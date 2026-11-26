@@ -1,37 +1,31 @@
 # Local only: other mods and the archive of everything no longer needed for development
 /ManualTurnRate/
-/AnimStudio/_archive/
+/_archive/
 
 # Backups and packages
 *.zip
-/AnimStudio/tester-package/AnimStudio_*/
 
 # Built programs
-/AnimStudio/*.dll
+/SessionAnimLoader/*.dll
 *.exe
 *.exp
-/AnimStudio/AnimStudioNative/dist/
-/AnimStudio/AnimStudioEditor/dist/
+/SessionAnimLoader/Native/dist/
+/SessionStudio/dist/
 
 # Downloaded libraries (they have their own Git repository)
-/AnimStudio/AnimStudioEditor/third_party/imgui/
-/AnimStudio/AnimStudioEditor/third_party/ImGuizmo/
+/SessionStudio/third_party/imgui/
+/SessionStudio/third_party/ImGuizmo/
 
 # Logs, dumps and test results
 *.log
 *.dmp
 *-resultats/
 
-# Local only: working notes, plans, development test data, private tester package, generated pages
-/AnimStudio/HANDOFF.md
-/AnimStudio/MASTER-PROMPT.md
-/AnimStudio/PLAN-*.md
-/AnimStudio/STUDY-*.md
-/AnimStudio/EMOTES-design.md
-/AnimStudio/RELEASE-CHECKLIST.md
-/AnimStudio/AnimStudio/clips/captures/
-/AnimStudio/AnimStudio/clips/test_*.sanim
-/AnimStudio/AnimStudioEditor/testdata/
-/AnimStudio/tester-package/
-/AnimStudio/AnimStudioEditor/docs/*.html
-/AnimStudio/AnimStudioNative/third_party/ue4ss/UE4SS.lib
+# Local only: working notes, plans, AI prompts, development test data, private tester package, generated pages
+/notes/
+/tester-package/
+/SessionAnimLoader/Lua/clips/captures/
+/SessionAnimLoader/Lua/clips/test_*.sanim
+/SessionStudio/testdata/
+/SessionStudio/docs/*.html
+/SessionAnimLoader/Native/third_party/ue4ss/UE4SS.lib
