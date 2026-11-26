@@ -33,7 +33,9 @@ public:
     static constexpr int kMaxFrames = 91;     // 3.0 s at 30 fps (long enough to make a loop)
     static constexpr int kMinFrames = 91;     // 3.0 s: a shorter hold is dropped, retried next time
     static constexpr int kKickMax = 61;       // trick (one pass): 2.0 s at most in the air
-    static constexpr int kGroundTail = 24;    // lot 5: then 0.8 s on the ground (phase 5), for the landing part of trick clips
+    static constexpr int kGroundTail = 60;    // then 2.0 s on the ground (phase 5), for the trick's landing clip (0.8 s before 2026-11-26)
+    static constexpr int kTrickFrames = kKickMax + kGroundTail;   // longest trick recording (air + ground)
+    static constexpr int kBufFrames = kTrickFrames > kMaxFrames ? kTrickFrames : kMaxFrames;
     static constexpr int kGroundPhase = 5;    // phase value of the frames recorded after the ground contact
     static constexpr int kKickMin = 16;       // 0.5 s at least, otherwise dropped
     static constexpr int kMaxBones = 256;
@@ -66,10 +68,10 @@ private:
     int prevFig_ = 0;
     bool havePop_ = false;     // like the player: the first pop number seen only counts if a trick is on
     uint32_t pop_ = 0;
-    int phases_[kMaxFrames] = {};
-    std::vector<Quat> buf_;    // kMaxFrames * bones_
+    int phases_[kBufFrames] = {};
+    std::vector<Quat> buf_;    // kBufFrames * bones_
     std::vector<int> posBones_;
-    std::vector<float> posBuf_; // kMaxFrames * posBones_ * 3
-    float times_[kMaxFrames] = {};
-    float ratios_[kMaxFrames] = {};
+    std::vector<float> posBuf_; // kBufFrames * posBones_ * 3
+    float times_[kBufFrames] = {};
+    float ratios_[kBufFrames] = {};
 };

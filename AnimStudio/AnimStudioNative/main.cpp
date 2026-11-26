@@ -41,6 +41,7 @@
 #include "src/figure.h"
 #include "src/trick.h"
 #include "src/net.h"
+#include "src/landing_hold.h"
 #include <map>
 #include <set>
 
@@ -48,7 +49,7 @@ using Lua = RC::LuaMadeSimple::Lua;
 
 namespace {
 
-constexpr int kVersion = 22;
+constexpr int kVersion = 23;
 constexpr int SKM_CST = 0x4b0;    // USkinnedMeshComponent::ComponentSpaceTransformsArray[2] (0x10 apart)
 constexpr int SKM_EDIT = 0x4f0;   // USkinnedMeshComponent::CurrentEditableComponentTransforms
 constexpr int VT_FBT = 0x938;     // FinalizeBoneTransform slot in the skater mesh vtable
@@ -797,13 +798,14 @@ int nSetState(const Lua& lua) {
     gs.grab = v[10] != 0;
     // P6 lot 4: base poses, each one only when nothing more specific is on
     //   on foot: off the board; crouch: IsCranking; landing: from a trick's return to the ground (or IsLanding /
-    //   IsJustLanded without a trick) for kLandHold s; riding: on the board, on the ground, nothing else
+    //   IsJustLanded without a trick) for 0.8 s, or as long as the landing clip up to 2 s (landing_hold.h);
+    //   riding: on the board, on the ground, nothing else
     {
-        constexpr double kLandHold = 0.8;
         constexpr double kDismountWindow = 1.2;   // 2026-11-25: s after the feet leave the board (dismount part, figure)
         const bool onBoard = v[11] != 0, grounded = v[12] != 0, crank = v[13] != 0, landFlag = v[14] != 0;
         static bool s_prevKick = false, s_prevLand = false, s_prevBoard = true;
-        static double s_landAt = -100.0, s_boardAt = -100.0, s_offAt = -100.0;
+        static double s_boardAt = -100.0, s_offAt = -100.0;
+        static LandingWindow s_land;
         const double now = Now();
         if (onBoard && !s_prevBoard) s_boardAt = now;   // stepping back on the board raises IsLanding too: not a landing
         if (!onBoard && s_prevBoard && !gs.kickflip) s_offAt = now;   // 2026-11-25: stepping off the board
@@ -812,8 +814,8 @@ int nSetState(const Lua& lua) {
         static bool s_landFromTrick = false;
         static uint32_t s_landHash = 0;
         static int s_landStance = 0;
-        if (s_prevKick && !gs.kickflip) { s_landAt = now; s_landFromTrick = true; s_landHash = g_trickHash; s_landStance = g_trickStance; }
-        else if (landFlag && !s_prevLand && !gs.kickflip && now - s_boardAt > 0.6) { s_landAt = now; s_landFromTrick = false; }
+        if (s_prevKick && !gs.kickflip) { s_land.Start(now); s_landFromTrick = true; s_landHash = g_trickHash; s_landStance = g_trickStance; }
+        else if (landFlag && !s_prevLand && !gs.kickflip && now - s_boardAt > 0.6) { s_land.Start(now); s_landFromTrick = false; }
         if (s_landFromTrick) { gs.landTrickHash = s_landHash; gs.landStance = s_landStance; }
         s_prevKick = gs.kickflip;
         s_prevLand = landFlag;
@@ -827,10 +829,20 @@ int nSetState(const Lua& lua) {
         // the riding clip played while running). Riding starts only once IsOnBoard says the feet are on the board.
         static bool s_run = false;
         s_run = s_run ? speed > 110.0 : speed > 150.0;
+        // 2026-11-26: past 0.8 s the landing lasts as long as its clip (up to 2 s), and any other action ends it
+        double landHold = kLandHoldMin, landClip = 0.0;
+        const double landSince = s_land.Since(now);
+        if (landSince >= kLandHoldMin && landSince < kLandHoldMax && g_player && g_lib) {
+            GameState lg = gs;
+            lg.groundStance = gs.sw ? STANCE_Switch : STANCE_Normal;
+            landClip = g_player->LandingClipLength(g_lib->Current(), lg);
+            landHold = LandingHold(landClip);
+        }
+        const bool landOn = s_land.Active(now, landHold, gs.kickflip || special || crank || push || !onBoard);
         if (!onBoard) { if (!gs.kickflip) { if (s_run) gs.running = true; else if (s_walk) gs.walking = true; else gs.onFoot = true; } }
         else if (!gs.kickflip && !special) {
             if (crank) gs.crouch = true;
-            else if (now - s_landAt < kLandHold) gs.landing = true;
+            else if (landOn) gs.landing = true;
             else if (push) gs.pushing = true;
             else if (grounded) gs.riding = true;
         }
@@ -844,6 +856,8 @@ int nSetState(const Lua& lua) {
         static int s_prevBase = -1, s_prevFoot = -99;
         const int base = gs.onFoot ? 1 : gs.riding ? 2 : gs.crouch ? 3 : gs.landing ? 4 : gs.walking ? 5 : gs.pushing ? 6 : gs.running ? 7 : 0;
         const int foot = (int)v[15];
+        if (s_prevBase == 4 && base != 4 && landSince < 10.0)   // 2026-11-26: how long the landing lasted (landing clip > 0.8 s)
+            Log("landing: lasted %.2f s (landing clip %.2f s, at most %.1f s)", landSince, landClip, kLandHoldMax);
         if (base != s_prevBase || (base && foot != s_prevFoot)) {
             static const char* kBase[8] = {"other", "on foot (standing)", "riding", "crouch", "landing", "walking", "pushing", "running"};
             Log("base pose: %s (switch %d, goofy %d, FootPositionType %d, Speed %.0f)", kBase[base], gs.sw ? 1 : 0, gs.goofy ? 1 : 0, foot, speed);

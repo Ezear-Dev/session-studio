@@ -553,6 +553,16 @@ const char* Player::CurrentClipName() const {
     return "";
 }
 
+float Player::LandingClipLength(const ClipSet* set, const GameState& gs) const {
+    GameState g{false, false, gs.goofy, gs.sw, 0.f};   // the landing alone, as Choose sees it during the landing
+    g.landing = true;
+    g.groundStance = gs.groundStance;
+    g.landTrickHash = gs.landTrickHash;
+    g.landStance = gs.landStance;
+    const Clip* c = Choose(set, g, false);
+    return c && (c->states & ST_Landing) ? c->duration : 0.f;   // the riding fallback is not a landing clip
+}
+
 // P6: clip selection. During a trick, clips of that trick (or of "any trick") win over state clips.
 // Ties: priority, then specificity (named trick, feet, fewer stances), then file order.
 const Clip* Player::Choose(const ClipSet* set, const GameState& gs, bool trickOn) const {

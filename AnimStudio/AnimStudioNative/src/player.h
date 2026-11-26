@@ -89,6 +89,8 @@ public:
     static constexpr float kNetTimeTauBehind = 0.06f, kNetBehind = 0.05f, kNetMinRate = 0.25f;
     static constexpr float kNetBackRate = 0.25f;   // clip s per s: drift back toward a sender that stopped
     static constexpr float kNetMaxPull = 1.5f;     // clip s per s: most the pull may add to the sent speed
+    // 2026-11-26: length of the landing clip that would play now after gs's trick (0: none), see landing_hold.h
+    float LandingClipLength(const ClipSet* set, const GameState& gs) const;
     const char* CurrentClipName() const;             // internal copy: never a pointer into a Clip; "" if none
     int LayerCount() const { return nLayers_; }
     float RemoteTime(int i) const { return i >= 0 && i < nLayers_ ? layers_[i].tFixed : -1.f; }   // tests

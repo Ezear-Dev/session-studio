@@ -122,10 +122,10 @@ void FigureRecorder::Reset(int bones, const std::vector<int>& posBones) {
     if (bones < 0) bones = 0;
     if (bones > kMaxBones) bones = kMaxBones;
     bones_ = bones;
-    buf_.assign((size_t)kMaxFrames * (size_t)bones_, QIdent);
+    buf_.assign((size_t)kBufFrames * (size_t)bones_, QIdent);
     posBones_.clear();
     for (int b : posBones) if (b >= 0 && b < bones_ && (int)posBones_.size() < kMaxPos) posBones_.push_back(b);
-    posBuf_.assign((size_t)kMaxFrames * posBones_.size() * 3, 0.f);
+    posBuf_.assign((size_t)kBufFrames * posBones_.size() * 3, 0.f);
     active_ = 0;
     finishedId_ = 0;
     frames_ = 0;
@@ -185,7 +185,7 @@ void FigureRecorder::Tick(const GameState& gs, const Quat* gameLocals, const flo
         if (stop) Finish();
         else {
             accum_ += dt;
-            const int cap = activeLoops_ ? kMaxFrames : (tail_ < 0 ? kKickMax : kMaxFrames);
+            const int cap = activeLoops_ ? kMaxFrames : (tail_ < 0 ? kKickMax : kTrickFrames);
             while (accum_ >= kStep && frames_ < cap && (tail_ < 0 || tail_ < kGroundTail)) {
                 accum_ -= kStep;
                 Sample(gs, gameLocals, gamePos, tail_ >= 0 ? kGroundPhase : -1);
