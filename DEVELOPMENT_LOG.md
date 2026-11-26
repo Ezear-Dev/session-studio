@@ -68,6 +68,12 @@ Important steps, technical decisions, problems and their solutions. Current stat
   card, clip settings panel, trick phase ribbon in the timeline). Still ImGui 1.93 without docking, own layout code.
 - **Step 0: `app.cpp` split by panel (11-26)**: same `App` class over `app*.cpp`; the file-local helpers became
   `inline` in `app_internal.h` (namespace `app_detail`, pulled in with `using namespace`), so no line of logic changed.
+- **Step 1: one theme (11-26)**: `app/ui_theme` holds the palette (dark anthracite, skate orange `#FF6B1A` for what is
+  active or primary, blue `#5B8CFF` for what comes from the game), the ImGui style, the fonts and the icons;
+  `app/ui_widgets` holds the themed buttons (hover fade), toggles, icon buttons, segmented control, switch, record
+  toggle, chip and status dot. Fonts and icons come from `C:\Windows\Fonts` (Segoe UI, Segoe UI Semibold, Segoe Fluent
+  Icons or Segoe MDL2 Assets): nothing shipped, no licence question; without the icon font, buttons show text.
+  The old colour names (`kAccent`...) now point at the theme, so every panel changed colour without logic changes.
 
 ## Problems met and solutions
 

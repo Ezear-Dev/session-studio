@@ -162,34 +162,35 @@ void App::TimelineTransport() {
     ImGui::SameLine();
     if (doc_.EffectiveDrive() != Drive::ManualRatio) {
         const float nowF = std::round(t_ / kFrame);
-        if (ImGui::Button("|<")) JumpTo(0.f);
+        if (ui::IconButton("tostart", theme::Icon::ToStart, "|<")) JumpTo(0.f);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Start of the clip (Home)");
         ImGui::SameLine(0, fs * 0.2f);
-        if (ImGui::Button("<##img")) JumpTo((nowF - 1.f) * kFrame);
+        if (ui::IconButton("prevframe", theme::Icon::Prev, "<")) JumpTo((nowF - 1.f) * kFrame);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Previous frame (left arrow)");
         ImGui::SameLine(0, fs * 0.2f);
-        if (playing_) { ImGui::PushStyleColor(ImGuiCol_Button, kAccent); }
-        if (ImGui::Button(playing_ ? "Pause##c" : "Play##c", ImVec2(fs * 4.5f, 0))) { if (playing_) playing_ = false; else Request(Ask::Play); }
-        if (playing_) ImGui::PopStyleColor();
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Plays the clip (Space)");
+        {   // play / pause: the main action of the transport, always orange
+            const std::string pl = theme::HasIcons() ? theme::Glyph(playing_ ? theme::Icon::Pause : theme::Icon::Play) + (playing_ ? "  Pause##c" : "  Play##c")
+                                                     : std::string(playing_ ? "Pause##c" : "Play##c");
+            if (ui::Button(pl.c_str(), ui::Kind::Primary, ImVec2(fs * 5.f, 0))) { if (playing_) playing_ = false; else Request(Ask::Play); }
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip(playing_ ? "Pause (Space)" : "Plays the clip (Space)");
         ImGui::SameLine(0, fs * 0.2f);
-        if (ImGui::Button(">##img")) JumpTo((nowF + 1.f) * kFrame);
+        if (ui::IconButton("nextframe", theme::Icon::Next, ">")) JumpTo((nowF + 1.f) * kFrame);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Next frame (right arrow)");
         ImGui::SameLine(0, fs * 0.2f);
-        if (ImGui::Button(">|")) JumpTo(c.duration);
+        if (ui::IconButton("toend", theme::Icon::ToEnd, ">|")) JumpTo(c.duration);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("End of the clip (End)");
         // 2026-11-25 (user request): loop and speed of the editor playback, to study the motion
         ImGui::SameLine(0, fs * 0.5f);
         const bool gameLoops = doc_.LoopsInTime();
         const bool loopOn = gameLoops || loopPreview_;
-        if (loopOn) ImGui::PushStyleColor(ImGuiCol_Button, kAccent);
         if (gameLoops) ImGui::BeginDisabled();
-        if (ImGui::Button("Loop (L)")) { loopPreview_ = !loopPreview_; SaveSetting(settings_, "timeline.loop", loopPreview_ ? "1" : "0"); }
+        if (ui::IconButton("loop", theme::Icon::Loop, "Loop", loopOn)) { loopPreview_ = !loopPreview_; SaveSetting(settings_, "timeline.loop", loopPreview_ ? "1" : "0"); }
         if (gameLoops) ImGui::EndDisabled();
-        if (loopOn) ImGui::PopStyleColor();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
             ImGui::SetTooltip("%s", gameLoops ? "This clip also loops in game: playback always loops."
-                                              : "Replays the clip endlessly, to study it.\nEditor only: in game, the clip plays as before.");
+                                              : loopOn ? "Loop is ON (L): the clip replays endlessly, to study it.\nEditor only: in game, the clip plays as before."
+                     : "Loop is OFF (L): the clip plays once.\nEditor only: in game, the clip plays as before.");
         ImGui::SameLine(0, fs * 0.2f);
         static const float kSpeeds[3] = {1.f, 0.5f, 0.25f};
         static const char* kSpeedName[3] = {"x1", "x0.5", "x0.25"};
@@ -306,11 +307,11 @@ void App::TimelineViewBar() {
             std::string who = k.bones.empty() ? std::string("all bones") : k.bones.size() == 1 ? BoneLabelUi(doc_.skeleton().names[k.bones.front()]) : (std::to_string(k.bones.size()) + " bones");
             if (k.bones.size() == 1 && k.bones.front() == doc_.PelvisBone()) who = "Pelvis";
             const int ip = doc_.KeyInterp(k.t, k.bones.empty() ? -1 : k.bones.front());
-            ImGui::TextColored(ImVec4(1, 0.85f, 0.4f, 1), "Selected key: %.2f s · %s · %s", k.t, who.c_str(), ip >= 0 ? kInterpName[ip] : "?");
+            ImGui::TextColored(theme::AccentHi, "Selected key: %.2f s · %s · %s", k.t, who.c_str(), ip >= 0 ? kInterpName[ip] : "?");
         } else {
             float a = 1e9f, b = -1e9f;
             for (auto& k : keySel_) { a = std::min(a, k.t); b = std::max(b, k.t); }
-            ImGui::TextColored(ImVec4(1, 0.85f, 0.4f, 1), "%d keys selected (%.2f to %.2f s) · Del to delete · Esc to deselect", (int)keySel_.size(), a, b);
+            ImGui::TextColored(theme::AccentHi, "%d keys selected (%.2f to %.2f s) · Del to delete · Esc to deselect", (int)keySel_.size(), a, b);
         }
     }
 
@@ -319,7 +320,7 @@ void App::TimelineViewBar() {
 void App::TimelinePanel() {
     const Layout L = Lay();
     Place(0, L.h - L.status - L.bottom, L.w, L.bottom);
-    ImGui::Begin("Timeline", nullptr, kPanel | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    BeginPanel("Timeline", kPanel | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     // selected keys that no longer exist (undo, another clip, deleted) leave the selection
     keySel_.erase(std::remove_if(keySel_.begin(), keySel_.end(), [&](const KeySel& k) {
         const std::vector<float> ts = k.bones.empty() ? doc_.KeyTimes(-1) : doc_.KeyTimesBones(k.bones);
@@ -355,7 +356,7 @@ void App::TimelinePanel() {
             ImGui::SetTooltip("Copies the game's pose shown by this slider (%.2f s) to the playhead (%.2f s).\nUse it to put a part back as in the game, or to reuse a game pose from another moment.\nA part picked: that part and what it carries (the arm with the hand). Nothing picked: the whole body.\nWith \"Auto key\", the key is set right away; Ctrl+Z undoes it.", originT_, t_);
     } else {
         originFocus_ = false;
-        ImGui::TextColored(ImVec4(1, 0.5f, 0.5f, 1), "game animation not recorded yet: do \"%s\" once in game", VariantTitleUi(var_).c_str());
+        ImGui::TextColored(theme::Bad, "game animation not recorded yet: do \"%s\" once in game", VariantTitleUi(var_).c_str());
     }
 
     TimelineTransport();   // UI Phase 4
@@ -405,7 +406,7 @@ void App::TimelinePanel() {
             if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) JumpTo(tn);
             else if (ImGui::IsItemActive() && !doc_.HasPending() && std::fabs(tn - t_) > 1e-4f) JumpTo(tn);
         }
-        rd->AddRectFilled(rulerP, ImVec2(rulerP.x + W, rulerP.y + rulerH), IM_COL32(38, 40, 48, 255));
+        rd->AddRectFilled(rulerP, ImVec2(rulerP.x + W, rulerP.y + rulerH), theme::U32(theme::Bg0));
         rd->PushClipRect(rulerP, ImVec2(rulerP.x + W, rulerP.y + rulerH), true);
         const float pps = (W - 16.f) / tview_.Span(dur);
         const float minor = RulerStep(pps, fs * 0.45f), major = RulerStep(pps, fs * 4.5f);
@@ -416,12 +417,12 @@ void App::TimelinePanel() {
             const float q = t / major;
             const bool isMajor = std::fabs(q - std::round(q)) < 1e-3f;
             const float x = X(t);
-            rd->AddLine(ImVec2(x, rulerP.y + (isMajor ? rulerH * 0.45f : rulerH * 0.75f)), ImVec2(x, rulerP.y + rulerH), IM_COL32(110, 112, 124, 255));
+            rd->AddLine(ImVec2(x, rulerP.y + (isMajor ? rulerH * 0.45f : rulerH * 0.75f)), ImVec2(x, rulerP.y + rulerH), theme::U32(theme::Text3));
             if (isMajor) {
                 char lb[32];
                 if (major < 0.099f) snprintf(lb, sizeof(lb), "%d", (int)std::lround(t / kFrame));   // very close: frame numbers
                 else snprintf(lb, sizeof(lb), major < 1.f ? "%.2f s" : "%.0f s", t);
-                rd->AddText(ImVec2(x + 3.f, rulerP.y + 1.f), IM_COL32(170, 172, 184, 255), lb);
+                rd->AddText(ImVec2(x + 3.f, rulerP.y + 1.f), theme::U32(theme::Text2), lb);
             }
         }
         if (dur > 0.f) {   // end of the clip
@@ -432,7 +433,7 @@ void App::TimelinePanel() {
         if (InView(xp)) {
             const float hw = fs * 0.4f;
             const ImVec2 tri[3] = {ImVec2(xp - hw, rulerP.y + rulerH - hw * 1.6f), ImVec2(xp + hw, rulerP.y + rulerH - hw * 1.6f), ImVec2(xp, rulerP.y + rulerH)};
-            rd->AddTriangleFilled(tri[0], tri[1], tri[2], IM_COL32(255, 90, 90, 255));
+            rd->AddTriangleFilled(tri[0], tri[1], tri[2], theme::U32(theme::Accent));
         }
         rd->PopClipRect();
         if (rulerHov) ImGui::SetTooltip(major < 0.099f ? "Click or drag: change the time · wheel: zoom\nThe numbers are frames (30 per second)." : "Click or drag: change the time · wheel: zoom");
@@ -467,7 +468,7 @@ void App::TimelinePanel() {
             ImGui::PopStyleVar();
             ImGui::SameLine(0.f, fs * 0.2f);
         } else ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (r.depth ? indent : fs * 1.2f));
-        if (inRow) ImGui::PushStyleColor(ImGuiCol_Text, exact ? ImVec4(1.f, 0.75f, 0.3f, 1.f) : ImVec4(1.f, 0.9f, 0.6f, 1.f));
+        if (inRow) ImGui::PushStyleColor(ImGuiCol_Text, exact ? theme::AccentHi : theme::Text);
         const float lw = labelW - ImGui::GetCursorPosX() - fs * 0.5f;
         if (ImGui::Selectable(r.label.c_str(), inRow, 0, ImVec2(std::max(fs, lw), rowH)) && r.primary >= 0) {
             if (doc_.IsEditable(r.primary) || r.primary == doc_.PelvisBone()) { sel_ = r.primary; prevSel_ = sel_; }
@@ -482,8 +483,8 @@ void App::TimelinePanel() {
         trackX = q0.x;
         if (ri == 0) top = q0.y;
         bottom = q0.y + rowH;
-        const ImU32 bg = ri == 0 ? IM_COL32(45, 47, 56, 255) : exact ? IM_COL32(72, 58, 30, 255) : inRow ? IM_COL32(55, 48, 35, 255)
-                       : r.depth ? IM_COL32(28, 30, 36, 255) : (ri % 2 ? IM_COL32(35, 37, 44, 255) : IM_COL32(31, 33, 39, 255));
+        const ImU32 bg = ri == 0 ? theme::U32(theme::Surface) : exact ? IM_COL32(58, 37, 24, 255) : inRow ? IM_COL32(40, 31, 26, 255)
+                       : r.depth ? theme::U32(theme::Bg1) : (ri % 2 ? IM_COL32(25, 28, 35, 255) : IM_COL32(21, 24, 30, 255));   // orange tints = the selected part
         dl->AddRectFilled(q0, ImVec2(q0.x + W, q0.y + rowH), bg);
         if (hang.ok && hang.land > hang.catchT + 1e-3f) {   // 2026-11-25: the hang time, stretched in game with the jump height
             const float xa = std::clamp(X(hang.catchT), q0.x, q0.x + W), xb = std::clamp(X(hang.land), q0.x, q0.x + W);
@@ -497,9 +498,9 @@ void App::TimelinePanel() {
             const float major = RulerStep((W - 16.f) / tview_.Span(dur), fs * 4.5f);
             const float a0 = tview_.Start(dur), a1 = a0 + tview_.Span(dur);
             for (int i = (int)std::ceil(a0 / major - 1e-4f); i * major <= std::min(a1, dur) + 1e-4f; i++)
-                dl->AddLine(ImVec2(X(i * major), q0.y), ImVec2(X(i * major), q0.y + rowH), IM_COL32(52, 54, 64, 255));
+                dl->AddLine(ImVec2(X(i * major), q0.y), ImVec2(X(i * major), q0.y + rowH), theme::U32(theme::Line, 0.7f));
         }
-        if (dur > 0.f && X(dur) < q0.x + W) dl->AddRectFilled(ImVec2(X(dur) + 8.f, q0.y), ImVec2(q0.x + W, q0.y + rowH), IM_COL32(20, 21, 26, 255));
+        if (dur > 0.f && X(dur) < q0.x + W) dl->AddRectFilled(ImVec2(X(dur) + 8.f, q0.y), ImVec2(q0.x + W, q0.y + rowH), theme::U32(theme::Bg0));
         const std::vector<float> keys = r.bones.empty() ? doc_.KeyTimes(-1) : doc_.KeyTimesBones(r.bones);
         const bool draggingThis = dragKey_ && dragBones_ == r.bones;
         // 2026-11-26 (task 3): a locked start / end key is a padlock: not selectable, not movable, not deletable
@@ -520,7 +521,7 @@ void App::TimelinePanel() {
             const float rr = picked ? rad * 1.35f : rad;
             const ImVec2 pts[4] = {ImVec2(x, my - rr), ImVec2(x + rr, my), ImVec2(x, my + rr), ImVec2(x - rr, my)};
             const int ip = doc_.KeyInterp(k, r.bones.empty() ? -1 : r.bones.front());
-            ImU32 col = ri == 0 ? IM_COL32(200, 200, 210, 255) : IM_COL32(230, 200, 80, 255);
+            ImU32 col = ri == 0 ? theme::U32(theme::Text2) : IM_COL32(232, 193, 80, 255);
             if (std::fabs(kt - t_) < 1e-3f) col = kColSel;
             if (ip == EditorDoc::IP_Step) dl->AddRectFilled(ImVec2(x - rr * 0.8f, my - rr * 0.8f), ImVec2(x + rr * 0.8f, my + rr * 0.8f), col);   // square: constant
             else dl->AddConvexPolyFilled(pts, 4, col);
@@ -570,9 +571,9 @@ void App::TimelinePanel() {
             if (pt < 0.f || pt > c.duration + 1e-3f) continue;
             const float x = X(std::min(pt, c.duration));
             if (!InView(x)) continue;
-            dl->AddLine(ImVec2(x, top), ImVec2(x, bottom), ph == 5 ? IM_COL32(120, 230, 140, 200) : IM_COL32(120, 200, 255, 160), ph == 5 ? 2.f : 1.f);
+            dl->AddLine(ImVec2(x, top), ImVec2(x, bottom), ph == 5 ? theme::U32(theme::Good, 0.8f) : theme::U32(theme::Ghost, 0.65f), ph == 5 ? 2.f : 1.f);
             if (x >= lastEnd) {
-                dl->AddText(ImVec2(x + 3.f, top + 1.f), ph == 5 ? IM_COL32(120, 230, 140, 255) : IM_COL32(120, 200, 255, 255), kPhaseLabel[ph]);
+                dl->AddText(ImVec2(x + 3.f, top + 1.f), ph == 5 ? theme::U32(theme::Good) : IM_COL32(157, 184, 255, 255), kPhaseLabel[ph]);
                 lastEnd = x + 3.f + ImGui::CalcTextSize(kPhaseLabel[ph]).x + 4.f;
             }
         }
@@ -582,13 +583,13 @@ void App::TimelinePanel() {
         if (InView(xd)) dl->AddLine(ImVec2(xd, top), ImVec2(xd, bottom), IM_COL32(190, 150, 255, 220), 2.f);
         if (InView(xd)) dl->AddText(ImVec2(xd + 3.f, top + 1.f), IM_COL32(190, 150, 255, 255), "dismount");
     }
-    if (bottom > top && InView(X(t_))) dl->AddLine(ImVec2(X(t_), top), ImVec2(X(t_), bottom), IM_COL32(255, 90, 90, 255), 2.f);
+    if (bottom > top && InView(X(t_))) dl->AddLine(ImVec2(X(t_), top), ImVec2(X(t_), bottom), theme::U32(theme::Accent), 2.f);
     // box selection
     if (boxing_) {
         const float x0 = std::min(boxX0_, io.MousePos.x), x1 = std::max(boxX0_, io.MousePos.x);
         const float y0 = std::min(boxY0_, io.MousePos.y), y1 = std::max(boxY0_, io.MousePos.y);
-        dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y1), IM_COL32(255, 200, 80, 40));
-        dl->AddRect(ImVec2(x0, y0), ImVec2(x1, y1), IM_COL32(255, 200, 80, 200));
+        dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y1), theme::U32(theme::Accent, 0.12f));
+        dl->AddRect(ImVec2(x0, y0), ImVec2(x1, y1), theme::U32(theme::Accent, 0.8f));
         if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
             boxing_ = false;
             int added = 0;

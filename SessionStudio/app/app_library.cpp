@@ -9,7 +9,7 @@ using namespace app_detail;
 void App::TricksPanel() {
     const Layout L = Lay();
     Place(0, L.top, L.left, L.h - L.top - L.status - L.bottom - L.gap);
-    ImGui::Begin("Library", nullptr, kPanel);
+    BeginPanel("Library", kPanel);
     if (clipsDir_.empty()) {   // empty state: nothing can be listed without the game's clips folder
         ImGui::TextWrapped("The game's clips folder is not chosen yet.");
         ImGui::TextDisabled("...\\Win64\\Mods\\SessionAnimLoader\\clips");
@@ -40,7 +40,7 @@ void App::TricksPanel() {
             if (ImGui::GetItemRectMax().x + st.ItemSpacing.x + w <= right) ImGui::SameLine();
             else ImGui::SetCursorPosX(indentX);
         }
-        ImGui::PushStyleColor(ImGuiCol_Text, FigureReady(v) ? kOk : (on ? ImVec4(1, 1, 1, 1) : kDim));
+        ImGui::PushStyleColor(ImGuiCol_Text, FigureReady(v) ? kOk : (on ? theme::Text : kDim));
         if (ImGui::RadioButton(StanceLabel(s), on)) pick(v);
         ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) {
@@ -55,7 +55,7 @@ void App::TricksPanel() {
     for (int g = 0; g < 2; g++) {
         FigureVariant v = var_; v.goofy = g == 1;
         if (g) ImGui::SameLine();
-        ImGui::PushStyleColor(ImGuiCol_Text, FigureReady(v) ? kOk : (var_.goofy == (g == 1) ? ImVec4(1, 1, 1, 1) : kDim));
+        ImGui::PushStyleColor(ImGuiCol_Text, FigureReady(v) ? kOk : (var_.goofy == (g == 1) ? theme::Text : kDim));
         if (ImGui::RadioButton(g ? "Goofy" : "Regular", var_.goofy == (g == 1))) pick(v);
         ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) ImGui::SetTooltip(g ? "Goofy: right foot forward." : "Regular: left foot forward.");
@@ -186,7 +186,7 @@ void App::LibraryClips() {
             continue;
         }
         bool en = c.enabled;
-        if (ImGui::Checkbox("##on", &en)) ToggleClipEnabled(ci.file, en);
+        if (ui::Switch("##on", &en)) ToggleClipEnabled(ci.file, en);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip(c.enabled ? "On: plays in game. Untick to turn it off without deleting it." : "Off: does not play in game. Tick to turn it on.");
         ImGui::SameLine();
         const std::string stem = ci.file.size() > 6 ? ci.file.substr(0, ci.file.size() - 6) : ci.file;

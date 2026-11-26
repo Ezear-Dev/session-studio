@@ -9,6 +9,7 @@
 #include "imgui_impl_dx11.h"
 #include "app.h"
 #include "workspace.h"
+#include "ui_theme.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -94,6 +95,14 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmd, int) {
         App app(ExeDir());
         std::string report;
         const int code = app.SelfTest(report);
+        {   // redesign step 1: the theme fonts and the Windows icon font (no window needed)
+            ImGui::CreateContext();
+            theme::LoadFonts(16.f);
+            const theme::FontReport fr = theme::CheckFonts();
+            report += std::string("fonts: Segoe UI ") + (fr.body ? "yes" : "NO (ImGui font)") + ", Semibold " + (fr.strong ? "yes" : "no") +
+                      ", icons " + (fr.iconFile.empty() ? std::string("none (text labels)") : fr.iconFile + " " + std::to_string(fr.iconsFound) + "/" + std::to_string(fr.iconsTotal)) + "\n";
+            ImGui::DestroyContext();
+        }
         if (AttachConsole(ATTACH_PARENT_PROCESS)) { FILE* f = nullptr; freopen_s(&f, "CONOUT$", "w", stdout); std::fputs(report.c_str(), stdout); std::fflush(stdout); }
         FILE* f = _wfsopen((ExeDir() + L"selftest.txt").c_str(), L"wb", _SH_DENYNO);
         if (f) { std::fputs(report.c_str(), f); std::fclose(f); }
@@ -133,14 +142,9 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmd, int) {
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.IniFilename = nullptr;   // ImGui's own file stays off: panel sizes live in SessionStudio.ini (UI Phase 1)
-    ImGui::StyleColorsDark();
-    ImGuiStyle& style = ImGui::GetStyle();
-    style.FrameRounding = 3.f;
-    style.GrabRounding = 3.f;
-    style.ScaleAllSizes(scale);
-    style.FontScaleDpi = scale;
-    // font with accents (Windows Segoe UI), else ImGui's one
-    if (GetFileAttributesW(L"C:\\Windows\\Fonts\\segoeui.ttf") != INVALID_FILE_ATTRIBUTES) io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 17.f);
+    // redesign step 1: the Session Studio theme (palette, style, Segoe UI + Windows icon font), app/ui_theme.cpp
+    theme::ApplyStyle(scale);
+    theme::LoadFonts(16.f);
     ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplDX11_Init(g_dev, g_ctx);
 
@@ -191,7 +195,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmd, int) {
         ImGui::NewFrame();
         app.Frame(dt);
         ImGui::Render();
-        const float clear[4] = {0.09f, 0.10f, 0.12f, 1.f};
+        const float clear[4] = {theme::Bg0.x, theme::Bg0.y, theme::Bg0.z, 1.f};
         g_ctx->OMSetRenderTargets(1, &g_rtv, nullptr);
         g_ctx->ClearRenderTargetView(g_rtv, clear);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());

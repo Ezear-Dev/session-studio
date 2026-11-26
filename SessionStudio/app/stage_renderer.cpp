@@ -1,5 +1,6 @@
 // Session Studio -- off-screen renderer of the 3D view's solid body (PLAN-MANNEQUIN task 2), see stage_renderer.h
 #include "stage_renderer.h"
+#include "ui_theme.h"
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <algorithm>
@@ -167,7 +168,7 @@ ID3D11ShaderResourceView* StageRenderer::Render(int W, int H, const float viewPr
     ID3D11DeviceContext* c = d.ctx;
     ID3D11ShaderResourceView* nullSrv = nullptr;
     c->PSSetShaderResources(0, 1, &nullSrv);
-    const float clear[4] = {28.f / 255.f, 30.f / 255.f, 36.f / 255.f, 0.f};   // the view's background colour, transparent
+    const float clear[4] = {theme::Stage.x, theme::Stage.y, theme::Stage.z, 0.f};   // the view's background colour (theme), transparent
     c->OMSetRenderTargets(1, &d.rtv, d.dsv);
     c->ClearRenderTargetView(d.rtv, clear);
     c->ClearDepthStencilView(d.dsv, D3D11_CLEAR_DEPTH, 1.f, 0);

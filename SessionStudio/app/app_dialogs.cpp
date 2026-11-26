@@ -46,9 +46,7 @@ void App::Dialogs() {
         ImGui::Text("Delete %s?", libFile_.c_str());
         ImGui::TextWrapped("It will be removed from the game and moved to the backups\n(\"Backups\" button at the bottom): you can get it back.");
         if (libFile_ == fileName_) ImGui::TextColored(kAlert, "It is the open clip: it stays shown, as a clip not saved yet.");
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.65f, 0.22f, 0.20f, 1.f));
-        if (ImGui::Button("Delete")) { ImGui::CloseCurrentPopup(); DeleteClip(libFile_); }
-        ImGui::PopStyleColor();
+        if (ui::Button("Delete", ui::Kind::Danger)) { ImGui::CloseCurrentPopup(); DeleteClip(libFile_); }
         ImGui::SameLine();
         if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();

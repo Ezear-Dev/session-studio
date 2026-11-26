@@ -70,7 +70,7 @@ void App::Splitters() {
             SaveLayout();
         }
         const ImVec2 p = ImGui::GetItemRectMin(), q = ImGui::GetItemRectMax();
-        const ImU32 col = act ? U32(kAccent) : hov ? U32(ImVec4(kAccent.x, kAccent.y, kAccent.z, 0.6f)) : IM_COL32(60, 63, 74, 255);
+        const ImU32 col = act ? U32(kAccent) : hov ? U32(ImVec4(kAccent.x, kAccent.y, kAccent.z, 0.6f)) : IM_COL32(0, 0, 0, 0);   // idle: the gap between panels shows the window background
         ImDrawList* dl = ImGui::GetWindowDrawList();
         if (s.kind == 2) dl->AddLine(ImVec2(p.x, (p.y + q.y) * 0.5f), ImVec2(q.x, (p.y + q.y) * 0.5f), col, act || hov ? 3.f : 1.f);
         else dl->AddLine(ImVec2((p.x + q.x) * 0.5f, p.y), ImVec2((p.x + q.x) * 0.5f, q.y), col, act || hov ? 3.f : 1.f);
@@ -85,11 +85,24 @@ void App::HeaderBar() {
     Place(0, 0, L.w, L.top);
     ImGui::Begin("##haut", nullptr, kPanel | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar);
     ImGui::SetCursorPosY((L.top - ImGui::GetFrameHeight()) * 0.5f);
-    // what is being edited
+    // logo mark (orange rounded square, drawn) and the name in the title font
+    {
+        const float h = ImGui::GetFrameHeight();
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float m = std::round(h * 0.1f);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(ImVec2(p.x + m, p.y + m), ImVec2(p.x + h - m, p.y + h - m), theme::U32(theme::Accent), h * 0.28f);
+        const ImVec2 ss = ImGui::CalcTextSize("S");
+        dl->AddText(theme::Strong(), 0.f, ImVec2(p.x + (h - ss.x) * 0.5f, p.y + (h - ss.y) * 0.5f), theme::U32(theme::OnAccent), "S");
+        ImGui::Dummy(ImVec2(h, h));
+        ImGui::SameLine(0, fs * 0.5f);
+    }
+    if (theme::Strong()) ImGui::PushFont(theme::Strong(), 0.f);
     ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(kMuted, "Session Studio");
-    ImGui::SameLine(0, fs);
-    Badge(VariantTitleUi(var_).c_str(), ImVec4(0.55f, 0.78f, 1.f, 1.f));
+    ImGui::TextUnformatted("Session Studio");
+    if (theme::Strong()) ImGui::PopFont();
+    ImGui::SameLine(0, fs * 1.2f);
+    Badge(VariantTitleUi(var_).c_str(), theme::Text);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("The trick (or ground state), stance and foot you are editing.\nChange them in the left column.");
     ImGui::SameLine(0, fs * 0.8f);
     ImGui::AlignTextToFramePadding();
@@ -107,44 +120,39 @@ void App::HeaderBar() {
 
     // file actions
     ImGui::SameLine(0, fs * 1.5f);
-    if (ImGui::Button("New")) Request(Ask::New);
+    if (ui::Button("New")) Request(Ask::New);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("New clip for the variant shown.");
     ImGui::SameLine();
-    if (ImGui::Button("Open...")) openDialog_ = true;
+    if (ui::Button("Open...")) openDialog_ = true;
     ImGui::SameLine();
-    ImGui::PushStyleColor(ImGuiCol_Button, kAccent);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.32f, 0.60f, 1.f, 1.f));
-    if (ImGui::Button("Save (Ctrl+S)")) Request(Ask::Save);
-    ImGui::PopStyleColor(2);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Writes the clip to the game's clips folder (automatic name for a new clip).\nThe previous version is copied to the backups first.\nThe bottom bar tells you whether the game reloaded it.");
+    if (ui::Button("Save", ui::Kind::Primary)) Request(Ask::Save);   // the only orange filled button
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Save (Ctrl+S)\nWrites the clip to the game's clips folder (automatic name for a new clip).\nThe previous version is copied to the backups first.\nThe bottom bar tells you whether the game reloaded it.");
     ImGui::SameLine();
-    if (ImGui::Button("Save as...")) Request(Ask::SaveAs);
+    if (ui::Button("Save as...")) Request(Ask::SaveAs);
 
     // undo / redo (never called "Annuler": that word is the Cancel of every dialog)
     ImGui::SameLine(0, fs * 1.5f);
     if (!doc_.CanUndo()) ImGui::BeginDisabled();
-    if (ImGui::Button("Undo")) { if (doc_.Undo()) AfterUndoRedo(); }
+    if (ui::IconButton("undo", theme::Icon::Undo, "Undo")) { if (doc_.Undo()) AfterUndoRedo(); }
     if (!doc_.CanUndo()) ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
         ImGui::SetTooltip(doc_.CanUndo() ? "Undo: %s (Ctrl+Z)" : "Nothing to undo (Ctrl+Z)", doc_.UndoLabel());
-    ImGui::SameLine();
+    ImGui::SameLine(0, ImGui::GetStyle().ItemSpacing.x * 0.5f);
     if (!doc_.CanRedo()) ImGui::BeginDisabled();
-    if (ImGui::Button("Redo")) { if (doc_.Redo()) AfterUndoRedo(); }
+    if (ui::IconButton("redo", theme::Icon::Redo, "Redo")) { if (doc_.Redo()) AfterUndoRedo(); }
     if (!doc_.CanRedo()) ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
         ImGui::SetTooltip(doc_.CanRedo() ? "Redo: %s (Ctrl+Y)" : "Nothing to redo (Ctrl+Y)", doc_.RedoLabel());
 
-    // auto key: always visible, it changes what every gesture does
+    // auto key: always visible, it changes what every gesture does (record style: red dot when on)
     ImGui::SameLine(0, fs * 1.5f);
-    ImGui::PushStyleColor(ImGuiCol_Button, autoKey_ ? ImVec4(0.18f, 0.42f, 0.25f, 1.f) : ImVec4(0.30f, 0.30f, 0.34f, 1.f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, autoKey_ ? ImVec4(0.24f, 0.52f, 0.32f, 1.f) : ImVec4(0.38f, 0.38f, 0.43f, 1.f));
-    if (ImGui::Button(autoKey_ ? "Auto key: ON" : "Auto key: OFF")) autoKey_ = !autoKey_;
-    ImGui::PopStyleColor(2);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("ON: every gesture sets a key at the time shown.\nOFF: you set the key yourself with K (or the \"+ key\" button).");
+    if (ui::RecordToggle("Auto key", autoKey_)) autoKey_ = !autoKey_;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip(autoKey_ ? "Auto key is ON: every gesture sets a key at the time shown.\nClick to turn it off (then you set keys yourself with K)."
+                                                           : "Auto key is OFF: you set the key yourself with K (or the \"+ key\" button).\nClick to turn it on.");
     // UI Phase 5: the welcome window (setup check, the 5 steps, the guide) can come back at any time
     ImGui::SameLine(0, fs * 1.5f);
-    if (ImGui::Button("Help")) showWelcome_ = true;
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Checks the installation, recalls the steps and opens the guide.");
+    if (ui::IconButton("help", theme::Icon::Help, "Help")) showWelcome_ = true;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Help: checks the installation, recalls the steps and opens the guide.");
     ImGui::End();
 }
 
@@ -209,9 +217,7 @@ void App::WelcomeWindow() {
     ImGui::TextDisabled("%s", "Not supported yet: grinds, grabs, walking and running (in progress). Powerslide not checked yet.");
     ImGui::PopTextWrapPos();
     ImGui::Spacing();
-    ImGui::PushStyleColor(ImGuiCol_Button, kAccent);
-    const bool start = ImGui::Button("Start", ImVec2(fs * 8.f, 0));
-    ImGui::PopStyleColor();
+    const bool start = ui::Button("Start", ui::Kind::Primary, ImVec2(fs * 8.f, 0));
     ImGui::SameLine();
     if (ImGui::Button("Open the guide")) OpenGuide();
     ImGui::SameLine();
@@ -265,7 +271,7 @@ void App::StatusBar() {
     const Layout L = Lay();
     const float fs = ImGui::GetFontSize();
     Place(0, L.h - L.status, L.w, L.status);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.075f, 0.08f, 0.10f, 1.f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, theme::Bg1);
     ImGui::Begin("##etat", nullptr, kPanel | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar);
     ImGui::PopStyleColor();
     const float sp = fs * 1.2f;
@@ -358,7 +364,7 @@ void App::StatusBar() {
     if (!status_.empty()) {
         ImGui::SameLine(0, sp);
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(statusAge_ < 12.f ? ImVec4(1, 0.85f, 0.4f, 1) : kMuted, "%s", status_.c_str());
+        ImGui::TextColored(statusAge_ < 12.f ? theme::Warn : kMuted, "%s", status_.c_str());
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", status_.c_str());
     }
     ImGui::End();

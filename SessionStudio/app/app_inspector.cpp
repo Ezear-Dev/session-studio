@@ -6,20 +6,13 @@ using namespace app_detail;
 void App::PropsPanel() {
     const Layout L = Lay();
     Place(L.w - L.right, L.top, L.right, L.h - L.top - L.status - L.bottom - L.gap);
-    ImGui::Begin("Inspector", nullptr, kPanel);
+    BeginPanel("Inspector", kPanel);
     // Creator / Studio: what is shown, never what the clip contains (UI Phase 3)
     {
-        auto Seg = [&](const char* label, bool on) {
-            if (on) { ImGui::PushStyleColor(ImGuiCol_Button, kAccent); ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.32f, 0.60f, 1.f, 1.f)); }
-            const bool r = ImGui::Button(label);
-            if (on) ImGui::PopStyleColor(2);
-            return r;
-        };
-        if (Seg("Creator", !studio_) && studio_) { studio_ = false; SaveSetting(settings_, "ui.studio", "0"); }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("The essentials: pick, pose, pull, save.");
-        ImGui::SameLine(0, ImGui::GetStyle().ItemSpacing.x * 0.5f);
-        if (Seg("Studio", studio_) && !studio_) { studio_ = true; SaveSetting(settings_, "ui.studio", "1"); }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Everything: precise values, track weights, bone list,\nAdvanced tab (stances, feet, priority, blends, loop, drive).\nThe clip does not change when you switch modes.");
+        static const char* kModes[2] = {"Creator", "Studio"};
+        int m = studio_ ? 1 : 0;
+        if (ui::Segmented("##mode", kModes, 2, &m)) { studio_ = m == 1; SaveSetting(settings_, "ui.studio", studio_ ? "1" : "0"); }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Creator: the essentials (pick, pose, pull, save).\nStudio: everything (precise values, track weights, bone list,\nAdvanced tab: stances, feet, priority, blends, loop, drive).\nThe clip does not change when you switch modes.");
     }
     if (sel_ != inspSelPrev_) { if (sel_ >= 0) inspForce_ = 0; inspSelPrev_ = sel_; }   // a new selection: its tab
     if (ImGui::BeginTabBar("##inspecteur")) {
@@ -43,7 +36,7 @@ void App::InspectorSelection() {
         ImGui::TextColored(col, "Tool: %s", tool.c_str());
     }
     const bool lockedHere = sel_ >= 0 && doc_.LockedAt(doc_.KeyTime(t_));   // 2026-11-26: locked start / end (task 3)
-    if (lockedHere) ImGui::TextColored(ImVec4(1.f, 0.85f, 0.3f, 1.f), "%s", "Start and end are locked to the game's pose:\npose between them (Clip tab to unlock).");
+    if (lockedHere) ImGui::TextColored(theme::Warn, "%s", "Start and end are locked to the game's pose:\npose between them (Clip tab to unlock).");
     if (sel_ >= 0 && sel_ == doc_.PelvisBone()) {
         ImGui::BeginDisabled(lockedHere);
         PelvisProps();
@@ -52,7 +45,7 @@ void App::InspectorSelection() {
         const std::string& name = doc_.skeleton().names[sel_];
         ImGui::SeparatorText(("Bone: " + Short(name)).c_str());
         const bool legFrozen = doc_.LegFrozenAt(sel_, t_);   // 2026-11-26: the game takes the legs back from the catch
-        if (legFrozen && !lockedHere) ImGui::TextColored(ImVec4(1.f, 0.85f, 0.3f, 1.f), "%s", "After the catch, the game takes the legs back:\npose them before the catch, or in the landing clip.");
+        if (legFrozen && !lockedHere) ImGui::TextColored(theme::Warn, "%s", "After the catch, the game takes the legs back:\npose them before the catch, or in the landing clip.");
         ImGui::BeginDisabled(legFrozen || lockedHere);
         float r[3];
         QToRotatorDeg(doc_.EditedRaw(sel_, t_), r[0], r[1], r[2]);
@@ -98,7 +91,7 @@ void App::InspectorSelection() {
             const int side = doc_.ArmSide(sel_);
             const EditorDoc::ShoulderInfo sh = doc_.Shoulder(side, t_);
             if (sh.ok) {
-                const ImVec4 col = sh.warn ? ImVec4(1.f, 0.45f, 0.35f, 1.f) : ImVec4(0.6f, 0.8f, 0.6f, 1.f);
+                const ImVec4 col = sh.warn ? theme::Bad : theme::Good;
                 ImGui::TextColored(col, "%sshoulder: arm raised %.0f°, twist %+.0f° (forearm %+.0f°), clavicle %+.0f°",
                                    sh.warn ? "! " : "", sh.elevation, sh.twistUpper, sh.twistFore, sh.clavRaise);
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("The game's body has no twist bones: an arm raised very high by the shoulder alone,\nor twisted on itself, crushes the shoulder's skin in game (the editor only shows bones).\nRed: risk of deformation.");
@@ -200,7 +193,7 @@ void App::InspectorClip() {
     if (ImGui::RadioButton("Add", c.mode == Mode::Additive) && c.mode != Mode::Additive) { askMode_ = Mode::Additive; if (c.tracks.empty()) doc_.SetMode(Mode::Additive); else popMode_ = true; }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("The clip adds to the game's movement (keeps its small variations).");
     bool b = c.enabled;
-    if (ImGui::Checkbox("On in game", &b)) { doc_.Checkpoint("on"); doc_.clip().enabled = b; }
+    if (ui::Switch("##ongame", &b, "On in game")) { doc_.Checkpoint("on"); doc_.clip().enabled = b; }
     {   // who it plays for: goofy players see a regular clip only when it is mirrored (audit F)
         bool both = c.feet == Feet::Any;
         if (ImGui::Checkbox("Regular and goofy (auto mirror)", &both)) {

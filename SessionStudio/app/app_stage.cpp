@@ -47,12 +47,7 @@ void App::StageToolbar() {
     // a button drawn "on" (accent) or dimmed; returns the click
     auto Tool = [&](const char* label, bool on, bool dim, float gap) {
         Next(BtnW(label), gap);
-        if (on) { ImGui::PushStyleColor(ImGuiCol_Button, kAccent); ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.32f, 0.60f, 1.f, 1.f)); }
-        if (dim) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.45f);
-        const bool r = ImGui::Button(label);
-        if (dim) ImGui::PopStyleVar();
-        if (on) ImGui::PopStyleColor(2);
-        return r;
+        return ui::Toggle(label, on, dim);
     };
     const float groupGap = fs * 1.2f;
     // a group (quiet title + its controls) moves to a new line as a whole when it does not fit on this one
@@ -155,17 +150,17 @@ void App::ToolInfo(std::string& what, std::string& tool, ImVec4& col) const {
     what.clear();
     for (int k = 0; k < kLimbs; k++) if (LimbBone(k) == sel_) what = kLimbLabel[k];
     if (what.empty()) what = BoneLabelUi(doc_.skeleton().names[sel_]);
-    if (sel_ == doc_.PelvisBone()) { tool = "Move (the feet stay)"; col = ImVec4(1.f, 0.65f, 0.3f, 1.f); return; }
+    if (sel_ == doc_.PelvisBone()) { tool = "Move (the feet stay)"; col = theme::AccentHi; return; }
     int a, b, c, d;
     const IkJoint j = ikMode_ ? doc_.IkHandle(sel_, a, b, c, d) : IkJoint::None;
     if (j != IkJoint::None) {
         const bool leg = IsLegBone(doc_.skeleton().names[sel_]);
         tool = j == IkJoint::Mid ? (leg ? "Pull the knee (IK)" : "Pull the elbow (IK)") : j == IkJoint::Root ? "Pull the shoulder (IK)" : (leg ? "Pull the foot (IK)" : "Pull the hand (IK)");
-        col = ImVec4(0.47f, 0.86f, 1.f, 1.f);
+        col = ImVec4(0.212f, 0.773f, 0.941f, 1.f);   // hands / feet: the limb cyan
         return;
     }
     tool = worldMode_ ? "Rotate (world rings)" : "Rotate (local rings)";
-    col = ImVec4(1.f, 0.78f, 0.4f, 1.f);
+    col = theme::Warn;
 }
 
 void App::PelvisProps() {
@@ -184,14 +179,14 @@ void App::PelvisProps() {
 void App::ViewPanel() {
     const Layout L = Lay();
     Place(L.left + L.gap, L.top, L.w - L.left - L.right - 2.f * L.gap, L.h - L.top - L.status - L.bottom - L.gap);
-    ImGui::Begin("3D view", nullptr, kPanel | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    BeginPanel("3D view", kPanel | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     if (skeletonOk_) StageToolbar();   // UI Phase 3; above the canvas: never over the rings
     const ImVec2 p0 = ImGui::GetCursorScreenPos();
     ImVec2 sz = ImGui::GetContentRegionAvail();
     if (sz.x < 50) sz.x = 50;
     if (sz.y < 50) sz.y = 50;
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddRectFilled(p0, ImVec2(p0.x + sz.x, p0.y + sz.y), IM_COL32(28, 30, 36, 255));
+    dl->AddRectFilled(p0, ImVec2(p0.x + sz.x, p0.y + sz.y), theme::U32(theme::Stage));
 
     if (!skeletonOk_) {
         ImGui::TextWrapped("Skeleton not found.\n%s\n\nStart the game once with the mod installed: it writes _skeleton.json into the clips folder.", skeletonErr_.c_str());
@@ -264,8 +259,9 @@ void App::ViewPanel() {
     for (int i = -6; i <= 6; i++) {   // ground
         const float a[3] = {i * 25.f, -150.f, 0}, b[3] = {i * 25.f, 150.f, 0}, c[3] = {-150.f, i * 25.f, 0}, d[3] = {150.f, i * 25.f, 0};
         ImVec2 pa, pb;
-        if (PU(a, pa) && PU(b, pb)) dl->AddLine(pa, pb, IM_COL32(60, 62, 70, 255));
-        if (PU(c, pa) && PU(d, pb)) dl->AddLine(pa, pb, IM_COL32(60, 62, 70, 255));
+        const ImU32 gc = i == 0 ? theme::U32(theme::Line, 1.f) : theme::U32(theme::Line, 0.75f);   // the centre lines a bit brighter
+        if (PU(a, pa) && PU(b, pb)) dl->AddLine(pa, pb, gc);
+        if (PU(c, pa) && PU(d, pb)) dl->AddLine(pa, pb, gc);
     }
     auto boneIdx = [&](const char* name) { for (int b = 0; b < n; b++) if (s.names[b] == name) return b; return -1; };
 
@@ -373,7 +369,7 @@ void App::ViewPanel() {
             }
             if (!ok) continue;
             const bool selB = b == sel_;
-            const ImU32 col = selB ? IM_COL32(255, 170, 60, 150) : doc_.TrackOf(b) ? IM_COL32(120, 220, 140, 110) : IM_COL32(200, 200, 210, 70);
+            const ImU32 col = selB ? IM_COL32(255, 107, 26, 160) : doc_.TrackOf(b) ? IM_COL32(120, 220, 140, 110) : IM_COL32(200, 200, 210, 70);
             for (int e = 0; e < 2; e++) for (int k = 0; k < 4; k++) dl->AddLine(sp[e][k], sp[e][(k + 1) % 4], col, 1.f);
             for (int k = 0; k < 4; k++) dl->AddLine(sp[0][k], sp[1][k], k == 0 ? IM_COL32(255, 230, 120, 200) : col, k == 0 ? 2.f : 1.f);
         }
@@ -424,20 +420,20 @@ void App::ViewPanel() {
         const ImVec2 ts = ImGui::CalcTextSize(txt.c_str());
         const float px = ImGui::GetFontSize() * 0.5f, py = 3.f;
         const ImVec2 bp(p0.x + 8, p0.y + 6);
-        dl->AddRectFilled(bp, ImVec2(bp.x + ts.x + 2 * px, bp.y + ts.y + 2 * py), IM_COL32(20, 21, 26, 210), ts.y * 0.5f);
+        dl->AddRectFilled(bp, ImVec2(bp.x + ts.x + 2 * px, bp.y + ts.y + 2 * py), theme::U32(theme::Bg0, 0.85f), ts.y * 0.5f);
         dl->AddRect(bp, ImVec2(bp.x + ts.x + 2 * px, bp.y + ts.y + 2 * py), U32(ImVec4(tc.x, tc.y, tc.z, 0.8f)), ts.y * 0.5f);
         dl->AddText(ImVec2(bp.x + px, bp.y + py), U32(tc), txt.c_str());
     }
     if (doc_.HasPending() && !autoKey_) {
         char buf[160];
         snprintf(buf, sizeof(buf), "Pending change: K to set the key at %.2f s", t_);
-        dl->AddText(ImVec2(p0.x + 8, p0.y + 12 + lh), IM_COL32(255, 165, 50, 255), buf);
+        dl->AddText(ImVec2(p0.x + 8, p0.y + 12 + lh), theme::U32(theme::Warn), buf);
     }
     if (!doc_.HasFigure()) {
         const std::string msg = figErr_.empty()
             ? "Game animation not recorded yet: do \"" + VariantTitleUi(var_) + "\" once in game, it records itself."
             : "Game animation unusable (" + figErr_ + "): \"record again\", then do the move again in game.";
-        dl->AddText(ImVec2(p0.x + 8, p0.y + sz.y - lh - 4), IM_COL32(255, 128, 128, 255), msg.c_str());
+        dl->AddText(ImVec2(p0.x + 8, p0.y + sz.y - lh - 4), theme::U32(theme::Bad), msg.c_str());
     }
     dl->PopClipRect();
 
@@ -448,7 +444,7 @@ void App::ViewPanel() {
     if (poseBlocked) {   // no handle: the game takes the legs back from the catch, or a locked instant
         const char* msg = lockedHere ? "Start and end are locked to the game's pose: pose between them (Clip tab to unlock)."
                                      : "After the catch, the game takes the legs back: pose them before the catch, or in the landing clip.";
-        dl->AddText(ImVec2(p0.x + 8, p0.y + sz.y - 2 * ImGui::GetTextLineHeightWithSpacing() - 4), IM_COL32(255, 217, 77, 255), msg);
+        dl->AddText(ImVec2(p0.x + 8, p0.y + sz.y - 2 * ImGui::GetTextLineHeightWithSpacing() - 4), theme::U32(theme::Warn), msg);
     } else if (ikKind != IkJoint::None) {
         const int joint = ikKind == IkJoint::Mid ? ikF : ikKind == IkJoint::Root ? ikU : ikH;
         const bool leg = IsLegBone(s.names[sel_]);
