@@ -21,6 +21,8 @@ public:
     // background; eyeDir = direction the camera looks (UE component space). nullptr if nothing could be drawn.
     ID3D11ShaderResourceView* Render(int w, int h, const float viewProj[16], const float eyeDir[3], const std::vector<const Mesh*>& meshes);
     void Release();
+    // --selftest (redesign step 3): compiles both shaders without a device; false + the compiler message on error
+    static bool CheckShaders(std::string& err);
 
 private:
     struct Impl;

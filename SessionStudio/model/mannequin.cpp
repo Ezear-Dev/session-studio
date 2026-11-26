@@ -395,3 +395,13 @@ void BuildMannequinMesh(const MannequinRig& r, const std::vector<FTr>& cs, const
         }
     }
 }
+
+float GroundHeight(const MannequinRig& r, const std::vector<std::vector<FTr>>& poses) {
+    float g = 0.f;
+    Mesh m;
+    for (const std::vector<FTr>& cs : poses) {
+        BuildMannequinMesh(r, cs, std::vector<uint32_t>(cs.size(), 0xFFC0C0C0u), m, -1);
+        for (const MeshVertex& v : m.verts) if (std::isfinite(v.pos[2])) g = std::min(g, v.pos[2]);
+    }
+    return g;
+}

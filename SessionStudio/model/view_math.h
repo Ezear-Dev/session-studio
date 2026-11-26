@@ -12,6 +12,9 @@ struct OrbitCamera {
     void Proj(float aspect, float m[16]) const;
 };
 
+// 2026-11-27 (redesign step 3): aims at the centre of the box mn..mx and backs off until the whole box fits the view
+// (its bounding sphere inside the narrower field of view); keeps yaw and pitch
+void FrameBox(OrbitCamera& c, const float mn[3], const float mx[3], float aspect);
 // false if the point is behind the camera
 bool Project(const OrbitCamera& c, float aspect, const float p[3], float vpW, float vpH, float& sx, float& sy);
 // pickable bone whose joint is closest to the click (radius in pixels), -1 otherwise

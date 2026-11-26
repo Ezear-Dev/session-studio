@@ -88,3 +88,25 @@ TEST(view_rotator_roundtrip) {
         CHECK_NEAR(pp, p, 0.01);
     }
 }
+
+// redesign step 3 fix (2026-11-27, user: "Reset does not reset to the right place"): Reset frames the skater's box
+TEST(view_frame_box_fits_and_centres) {
+    for (float aspect : {1600.f / 900.f, 0.8f}) {
+        OrbitCamera c;
+        const float mn[3] = {-30.f, -40.f, 20.f}, mx[3] = {50.f, 40.f, 190.f};
+        FrameBox(c, mn, mx, aspect);
+        CHECK_NEAR(c.target[0], 10.f, 1e-3); CHECK_NEAR(c.target[1], 0.f, 1e-3); CHECK_NEAR(c.target[2], 105.f, 1e-3);
+        const float W = 1000.f, H = W / aspect;
+        for (int k = 0; k < 8; k++) {   // every corner of the box lands inside the view, with a margin
+            const float p[3] = {k & 1 ? mx[0] : mn[0], k & 2 ? mx[1] : mn[1], k & 4 ? mx[2] : mn[2]};
+            float sx, sy;
+            CHECK(Project(c, aspect, p, W, H, sx, sy));
+            CHECK(sx > W * 0.03f && sx < W * 0.97f && sy > H * 0.03f && sy < H * 0.97f);
+        }
+        float sx, sy;   // and the box does not shrink to a dot: its height takes a good part of the view
+        const float top[3] = {10.f, 0.f, 190.f}, bot[3] = {10.f, 0.f, 20.f};
+        float tx, ty;
+        CHECK(Project(c, aspect, top, W, H, tx, ty) && Project(c, aspect, bot, W, H, sx, sy));
+        CHECK(sy - ty > H * 0.45f);
+    }
+}

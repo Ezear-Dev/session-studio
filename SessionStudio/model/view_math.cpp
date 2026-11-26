@@ -1,4 +1,5 @@
 #include "view_math.h"
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -161,4 +162,18 @@ void StageViewProj(const OrbitCamera& c, float aspect, float out[16]) {
     // D3D depth: z' = (z + w) / 2
     for (int col = 0; col < 4; col++) vp[col * 4 + 2] = 0.5f * (vp[col * 4 + 2] + vp[col * 4 + 3]);
     for (int i = 0; i < 16; i++) out[i] = vp[i];
+}
+
+void FrameBox(OrbitCamera& c, const float mn[3], const float mx[3], float aspect) {
+    float r2 = 0.f;
+    for (int k = 0; k < 3; k++) {
+        c.target[k] = (mn[k] + mx[k]) * 0.5f;
+        const float h = (mx[k] - mn[k]) * 0.5f;
+        r2 += h * h;
+    }
+    const float radius = std::sqrt(r2) * 1.05f;   // a small margin around the box
+    const float half = c.fovDeg * kDeg * 0.5f;
+    const float halfH = std::atan(std::tan(half) * (aspect > 1e-6f ? aspect : 1.f));
+    const float fit = std::min(half, halfH);
+    c.dist = std::clamp(radius / std::sin(fit), 30.f, 3000.f);
 }

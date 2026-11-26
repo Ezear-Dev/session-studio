@@ -80,6 +80,19 @@ Important steps, technical decisions, problems and their solutions. Current stat
   Save as, Studio mode, help and folders moved to the ... menu; Auto key to the timeline transport. Tab switches the
   workspace: the shell claims the Tab key (`SetKeyOwner`) so ImGui's keyboard navigation cannot focus a button with
   it (Space would then press that button instead of playing). Editing keys are ignored in Browse.
+- **Step 3: floating stage tools (11-27)**: the tools are ImGui *child windows* of the stage window. ImGuizmo only
+  reacts when the stage window itself is hovered (`IsHoveringWindow` in ImGuizmo.cpp), so a ring under a card can
+  never be grabbed through it, and the stage's own picking / orbit use `IsWindowHovered()` the same way. Cards are
+  placed by a corner from their size at the last frame. The Studio bone list moved from the Inspector to the body
+  picker ("All bones"). The mannequin shader got a warm wrapped key, cool fill and rim, warm floor bounce and a soft
+  highlight curve; `--selftest` now compiles the stage shaders (they are compiled at start: an error would silently
+  fall back to the skeleton view).
+- **The editor's floor is not the game's ground in tricks (11-27)**: the user saw the feet go through the floor. Measured
+  on the real recordings: in component space the body goes down to -41 cm (KickFlip), -30 (Ollie), -16 (Landing),
+  while standing / riding stay at or above 0. Component space follows the character, not the ground, so there is no
+  true ground during a jump; the floor is now drawn under the lowest point of the variant's game animation
+  (`GroundHeight`, model + tests). Reset now frames the posed skater (`FrameBox`); the body picker was removed at the
+  user's request.
 
 ## Problems met and solutions
 

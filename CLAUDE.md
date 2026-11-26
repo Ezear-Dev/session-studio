@@ -46,6 +46,8 @@ DLL ──writes──► SessionAnimLoader.native.log ──parsed by──► 
 - The editor reuses the mod's core library: **any change in `src/` affects both the DLL and the editor**.
 
 Rule for new code: logic goes in `src/` or `model/` with offline tests; `app/` only draws and dispatches.
+Stage rule (redesign step 3): anything clickable over the 3D view must be a child window of the stage window (see
+`StageOverlays`), never a plain item: ImGuizmo and the stage picking ignore the mouse only over other windows.
 
 ## 3. Build and test (the only commands known to work)
 

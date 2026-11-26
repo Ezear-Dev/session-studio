@@ -12,27 +12,39 @@ cbuffer CB : register(b0) { float4x4 vp; float4 eyeDir; };
 struct VSI { float3 p : POSITION; float3 n : NORMAL; float4 c : COLOR; };
 struct PSI { float4 p : SV_POSITION; float3 n : NORMAL; float4 c : COLOR; };
 PSI vs(VSI i) { PSI o; o.p = mul(vp, float4(i.p, 1.0)); o.n = i.n; o.c = i.c; return o; }
-// studio light (2026-11-26 second look): sky / ground ambient, a key light above and to the side of the camera,
-// a soft fill from the other side, a faint highlight and rim, so the volumes read
+// studio light (2026-11-26 second look, redesign step 3 on 2026-11-27): a warm key light above and to the side of the
+// camera with a soft wrap, a cool fill from the other side, sky / warm floor bounce ambient, a soft highlight and a cool
+// rim light that separates the body from the dark background; a gentle curve keeps the clay from looking flat
 float4 ps(PSI i) : SV_Target {
     float3 n = normalize(i.n);
     float3 V = -normalize(eyeDir.xyz);
     float3 up = float3(0.0, 0.0, 1.0);
     float3 right = cross(V, up);
     right = dot(right, right) > 1e-6 ? normalize(right) : float3(1.0, 0.0, 0.0);
-    float3 key = normalize(V * 0.55 + up * 0.75 + right * 0.45);
-    float3 fill = normalize(V * 0.6 - right * 0.7 + up * 0.05);
+    float3 key = normalize(V * 0.50 + up * 0.80 + right * 0.50);
+    float3 fill = normalize(V * 0.55 - right * 0.75 + up * 0.05);
+    float3 back = normalize(-V * 0.85 + up * 0.45 - right * 0.25);
     float hemi = 0.5 + 0.5 * n.z;
-    float3 amb = lerp(float3(0.16, 0.16, 0.19), float3(0.36, 0.37, 0.40), hemi);
-    float k = saturate(dot(n, key));
-    float f = saturate(dot(n, fill)) * 0.22;
-    float spec = pow(saturate(dot(n, normalize(key + V))), 28.0) * 0.10;
-    float rim = pow(1.0 - saturate(dot(n, V)), 3.0) * 0.12;
-    float3 c = i.c.rgb * (amb + k * 0.78 + f) + spec + rim;
+    float3 amb = lerp(float3(0.17, 0.15, 0.14), float3(0.30, 0.33, 0.38), hemi);       // warm floor bounce, cool sky
+    float kw = saturate((dot(n, key) + 0.25) / 1.25);                                   // wrapped key: softer terminator
+    float3 keyC = float3(1.00, 0.95, 0.88) * kw * 0.80;
+    float3 fillC = float3(0.62, 0.70, 0.86) * saturate(dot(n, fill)) * 0.20;
+    float spec = pow(saturate(dot(n, normalize(key + V))), 36.0) * 0.12;
+    float fres = pow(1.0 - saturate(dot(n, V)), 2.6);
+    float3 rim = float3(0.55, 0.66, 0.90) * fres * (0.10 + 0.25 * saturate(dot(n, back)));
+    float3 c = i.c.rgb * (amb + keyC + fillC) + spec + rim;
+    c = c / (1.0 + c * 0.18) * 1.12;                                                    // soft shoulder on the highlights
     return float4(saturate(c), 1.0);
 }
 )";
 template <class T> void Rel(T*& p) { if (p) { p->Release(); p = nullptr; } }
+bool CompileOne(const char* entry, const char* profile, std::string& err) {
+    ID3DBlob* b = nullptr; ID3DBlob* eb = nullptr;
+    const bool ok = SUCCEEDED(D3DCompile(kShader, std::strlen(kShader), "stage", nullptr, nullptr, entry, profile, 0, 0, &b, &eb));
+    if (!ok) err = eb ? std::string((const char*)eb->GetBufferPointer(), eb->GetBufferSize()) : std::string(entry);
+    Rel(b); Rel(eb);
+    return ok;
+}
 constexpr DXGI_FORMAT kColor = DXGI_FORMAT_R8G8B8A8_UNORM, kDepth = DXGI_FORMAT_D24_UNORM_S8_UINT;
 } // namespace
 
@@ -220,3 +232,5 @@ ID3D11ShaderResourceView* StageRenderer::Render(int W, int H, const float viewPr
     if (d.samples > 1) c->ResolveSubresource(d.picTex, 0, d.colorTex, 0, kColor);
     return d.srv;
 }
+
+bool StageRenderer::CheckShaders(std::string& err) { return CompileOne("vs", "vs_4_0", err) && CompileOne("ps", "ps_4_0", err); }

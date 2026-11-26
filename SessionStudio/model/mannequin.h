@@ -49,3 +49,7 @@ bool TorsoAxes(const MannequinRig& r, const std::vector<FTr>& cs, float side[3],
 // bones are absent, not finite, or of zero length is skipped. Under 20 000 triangles.
 // stripeBone: the yellow stripe goes on that bone only (-1: none, -2: every limb)
 void BuildMannequinMesh(const MannequinRig& r, const std::vector<FTr>& cs, const std::vector<uint32_t>& boneRgba, Mesh& out, int stripeBone = -2);
+// 2026-11-27 (redesign step 3): height of the editor's floor for these poses (usually samples of the game's animation):
+// 0, or lower when the body goes below 0: in tricks the recorded body goes up to ~40 cm below the component origin
+// (measured: KickFlip -41, Ollie -30, Landing -16 cm), and the soles sit a little under the toe bones. Never above 0.
+float GroundHeight(const MannequinRig& r, const std::vector<std::vector<FTr>>& poses);

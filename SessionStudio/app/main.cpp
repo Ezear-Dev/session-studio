@@ -10,6 +10,7 @@
 #include "app.h"
 #include "workspace.h"
 #include "ui_theme.h"
+#include "stage_renderer.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -102,6 +103,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmd, int) {
             report += std::string("fonts: Segoe UI ") + (fr.body ? "yes" : "NO (ImGui font)") + ", Semibold " + (fr.strong ? "yes" : "no") +
                       ", icons " + (fr.iconFile.empty() ? std::string("none (text labels)") : fr.iconFile + " " + std::to_string(fr.iconsFound) + "/" + std::to_string(fr.iconsTotal)) + "\n";
             ImGui::DestroyContext();
+        }
+        {   // redesign step 3: the 3D view's shaders compile (they are compiled at start, an error would hide the body)
+            std::string err;
+            report += StageRenderer::CheckShaders(err) ? std::string("stage shaders: OK\n") : "stage shaders: ERROR " + err + "\n";
         }
         if (AttachConsole(ATTACH_PARENT_PROCESS)) { FILE* f = nullptr; freopen_s(&f, "CONOUT$", "w", stdout); std::fputs(report.c_str(), stdout); std::fflush(stdout); }
         FILE* f = _wfsopen((ExeDir() + L"selftest.txt").c_str(), L"wb", _SH_DENYNO);

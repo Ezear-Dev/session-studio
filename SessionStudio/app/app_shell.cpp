@@ -487,9 +487,11 @@ void App::Toast() {
     const float maxW = fs * 26.f;
     const ImVec2 ts = ImGui::CalcTextSize(status_.c_str(), nullptr, false, maxW);
     const float px = fs * 0.8f, py = fs * 0.5f;
-    const float rx = ws_ == 1 ? L.stage.x + L.stage.w - fs * 0.8f : L.w - L.gap - fs * 0.8f;
-    const float by = ws_ == 1 ? L.stage.y + L.stage.h - fs * 0.8f : L.h - L.gap - fs * 0.8f;
-    const ImVec2 p0(rx - ts.x - px * 2.f - fs * 0.2f, by - ts.y - py * 2.f), p1(rx, by);
+    // redesign step 3: bottom centre (the stage has its camera card bottom right and its banners bottom left)
+    const float cx = ws_ == 1 ? L.stage.x + L.stage.w * 0.5f : L.w * 0.5f;
+    const float by = ws_ == 1 ? L.stage.y + L.stage.h - OverlaySize("##camera").y - fs * 1.4f : L.h - L.gap - fs * 0.8f;   // above the cards
+    const float tw = ts.x + px * 2.f + fs * 0.2f;
+    const ImVec2 p0(std::round(cx - tw * 0.5f), by - ts.y - py * 2.f), p1(p0.x + tw, by);
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     dl->AddRectFilled(p0, p1, theme::U32(theme::Raised, 0.97f * a), fs * 0.4f);
     dl->AddRect(p0, p1, theme::U32(theme::Line, a), fs * 0.4f);

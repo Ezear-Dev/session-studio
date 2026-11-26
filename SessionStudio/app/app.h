@@ -100,7 +100,9 @@ private:
     struct TrickEntry { std::string base; std::string category; uint8_t stances = 0; };   // browser line
 
     // ---------------------------------------------------------------- UI Phase 3 (2026-11-25): Stage toolbar + Inspector
-    void StageToolbar();                  // replaces LimbBar: body part, tool, ring space, display, camera, shortcuts
+    // redesign step 3 (2026-11-27): floating tools over the stage edges (tools, body picker, view, camera)
+    void StageOverlays(const ImVec2& p0, const ImVec2& sz);
+    ImVec2 OverlaySize(const char* id) const;   // size of a floating card at the last frame (0 before it is drawn)
     void InspectorSelection();            // Inspector tabs: what is selected and its tool options
     void InspectorClip();                 //   the clip (name, mode, parts, duration, who it plays for)
     void InspectorAdvanced();             //   Studio only: stances, feet, priority, blends, loop, drive
@@ -183,6 +185,12 @@ private:
 
     int sel_ = -1;
     OrbitCamera cam_;
+    // redesign step 3 fix (2026-11-27): the floor sits under the lowest point of the game's animation of the variant
+    // (in tricks the recorded body goes up to ~40 cm below the component origin); computed once per figure
+    float floorZ_ = 0.f;
+    std::string floorKey_;
+    float stageAspect_ = 16.f / 9.f;   // of the last frame (Reset frames the skater for it)
+    bool camFramed_ = false;           // the first view frames the skater
     bool ghost_ = true, worldMode_ = false, showBoard_ = false   /* 2026-11-26 (mannequin stage 2): solid board, ui.board, off by default */, showVolumes_ = true;
     // 2026-11-26 (mannequin): "View: Body / Skeleton" (ui.view); the body rig is calibrated once per skeleton
     bool bodyView_ = true;
