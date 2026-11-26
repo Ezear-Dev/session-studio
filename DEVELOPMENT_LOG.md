@@ -89,10 +89,11 @@ Important steps, technical decisions, problems and their solutions. Current stat
   fall back to the skeleton view).
 - **The editor's floor is not the game's ground in tricks (11-27)**: the user saw the feet go through the floor. Measured
   on the real recordings: in component space the body goes down to -41 cm (KickFlip), -30 (Ollie), -16 (Landing),
-  while standing / riding stay at or above 0. Component space follows the character, not the ground, so there is no
-  true ground during a jump; the floor is now drawn under the lowest point of the variant's game animation
-  (`GroundHeight`, model + tests). Reset now frames the posed skater (`FrameBox`); the body picker was removed at the
-  user's request.
+  while standing / riding stay at or above 0. A first fix put the floor under the lowest point of the game animation;
+  the skater then floated 41 cm up at the start. A second measure showed the ground reference IS 0 (root bones and the
+  board at 0, feet ~11 cm up on the board): only a few frames of the pop dip to -40 cm. Decision (user): the floor is an
+  option (View > Floor, off by default, always at 0); orientation axes in a corner show camera turns. Reset frames the
+  posed skater (`FrameBox`); the body picker was removed at the user's request.
 
 ## Problems met and solutions
 

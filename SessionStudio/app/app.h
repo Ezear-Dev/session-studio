@@ -185,10 +185,7 @@ private:
 
     int sel_ = -1;
     OrbitCamera cam_;
-    // redesign step 3 fix (2026-11-27): the floor sits under the lowest point of the game's animation of the variant
-    // (in tricks the recorded body goes up to ~40 cm below the component origin); computed once per figure
-    float floorZ_ = 0.f;
-    std::string floorKey_;
+    bool showFloor_ = false;           // redesign step 3 (user 2026-11-27): the floor at the game's height 0, View > Floor (ui.floor)
     float stageAspect_ = 16.f / 9.f;   // of the last frame (Reset frames the skater for it)
     bool camFramed_ = false;           // the first view frames the skater
     bool ghost_ = true, worldMode_ = false, showBoard_ = false   /* 2026-11-26 (mannequin stage 2): solid board, ui.board, off by default */, showVolumes_ = true;

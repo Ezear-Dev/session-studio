@@ -117,6 +117,8 @@ void App::StageOverlays(const ImVec2& p0, const ImVec2& sz) {
                 ui::Switch("##ghost", &ghost_, "Ghost");
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Blue: the game's original animation, to compare.");
             }
+            if (ui::Switch("##floor", &showFloor_, "Floor")) SaveSetting(settings_, "ui.floor", showFloor_ ? "1" : "0");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("A floor at the game's ground reference (height 0), with the skater's front in red.\nIn tricks, the game's own animation dips below it for a few frames (the pop):\nthe feet then go through it. That is the recording, not your clip.");
             if (ui::Switch("##board", &showBoard_, "Board")) SaveSetting(settings_, "ui.board", showBoard_ ? "1" : "0");
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("An APPROXIMATE board (light arrow = nose), from the animation's board bones.\nIt is not the board you see in game (driven by physics): it does not flip in tricks,\nand the feet may not sit exactly on it. Use it as a rough guide only.");
             if (!bodyView_) {
@@ -234,7 +236,7 @@ void App::ViewPanel() {
     const float fsz = ImGui::GetFontSize();
     const float round = ImGui::GetStyle().WindowRounding;
     {   // background: a vertical gradient (lighter at the top), rounded like the panel
-        const ImU32 top = theme::U32(ImVec4(0.110f, 0.125f, 0.157f, 1.f)), bot = theme::U32(ImVec4(0.059f, 0.067f, 0.086f, 1.f));
+        const ImU32 top = theme::U32(ImVec4(0.078f, 0.090f, 0.114f, 1.f)), bot = theme::U32(ImVec4(0.039f, 0.043f, 0.059f, 1.f));   // darker (user 2026-11-27)
         const ImVec2 p1(p0.x + sz.x, p0.y + sz.y);
         dl->AddRectFilled(p0, ImVec2(p1.x, p0.y + 2.f * round), top, round, ImDrawFlags_RoundCornersTop);
         dl->AddRectFilled(ImVec2(p0.x, p1.y - 2.f * round), p1, bot, round, ImDrawFlags_RoundCornersBottom);
@@ -324,55 +326,77 @@ void App::ViewPanel() {
         return true;
     };
     dl->PushClipRect(p0, ImVec2(p0.x + sz.x, p0.y + sz.y), true);
-    {   // redesign step 3 fix (user: the feet went through the floor): the floor under the lowest point of the game's
-        // animation of this variant (tricks go up to ~40 cm below 0); 0 without a recording
-        const std::string key = FigureKey(var_) + (doc_.HasFigure() ? "|fig" : "|none") + (mrig_.ok ? "|rig" : "");
-        if (key != floorKey_) {
-            floorKey_ = key;
-            floorZ_ = 0.f;
-            if (!mrigBuilt_) BuildBodyRig(csV);
-            if (doc_.HasFigure() && mrig_.ok) {
-                std::vector<std::vector<FTr>> poses(25);
-                for (int i = 0; i < 25; i++) doc_.OriginPose(doc_.FigureDuration() * i / 24.f, poses[i]);
-                floorZ_ = GroundHeight(mrig_, poses);
+    // redesign step 3, second fix (user 2026-11-27, "maybe remove the floor?"): in the game's recordings the ground
+    // reference is height 0 (root bones and board at 0, feet about 11 cm up on the board), but tricks dip far below it for a
+    // few frames (KickFlip pop: -40 cm). A floor there reads as "feet through the floor", a lower one as "floating".
+    // The floor is now an option (View > Floor, off by default), always at the game's height 0.
+    if (showFloor_) {
+        for (int i = -10; i <= 10; i++) {   // ground: 5 m, the lines fade away from the skater
+            const float a[3] = {i * 25.f, -250.f, 0.f}, b[3] = {i * 25.f, 250.f, 0.f}, c[3] = {-250.f, i * 25.f, 0.f}, d[3] = {250.f, i * 25.f, 0.f};
+            ImVec2 pa, pb;
+            const float k = 1.f - std::fabs((float)i) / 11.f;
+            const ImU32 gc = theme::U32(ImVec4(0.30f, 0.33f, 0.40f, 1.f), i == 0 ? 0.0f : 0.55f * k * k);   // centre lines: drawn below, coloured
+            if (PU(a, pa) && PU(b, pb)) dl->AddLine(pa, pb, gc);
+            if (PU(c, pa) && PU(d, pb)) dl->AddLine(pa, pb, gc);
+        }
+        {   // orientation (user: "1/4 turn" looked like the skater turned): coloured centre lines and the word "front" on the
+            // floor, so a turn of the camera reads as one. +X = where the skater faces (front), red; Y, green
+            ImVec2 pa, pb;
+            const float xa[3] = {-250.f, 0.f, 0.f}, xb[3] = {250.f, 0.f, 0.f}, ya[3] = {0.f, -250.f, 0.f}, yb[3] = {0.f, 250.f, 0.f};
+            if (PU(ya, pa) && PU(yb, pb)) dl->AddLine(pa, pb, IM_COL32(95, 211, 138, 120), 1.5f);
+            if (PU(xa, pa) && PU(xb, pb)) dl->AddLine(pa, pb, IM_COL32(229, 83, 75, 150), 1.5f);
+            const float fr[3] = {120.f, 0.f, 0.f};
+            if (PU(fr, pa)) dl->AddText(ImVec2(pa.x + 4.f, pa.y - fsz - 2.f), IM_COL32(229, 83, 75, 200), "front");
+        }
+        {   // a soft contact shadow on the ground under the skater (stacked discs, darker in the middle)
+            float cx = 0.f, cy = 0.f;
+            int nb = 0;
+            for (const char* fb : {"AMXX_L_Foot", "AMXX_R_Foot", "AMXX_Pelvis"})
+                for (int b = 0; b < n; b++) if (s.names[b] == fb) { cx += csV[b].px; cy += csV[b].py; nb++; }
+            if (nb) {
+                cx /= (float)nb; cy /= (float)nb;
+                for (int ring = 0; ring < 4; ring++) {
+                    const float rad = 22.f + ring * 9.f;
+                    ImVec2 pts[32];
+                    bool ok = true;
+                    for (int i = 0; i < 32 && ok; i++) {
+                        const float ang = i * 6.2831853f / 32.f;
+                        const float g[3] = {cx + std::cos(ang) * rad, cy + std::sin(ang) * rad * 0.8f, 0.f};
+                        ok = PU(g, pts[i]);
+                    }
+                    if (ok) dl->AddConvexPolyFilled(pts, 32, IM_COL32(0, 0, 0, 34));
+                }
             }
         }
     }
-    const float fz = floorZ_;
-    for (int i = -10; i <= 10; i++) {   // ground: 5 m, the lines fade away from the skater
-        const float a[3] = {i * 25.f, -250.f, fz}, b[3] = {i * 25.f, 250.f, fz}, c[3] = {-250.f, i * 25.f, fz}, d[3] = {250.f, i * 25.f, fz};
-        ImVec2 pa, pb;
-        const float k = 1.f - std::fabs((float)i) / 11.f;
-        const ImU32 gc = theme::U32(ImVec4(0.30f, 0.33f, 0.40f, 1.f), i == 0 ? 0.0f : 0.55f * k * k);   // centre lines: drawn below, coloured
-        if (PU(a, pa) && PU(b, pb)) dl->AddLine(pa, pb, gc);
-        if (PU(c, pa) && PU(d, pb)) dl->AddLine(pa, pb, gc);
-    }
-    {   // orientation (user: "1/4 turn" looked like the skater turned): coloured centre lines and the word "front" on the
-        // floor, so a turn of the camera reads as one. +X = where the skater faces (front), red; Y, green
-        ImVec2 pa, pb;
-        const float xa[3] = {-250.f, 0.f, fz}, xb[3] = {250.f, 0.f, fz}, ya[3] = {0.f, -250.f, fz}, yb[3] = {0.f, 250.f, fz};
-        if (PU(ya, pa) && PU(yb, pb)) dl->AddLine(pa, pb, IM_COL32(95, 211, 138, 120), 1.5f);
-        if (PU(xa, pa) && PU(xb, pb)) dl->AddLine(pa, pb, IM_COL32(229, 83, 75, 150), 1.5f);
-        const float fr[3] = {120.f, 0.f, fz};
-        if (PU(fr, pa)) dl->AddText(ImVec2(pa.x + 4.f, pa.y - fsz - 2.f), IM_COL32(229, 83, 75, 200), "front");
-    }
-    {   // a soft contact shadow on the ground under the skater (stacked discs, darker in the middle)
-        float cx = 0.f, cy = 0.f;
-        int nb = 0;
-        for (const char* fb : {"AMXX_L_Foot", "AMXX_R_Foot", "AMXX_Pelvis"})
-            for (int b = 0; b < n; b++) if (s.names[b] == fb) { cx += csV[b].px; cy += csV[b].py; nb++; }
-        if (nb) {
-            cx /= (float)nb; cy /= (float)nb;
-            for (int ring = 0; ring < 4; ring++) {
-                const float rad = 22.f + ring * 9.f;
-                ImVec2 pts[32];
-                bool ok = true;
-                for (int i = 0; i < 32 && ok; i++) {
-                    const float ang = i * 6.2831853f / 32.f;
-                    const float g[3] = {cx + std::cos(ang) * rad, cy + std::sin(ang) * rad * 0.8f, fz};
-                    ok = PU(g, pts[i]);
-                }
-                if (ok) dl->AddConvexPolyFilled(pts, 32, IM_COL32(0, 0, 0, 34));
+    {   // orientation axes in the top-left corner (always): a turn of the camera reads as one (user: "1/4 turn" looked
+        // like the skater turned). Directions of the skater's front (+X, red), side (Y, green) and up (Z, blue)
+        const ImVec2 c(p0.x + fsz * 2.6f, p0.y + fsz * 2.6f);
+        const float L = fsz * 1.7f;
+        const float o[3] = {cam_.target[0], -cam_.target[1], cam_.target[2]};   // UE point at the view's centre
+        ImVec2 so;
+        if (PU(o, so)) {
+            struct Ax { float d[3]; ImU32 col; const char* label; };
+            const Ax axes[3] = {{{1, 0, 0}, IM_COL32(229, 83, 75, 230), "front"}, {{0, 1, 0}, IM_COL32(95, 211, 138, 210), ""}, {{0, 0, 1}, IM_COL32(91, 140, 255, 210), "up"}};
+            dl->AddCircleFilled(c, L * 1.25f, theme::U32(theme::Bg0, 0.55f));
+            ImVec2 dir[3];
+            float len[3], maxLen = 1e-3f;
+            for (int k = 0; k < 3; k++) {   // projected directions; an axis pointing at the camera looks shorter
+                const float q[3] = {o[0] + axes[k].d[0] * 20.f, o[1] + axes[k].d[1] * 20.f, o[2] + axes[k].d[2] * 20.f};
+                ImVec2 sq;
+                len[k] = 0.f;
+                if (!PU(q, sq)) continue;
+                dir[k] = ImVec2(sq.x - so.x, sq.y - so.y);
+                len[k] = std::sqrt(dir[k].x * dir[k].x + dir[k].y * dir[k].y);
+                maxLen = std::max(maxLen, len[k]);
+            }
+            for (int k = 0; k < 3; k++) {
+                if (len[k] < 1e-3f) continue;
+                const float s2 = L / maxLen;
+                const ImVec2 e(c.x + dir[k].x * s2, c.y + dir[k].y * s2);
+                dl->AddLine(c, e, axes[k].col, 2.f);
+                dl->AddCircleFilled(e, 2.5f, axes[k].col);
+                if (*axes[k].label) dl->AddText(ImVec2(e.x + (dir[k].x >= 0.f ? 3.f : -ImGui::CalcTextSize(axes[k].label).x - 3.f), e.y - fsz * 0.5f), axes[k].col, axes[k].label);
             }
         }
     }
