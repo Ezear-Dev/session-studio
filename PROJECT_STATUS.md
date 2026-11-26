@@ -111,7 +111,19 @@ The check count depends on the machine: tests on real game clips are skipped whe
 
 ---
 
-## 6. UX/UI redesign project (in preparation, nothing started)
+## 6. UX/UI redesign project (started 2026-11-26, branch `redesign-ui`)
+
+**Current state (2026-11-26):** design v2 approved by the user — two full-screen workspaces, *Browse* (library) and
+*Animate* (full-width stage + full-width timeline, floating tools, contextual inspector card, clip settings panel);
+the user also asked for care on the stage mannequin (hands with fingers, feet). Detailed spec: local
+`notes/REDESIGN-PROPOSAL.md` (v1, a restyle of the four-panel layout, was rejected).
+| Step | State | Evidence |
+|---|---|---|
+| 0. Split `app.cpp` into panel files, no visible change | done, **user check pending** | build OK; `--selftest` exit 0; `test.cmd` ALL PASS (18607); code lines identical to before (sorted-line diff) |
+| 1-8 (theme, shell, stage, inspector, timeline, browse, dialogs, polish) | not started | — |
+
+Sections 6.2-6.6 below are the preparation notes written before the design; where they differ from the spec, the
+spec wins (e.g. §6.6 order).
 
 ### 6.1 Goal (user, 2026-11-26)
 Turn Session Studio into a small, professional, modern and intuitive animation studio, in the spirit of 2025-2026
@@ -126,8 +138,7 @@ intuitive. The **3D viewport and the timeline** become the centre of a premium c
 - Creator / Studio principle: one tool, simple by default, depth on demand, no duplicated features.
 - Dear ImGui **1.93.0 without docking** (the bundled branch). Docking, multi-viewport or another UI library would be a
   dependency change: decide it explicitly. The 3D view already renders through Direct3D 11 (`stage_renderer.cpp`).
-- `app.cpp` is a single ~3100-line class: splitting it into panels (library, viewport, inspector, timeline, dialogs)
-  is likely the first technical step, done without behaviour change and checked by the user.
+- `app.cpp` was a single ~3100-line class: split into panel files on 2026-11-26 (step 0, see above).
 - The agent cannot drive the mouse in the editor: every interaction change needs a precise user check list.
 
 ### 6.3 Feature inventory the redesign must keep (from the code, `app.cpp` panels)

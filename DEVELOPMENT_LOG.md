@@ -34,6 +34,7 @@ Important steps, technical decisions, problems and their solutions. Current stat
 | 11-26 | v0.23 | Landing state up to 2 s; editor copy / paste, end-pose warnings, lock start and end |
 | 11-26 | editor | Solid **mannequin** in the 3D view (six looks until accepted), optional approximate board |
 | 11-26 | v0.24 | **Rename**: AnimStudio → Session Studio (editor) + Session Anim Loader (mod); installed and checked in game |
+| 11-26 | editor | **UX/UI redesign started** on branch `redesign-ui`: design v1 (restyle of the 4-panel layout) rejected, v2 approved (Browse / Animate workspaces); step 0 splits `app.cpp` into panel files without behaviour change |
 
 ## Key technical decisions
 
@@ -60,6 +61,13 @@ Important steps, technical decisions, problems and their solutions. Current stat
 - **English everywhere (11-25/26)**: chat in French, project in English; the editor's French option was removed.
 - **No design rounds (11-25)**: short plan, then code (owner's rule).
 - **Mannequin built by code (11-26)**: rigid parts per bone; a CC0 skinned model was offered and declined for now.
+- **Redesign = two workspaces, not a restyle (11-26)**: the owner rejected a re-skin of the four fixed panels (3D view
+  too small, inspector too big, library a cramped list, weak timeline, overloaded top bar). Approved direction:
+  *Browse* (full-screen library: collections, trick cards with stance × feet matrix, detail panel) and *Animate*
+  (stage and timeline full width, floating tools on the stage edges so the gizmo area stays free, contextual inspector
+  card, clip settings panel, trick phase ribbon in the timeline). Still ImGui 1.93 without docking, own layout code.
+- **Step 0: `app.cpp` split by panel (11-26)**: same `App` class over `app*.cpp`; the file-local helpers became
+  `inline` in `app_internal.h` (namespace `app_detail`, pulled in with `using namespace`), so no line of logic changed.
 
 ## Problems met and solutions
 

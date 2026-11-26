@@ -38,8 +38,10 @@ DLL ──writes──► SessionAnimLoader.native.log ──parsed by──► 
 - `SessionStudio/model/` = **editor logic without interface** (static lib `asn_editor`, links `asn_core`): `EditorDoc`
   (split over `editor_doc_*.cpp` by feature), IK, mannequin and board meshes, time view, view math, workspace
   (settings, backups, library file operations, game log parsing), paths.
-- `SessionStudio/app/` = interface only: `app.cpp` (one large `App` class, ~3100 lines: header, library, stage,
-  inspector, timeline, dialogs), `stage_renderer.cpp` (D3D11 mannequin render), `main.cpp` (window, loop, `--selftest`).
+- `SessionStudio/app/` = interface only: one `App` class (`app.h`) split by panel since 2026-11-26 —
+  `app.cpp` (core: files, clips, confirmations, frame), `app_shell.cpp` (layout, header, welcome, status strip),
+  `app_library.cpp`, `app_stage.cpp`, `app_inspector.cpp`, `app_timeline.cpp`, `app_dialogs.cpp` (dialogs,
+  shortcuts); shared helpers in `app_internal.h` (namespace `app_detail`); `stage_renderer.cpp` (D3D11 mannequin render), `main.cpp` (window, loop, `--selftest`).
 - The editor reuses the mod's core library: **any change in `src/` affects both the DLL and the editor**.
 
 Rule for new code: logic goes in `src/` or `model/` with offline tests; `app/` only draws and dispatches.
