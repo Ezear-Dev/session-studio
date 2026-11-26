@@ -9,6 +9,11 @@
 #include <vector>
 #include "player.h"
 
+// 2026-11-26 v0.21: clips of other players go in clips\others\ (sub-folders allowed, 3 levels): loaded for the
+// multiplayer (found by content), never chosen for our own skater, never shown in the editor.
+constexpr const wchar_t* kOthersDir = L"others";
+constexpr const char* kOthersDirA = "others";
+
 class ClipLibrary {
 public:
     explicit ClipLibrary(std::wstring dir);
@@ -32,8 +37,11 @@ private:
         bool hasGood = false;
         Clip good;      // last valid version (not bound)
         bool seen = false;
+        bool foreign = false;   // clips\others\...
     };
     std::vector<std::string> Publish();
+    void ScanClip(const std::wstring& path, const std::string& key, bool foreign, std::vector<std::string>& log, bool& changed);
+    void ScanOthers(const std::wstring& dir, const std::string& rel, int depth, std::vector<std::string>& log, bool& changed);
 
     std::wstring dir_;
     std::vector<std::string> names_;

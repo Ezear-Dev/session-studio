@@ -61,6 +61,61 @@ std::vector<std::string> ClipLibrary::SetRig(std::vector<std::string> names) {
     return Publish();
 }
 
+void ClipLibrary::ScanClip(const std::wstring& path, const std::string& key, bool foreign, std::vector<std::string>& log, bool& changed) {
+    Entry& e = files_[key];
+    e.seen = true;
+    if (e.foreign != foreign) { e.foreign = foreign; e.hashed = false; }
+    // the CONTENT is compared (clips are small): a modification date can stay identical
+    // between two close saves of the same size
+    std::string text, err;
+    if (!ReadAll(path, text)) {
+        if (!e.readFail) log.push_back(key + ": cannot read (file open elsewhere?) -- retrying every second");
+        e.readFail = true;
+        return;   // previous version kept as it is
+    }
+    e.readFail = false;
+    const uint64_t h = Fnv1a(text);
+    if (e.hashed && e.hash == h) return;
+    e.hashed = true;
+    e.hash = h;
+    changed = true;
+    Clip c;
+    bool ok = ParseClip(text, key, c, err);
+    if (ok && haveRig_) { Clip probe = c; ok = BindClip(probe, names_, err); }
+    if (ok) {
+        c.stamp = ++clipStamp_;
+        // multiplayer identity: the content only (same bytes = same clip on every PC, whatever the file name)
+        const uint64_t id = ContentId(text);
+        c.netId = (uint32_t)(id >> 32);
+        c.netHash = (uint32_t)id;
+        c.foreign = foreign;
+        e.good = std::move(c);
+        e.hasGood = true;
+        log.push_back(key + ": loaded (\"" + e.good.name + "\", " + std::to_string(e.good.tracks.size()) + " track(s)" +
+                      (foreign ? ", another player's clip: played on their skater only" : "") + ")");
+    } else if (e.hasGood) log.push_back(key + ": " + err + " -- keeping the previous version");
+    else log.push_back(key + ": " + err + " -- refused");
+}
+
+void ClipLibrary::ScanOthers(const std::wstring& dir, const std::string& rel, int depth, std::vector<std::string>& log, bool& changed) {
+    if (depth > 3) return;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + L"\\*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        const std::wstring wname = fd.cFileName;
+        if (wname == L"." || wname == L"..") continue;
+        const std::string key = rel + "\\" + Utf8(wname);
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) continue;   // no link loops
+            ScanOthers(dir + L"\\" + wname, key, depth + 1, log, changed);
+            continue;
+        }
+        if (EndsWith(wname, L".sanim")) ScanClip(dir + L"\\" + wname, key, true, log, changed);
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+}
+
 std::vector<std::string> ClipLibrary::Scan() {
     std::vector<std::string> log;
     bool changed = false;
@@ -106,37 +161,12 @@ std::vector<std::string> ClipLibrary::Scan() {
                 continue;
             }
             if (!EndsWith(wname, L".sanim")) continue;
-            Entry& e = files_[name];
-            e.seen = true;
-            // the CONTENT is compared (clips are small): a modification date can stay identical
-            // between two close saves of the same size
-            std::string text, err;
-            if (!ReadAll(dir_ + L"\\" + wname, text)) {
-                if (!e.readFail) log.push_back(name + ": cannot read (file open elsewhere?) -- retrying every second");
-                e.readFail = true;
-                continue;   // previous version kept as it is
-            }
-            e.readFail = false;
-            const uint64_t h = Fnv1a(text);
-            if (e.hashed && e.hash == h) continue;
-            e.hashed = true;
-            e.hash = h;
-            changed = true;
-            Clip c;
-            bool ok = ParseClip(text, name, c, err);
-            if (ok && haveRig_) { Clip probe = c; ok = BindClip(probe, names_, err); }
-            if (ok) {
-                c.stamp = ++clipStamp_;
-                c.netId = NetId(name);           // 2026-11-26 multiplayer: same file + same bytes = same clip on every PC
-                c.netHash = (uint32_t)h;
-                e.good = std::move(c);
-                e.hasGood = true;
-                log.push_back(name + ": loaded (\"" + e.good.name + "\", " + std::to_string(e.good.tracks.size()) + " track(s))");
-            } else if (e.hasGood) log.push_back(name + ": " + err + " -- keeping the previous version");
-            else log.push_back(name + ": " + err + " -- refused");
+            ScanClip(dir_ + L"\\" + wname, name, false, log, changed);
         } while (FindNextFileW(h, &fd));
         FindClose(h);
     }
+    // 2026-11-26 v0.21: clips of other players, in clips\others\ and its sub-folders (one per player, any names)
+    ScanOthers(dir_ + L"\\" + kOthersDir, std::string(kOthersDirA), 0, log, changed);
     for (auto it = files_.begin(); it != files_.end();) {
         if (!it->second.seen) { log.push_back(it->first + ": removed (file deleted)"); it = files_.erase(it); changed = true; }
         else ++it;

@@ -1,7 +1,9 @@
 // 2026-11-26 multiplayer (SessionOpenMP mod channel): what one player sends so the others can play the same clips on
 // that player's skater. Not the pose: the layers of our player (which clip, clip time, weight), ~15 times a second.
-// The receiver needs the SAME clip file (same name, same content); a missing or different clip is skipped there.
-// Wire text: "S1" + hex of the binary frame (OpenMP carries Lua strings; hex keeps it plain text). Little endian.
+// The receiver needs a clip with the SAME content (any file name: in clips\ or clips\others\); a missing or different
+// clip is skipped there.
+// Wire text: "S2" + hex of the binary frame (OpenMP carries Lua strings; hex keeps it plain text). Little endian.
+// "S1" (v0.19 / v0.20) identified clips by file name + hash; it is not read any more.
 #pragma once
 #include <cstdint>
 #include <string>
@@ -9,8 +11,8 @@
 constexpr int kNetMaxLayers = 4;
 
 struct NetLayer {
-    uint32_t id = 0;        // NetId(file name)
-    uint32_t hash = 0;      // low 32 bits of the file content hash (Fnv1a)
+    uint32_t id = 0;        // ContentId of the clip file: high 32 bits
+    uint32_t hash = 0;      // ContentId: low 32 bits
     bool mirrored = false, dis = false, trick = false;
     float t = 0.f;          // clip time evaluated this frame (after every mapping: cycle, manual ratio, trick warp, dismount)
     float speed = 0.f;      // clip seconds per real second (receiver extrapolates between frames)
@@ -25,6 +27,8 @@ struct NetFrame {
     NetLayer l[kNetMaxLayers];
 };
 
-uint32_t NetId(const std::string& file);             // FNV-1a 32 of the lower-case file name
+// Identity of a clip file by its content: FNV-1a 64 of the bytes, without a UTF-8 BOM and without '\r' (a file that
+// went through a tool turning LF into CRLF, or back, keeps its identity).
+uint64_t ContentId(const std::string& text);
 std::string NetEncode(const NetFrame& f);            // "S1" + hex
 bool NetDecode(const std::string& s, NetFrame& out); // false on anything malformed (data from other players: untrusted)

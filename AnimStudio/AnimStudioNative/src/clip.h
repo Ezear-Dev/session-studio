@@ -50,8 +50,11 @@ struct Clip {
     Mode mode = Mode::Additive;
     bool mirror = true;
     uint64_t stamp = 0;        // content version (given by ClipLibrary): changes when the file changes
-    // 2026-11-26 multiplayer: identity on the wire (ClipLibrary): NetId(file) and the low 32 bits of the file hash
+    // 2026-11-26 multiplayer: identity on the wire (ClipLibrary) = ContentId of the file (net.h): high / low 32 bits.
+    // The file name plays no part: the same clip can have any name on each PC.
     uint32_t netId = 0, netHash = 0;
+    // 2026-11-26 v0.21: clip of another player (clips\others\...): played on that player's skater, never on ours
+    bool foreign = false;
     std::vector<std::pair<std::string, JValue>> extra;   // unknown root fields, in file order (kept)
     std::vector<Track> tracks;
     std::vector<PosKey> pelvis;   // P6 lot 2: "pelvis" (optional); a clip needs tracks or pelvis keys

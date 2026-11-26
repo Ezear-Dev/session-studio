@@ -72,11 +72,26 @@ public:
     // ApplyRemote: on a PEER's skater, play the layers that peer sent (clips found by NetId + content hash in `set`),
     // `age` = seconds since the frame arrived (clip time and weight extrapolated; faded out when the stream stops).
     // `missing` (optional) gets the number of layers whose clip is not here. Returns the number of bones rewritten.
+    // 2026-11-26 (after the v0.19 test): the receiver keeps its own clock per layer (time and weight advance with the
+    // sent speeds every frame) and pulls it softly toward the sent values; it snaps only on a big gap or a new layer.
+    // Before, every frame arrival reset the time to `t + speed * age`: packet jitter and the speed changes of the
+    // landing sync (hold in the air, 3x catch-up) showed as jumps. `clk` (optional) reports, on a new frame, the
+    // biggest jump the old rule would have made (clip seconds) and the snaps of this call.
+    struct NetClockStats { bool newFrame = false; float jump = 0.f; int snaps = 0; };
     void ExportNet(NetFrame& out, float dt);
-    int ApplyRemote(FTr* cs, int n, const ClipSet* set, const NetFrame& f, float age, float dt, int* missing = nullptr);
+    int ApplyRemote(FTr* cs, int n, const ClipSet* set, const NetFrame& f, float age, float dt, int* missing = nullptr,
+                    NetClockStats* clk = nullptr);
     static constexpr float kNetStale = 0.5f, kNetStaleFade = 0.3f;   // s
+    static constexpr float kNetTimeTau = 0.15f, kNetWeightTau = 0.10f;   // s: soft correction
+    static constexpr float kNetTimeSnap = 0.30f, kNetWeightSnap = 0.35f; // gap beyond which the clock jumps
+    // v0.22: behind the sender by more than kNetBehind (clip s): faster pull; ahead: at least kNetMinRate x the sent
+    // speed (the clock slows down, never goes back)
+    static constexpr float kNetTimeTauBehind = 0.06f, kNetBehind = 0.05f, kNetMinRate = 0.25f;
+    static constexpr float kNetBackRate = 0.25f;   // clip s per s: drift back toward a sender that stopped
+    static constexpr float kNetMaxPull = 1.5f;     // clip s per s: most the pull may add to the sent speed
     const char* CurrentClipName() const;             // internal copy: never a pointer into a Clip; "" if none
     int LayerCount() const { return nLayers_; }
+    float RemoteTime(int i) const { return i >= 0 && i < nLayers_ ? layers_[i].tFixed : -1.f; }   // tests
     int RigBones() const { return n_; }
     const CycleTracker& Cycle() const { return cyc_; }   // 2026-11-25: the game's step cycle (journal)
 
@@ -131,6 +146,11 @@ private:
     bool haveGen_ = false;
     int nLayers_ = 0;
     Layer layers_[kMaxLayers];
+    struct RemoteClock { uint32_t id, hash; bool mirrored, dis, trick; float t, w; };
+    RemoteClock rclk_[kNetMaxLayers] = {};   // receiver clocks of the last call (ApplyRemote)
+    int nRclk_ = 0;
+    uint32_t rSeq_ = 0;
+    bool rSeqHave_ = false;
     Quat game_[kMaxBones] = {};
     Quat local_[kMaxBones] = {};
     float localP_[kMaxBones][3] = {};

@@ -58,6 +58,41 @@ TEST(clipset_empty_without_rig_then_loaded) {
     CHECK(lib.Current()->clips[0].tracks[0].index == 15);
 }
 
+// 2026-11-26 v0.21: identity by content, clips of other players in clips\others\ (sub-folders too)
+TEST(clipset_others_folder_and_content_identity) {
+    const std::wstring d = TempDir(L"others");
+    CreateDirectoryW((d + L"\\others").c_str(), nullptr);
+    CreateDirectoryW((d + L"\\others\\Bob").c_str(), nullptr);
+    const std::string mine = ClipText("KickA", "AMXX_L_UpperArm", 10);
+    const std::string theirs = ClipText("KickB", "AMXX_L_UpperArm", 40);
+    Put(d, L"KickFlip_RGS_regular.sanim", mine);
+    Put(d + L"\\others\\Bob", L"KickFlip_RGS_regular.sanim", theirs);   // same file name as mine: no clash
+    Put(d + L"\\others", L"any name.sanim", mine);                       // a copy of mine under another name
+    ClipLibrary lib(d);
+    lib.SetRig(RefNames());
+    const auto lines = lib.Scan();
+    const ClipSet* s = lib.Current();
+    CHECK(s->clips.size() == 3);
+    const Clip *a = nullptr, *b = nullptr, *copy = nullptr;
+    for (auto& c : s->clips) {
+        if (c.file == "KickFlip_RGS_regular.sanim") a = &c;
+        if (c.file == "others\\Bob\\KickFlip_RGS_regular.sanim") b = &c;
+        if (c.file == "others\\any name.sanim") copy = &c;
+    }
+    CHECK(a && b && copy);
+    if (!a || !b || !copy) return;
+    CHECK(!a->foreign && b->foreign && copy->foreign);
+    CHECK(a->netId != b->netId || a->netHash != b->netHash);       // same name, other content: other clip
+    CHECK(a->netId == copy->netId && a->netHash == copy->netHash); // other name, same content: same clip
+    const uint64_t id = ContentId(mine);
+    CHECK(a->netId == (uint32_t)(id >> 32) && a->netHash == (uint32_t)id);
+    CHECK(AnyLine(lines, "others\\Bob\\KickFlip_RGS_regular.sanim", "their skater only"));
+    // removing a file of others\ is seen like any other
+    DeleteFileW((d + L"\\others\\any name.sanim").c_str());
+    CHECK(AnyLine(lib.Scan(), "others\\any name.sanim", "removed"));
+    CHECK(lib.Current()->clips.size() == 2);
+}
+
 TEST(clipset_broken_file_is_logged_others_load) {
     const std::wstring d = TempDir(L"broken");
     Put(d, L"a.sanim", ClipText("a", "AMXX_L_UpperArm", 10));

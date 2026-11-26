@@ -69,8 +69,14 @@ The editor's Help button opens the HTML version of the guides when present, else
 - Mirroring works bone by bone. The editor mirrors its 3D view on Y, because Unreal is left-handed.
 
 **Multiplayer**
-- Each player sends its clip layers (clip id and hash, time, weights) 15 times a second on the SessionOpenMP channel
-  `animstudio.clips1`. Receivers play their own copy of the same clips on that player's skater.
+- Each player sends its clip layers (clip identity, time, speed, weights) 15 times a second on the SessionOpenMP
+  channel `animstudio.clips1` (wire text `S2` + hex, `src/net.h`). Receivers play their own copy of the same clips on
+  that player's skater.
+- A clip's identity is its content (`ContentId`: FNV-1a 64 of the file without BOM and `\r`), never its file name.
+- `clips\others\` (sub-folders allowed) holds other players' clips: loaded and found for peers, never chosen for our
+  own skater, not shown in the editor.
+- The receiver keeps its own clock per layer and pulls it softly toward the received values (`Player::ApplyRemote`):
+  it never jumps back in time, and it snaps only on a big gap or a new layer.
 
 ## Rules for the Lua mod
 

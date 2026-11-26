@@ -19,12 +19,10 @@ Work in progress. There is **no ready-made download yet**: you have to build it 
   dismount, pose captures.
 - **Experimental:**
   - riding, walking and running: not stable yet;
-  - multiplayer through SessionOpenMP (two-player test pending). Players need AnimStudio and identical clip files
-    to see each other's animations.
+  - multiplayer through SessionOpenMP (tested with two players). To see another player's animation, you need a copy
+    of their clip file: put it in `Mods\AnimStudio\clips\others\` (any file name, a clip is recognised by its
+    content). Clips in `others\` are played on that player's skater only, never on yours.
 - **Not supported yet:** grinds and grabs. Powerslide is not checked.
-
-The sources were recently translated to English. They build and pass the offline tests, but this translated version
-has not been tested in game yet.
 
 ## Requirements
 

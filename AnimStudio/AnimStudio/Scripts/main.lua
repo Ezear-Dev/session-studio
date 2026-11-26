@@ -1,12 +1,13 @@
 -- AnimStudio: Lua half of the clip player (UE4SS 3.x, Session: Skate Sim). Every flip trick per stance, base poses.
 -- 2026-11-26 v0.19: multiplayer through the SessionOpenMP mod channel (section "multiplayer" below): our clips are played on our skater on the other players' screens.
+-- 2026-11-26 v0.21: clips are found by CONTENT on the other PCs (any file name); clips of other players go in clips\others\.
 -- It finds the player's skater, gives its mesh and bone table (parents + names) to AnimStudioNative (ASN_*),
 -- sends it the game state every frame (manual, nose manual, goofy, switch, ManualRatio, trick + pop + phase), rescans
 -- the Mods\AnimStudio\clips folder every 1 s, and handles the keys: Ctrl+F3 = studio on/off, Ctrl+F4 = pose capture.
 -- Results: [AnimStudio] lines in UE4SS.log + AnimStudio.native.log next to the exe.
 -- Rules: everything runs in the per-frame hook (game thread), the keys only raise a flag.
 
-local VERSION = "v0.19"
+local VERSION = "v0.21"
 local TAG = "[AnimStudio] "
 local HOOK_FN = "/Script/SessionGame.SkaterCharacterBase:GetSkateboardingAnimParams"
 
@@ -242,6 +243,13 @@ end
 local function netOnMessage(p, data)
     if type(data) ~= "string" then return end
     if data:sub(1, 2) == "S1" then
+        -- v0.19 / v0.20 named clips by file name: not compatible any more
+        NET.oldTold = NET.oldTold or {}
+        if not NET.oldTold[p] then
+            NET.oldTold[p] = true
+            log("net: " .. npname(p) .. " uses an older AnimStudio (v0.20 or before): update both to v0.21+ to see each other's clips")
+        end
+    elseif data:sub(1, 2) == "S2" then
         NET.got = NET.got + 1
         local e = NET.slots[p]
         if e then
@@ -287,7 +295,7 @@ local function netTick(now)
     if now - NET.sendT >= NET.SEND_EVERY then
         NET.sendT = now
         local pkt = tostring(q(function() return ASN_NetPacket() end, ""))
-        -- an empty frame is "S1" + 10 hex characters: send 3 of them after the last clip, then stay quiet
+        -- an empty frame is "S2" + 10 hex characters: send 3 of them after the last clip, then stay quiet
         if #pkt > 12 then NET.idle = 0 else NET.idle = NET.idle + 1 end
         if #pkt > 2 and NET.idle <= 3 and next(NET.slots) ~= nil then
             if q(function() return OpenMP.Send(NET.ch, OpenMP.EVERYONE, pkt, false) end, false) then NET.sent = NET.sent + 1 end
@@ -302,7 +310,7 @@ local function netTick(now)
             local miss = tonumber(st:match("clips missing here (%d+)") or "0") or 0
             if miss > 0 and not NET.missTold[p] then
                 NET.missTold[p] = true
-                log("net: " .. npname(p) .. " plays a clip you do not have (or another version): their skater keeps the game animation for it")
+                log("net: " .. npname(p) .. " plays a clip you do not have (or another version of it): their skater keeps the game animation for it. To see it, ask them for the .sanim file and put it in Mods\\AnimStudio\\clips\\others\\ (any file name)")
             end
         end
         log(string.format("net: sent %d, received %d, refused %d | %s", NET.sent, NET.got, NET.bad,

@@ -23,12 +23,15 @@ bool Finite(float v, float lo, float hi) { return std::isfinite(v) && v >= lo &&
 
 } // namespace
 
-uint32_t NetId(const std::string& file) {
-    uint32_t h = 2166136261u;
-    for (char c : file) {
-        const char l = (c >= 'A' && c <= 'Z') ? (char)(c - 'A' + 'a') : c;
-        h ^= (uint8_t)l;
-        h *= 16777619u;
+uint64_t ContentId(const std::string& text) {
+    size_t i = 0;
+    if (text.size() >= 3 && (uint8_t)text[0] == 0xEF && (uint8_t)text[1] == 0xBB && (uint8_t)text[2] == 0xBF) i = 3;
+    uint64_t h = 1469598103934665603ull;
+    for (; i < text.size(); i++) {
+        const uint8_t c = (uint8_t)text[i];
+        if (c == '\r') continue;
+        h ^= c;
+        h *= 1099511628211ull;
     }
     return h;
 }
@@ -46,13 +49,13 @@ std::string NetEncode(const NetFrame& f) {
         PutF(b, L.t); PutF(b, L.speed); PutF(b, L.w); PutF(b, L.wSpeed); PutF(b, L.legW);
     }
     static const char* kHex = "0123456789abcdef";
-    std::string s = "S1";
+    std::string s = "S2";
     for (unsigned char c : b) { s.push_back(kHex[c >> 4]); s.push_back(kHex[c & 15]); }
     return s;
 }
 
 bool NetDecode(const std::string& s, NetFrame& out) {
-    if (s.size() < 2 + 10 || s.size() > 2 + 2 * 512 || s[0] != 'S' || s[1] != '1' || (s.size() & 1)) return false;
+    if (s.size() < 2 + 10 || s.size() > 2 + 2 * 512 || s[0] != 'S' || s[1] != '2' || (s.size() & 1)) return false;
     uint8_t buf[512];
     const size_t nb = (s.size() - 2) / 2;
     for (size_t i = 0; i < nb; i++) {

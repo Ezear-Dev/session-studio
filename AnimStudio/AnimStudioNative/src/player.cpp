@@ -446,14 +446,29 @@ void Player::ExportNet(NetFrame& out, float dt) {
     }
 }
 
-int Player::ApplyRemote(FTr* cs, int n, const ClipSet* set, const NetFrame& f, float age, float dt, int* missing) {
+int Player::ApplyRemote(FTr* cs, int n, const ClipSet* set, const NetFrame& f, float age, float dt, int* missing,
+                        NetClockStats* clk) {
     postReady_ = false;
     if (missing) *missing = 0;
+    if (clk) *clk = NetClockStats{};
     if (!cs || n != n_ || n_ <= 0) return 0;
     if (!std::isfinite(dt) || dt < 0.f || dt > 0.1f) dt = 0.f;
     if (!std::isfinite(age) || age < 0.f) age = 0.f;
     float fade = 1.f;   // the stream stopped (player gone, packets lost): back to the game's pose
     if (age > kNetStale) fade = 1.f - (age - kNetStale) / kNetStaleFade;
+    const bool newFrame = !rSeqHave_ || f.seq != rSeq_;
+    rSeq_ = f.seq; rSeqHave_ = true;
+    if (clk) clk->newFrame = newFrame;
+    // receiver clocks: last call's clocks, each matched at most once to a layer of the same clip and flags
+    RemoteClock prev[kNetMaxLayers];
+    bool used[kNetMaxLayers] = {};
+    const int nPrev = nRclk_;
+    for (int i = 0; i < nPrev; i++) prev[i] = rclk_[i];
+    nRclk_ = 0;
+    // dt == 0 (first call, hitch): no clock to advance, take the sent values
+    const float kt = dt > 0.f ? 1.f - std::exp(-dt / kNetTimeTau) : 1.f;
+    const float kw = dt > 0.f ? 1.f - std::exp(-dt / kNetWeightTau) : 1.f;
+    const float ktBehind = dt > 0.f ? 1.f - std::exp(-dt / kNetTimeTauBehind) : 1.f;
     nLayers_ = 0;
     if (fade > 0.f && set) for (int i = 0; i < f.n && i < kNetMaxLayers; i++) {
         const NetLayer& r = f.l[i];
@@ -470,16 +485,55 @@ int Player::ApplyRemote(FTr* cs, int n, const ClipSet* set, const NetFrame& f, f
         L.nKeys = 0; L.hasPel = false; L.pel[0] = L.pel[1] = L.pel[2] = 0.f;
         L.mode = c->mode;
         L.netId = c->netId; L.netHash = c->netHash; L.netHave = false;
-        float t = r.t + r.speed * age;
-        if (LayerLoops(*c, r.trick, r.dis)) {
-            const float len = LoopLength(*c);
-            if (len > 1e-3f) { t = std::fmod(t, len); if (t < 0.f) t += len; }
-        } else {
-            if (t < 0.f) t = 0.f;
-            if (t > c->duration) t = c->duration;
+        const bool loops = LayerLoops(*c, r.trick, r.dis);
+        const float len = loops ? LoopLength(*c) : c->duration;
+        auto fit = [&](float t) {
+            if (loops) { if (len > 1e-3f) { t = std::fmod(t, len); if (t < 0.f) t += len; } }
+            else { if (t < 0.f) t = 0.f; if (t > c->duration) t = c->duration; }
+            return t;
+        };
+        auto gap = [&](float target, float t) {   // target - t, the short way round a loop
+            float d = target - t;
+            if (loops && len > 1e-3f) { d = std::fmod(d, len); if (d > 0.5f * len) d -= len; if (d < -0.5f * len) d += len; }
+            return d;
+        };
+        const float tTarget = fit(r.t + r.speed * age);
+        const float wTarget = Clamp01(r.w + r.wSpeed * age);
+        int best = -1; float bestGap = 0.f;
+        for (int k = 0; k < nPrev; k++) {
+            const RemoteClock& q = prev[k];
+            if (used[k] || q.id != r.id || q.hash != r.hash || q.mirrored != r.mirrored || q.dis != r.dis || q.trick != r.trick) continue;
+            const float g = std::fabs(gap(tTarget, fit(q.t + r.speed * dt)));
+            if (best < 0 || g < bestGap) { best = k; bestGap = g; }
         }
+        float t = tTarget, w = wTarget;
+        if (best >= 0) {
+            used[best] = true;
+            const float tAdv = fit(prev[best].t + r.speed * dt);
+            const float wAdv = Clamp01(prev[best].w + r.wSpeed * dt);
+            const float dT = gap(tTarget, tAdv), dW = wTarget - wAdv;
+            if (clk && newFrame && std::fabs(dT) > clk->jump) clk->jump = std::fabs(dT);
+            if (std::fabs(dT) > kNetTimeSnap || dt <= 0.f) { if (dt > 0.f && clk) clk->snaps++; }
+            else {
+                // v0.22 (after the v0.21 test: stutters on the peer, fast trick clips on low jumps): the landing sync
+                // changes the sender's speed in bursts (fast hang, creep, finish in 0.1 s) that we only learn 1 frame
+                // in 4. Behind by more than kNetBehind: catch up faster. Ahead (we kept the old, faster speed): slow
+                // down, never jump back in time (that was the stutter) and never stop while the sender moves; a
+                // sender that stopped (held pose, end of the clip) is joined by drifting back slowly.
+                const float k = dT > kNetBehind ? ktBehind : kt;
+                const float tPrev = prev[best].t;
+                float step = gap(fit(tAdv + dT * k), tPrev);
+                const float minStep = r.speed > 1e-3f ? kNetMinRate * r.speed * dt : -kNetBackRate * dt;
+                if (step < minStep) step = minStep;
+                const float maxStep = std::fmax(r.speed, 0.f) * dt + kNetMaxPull * dt;   // catch up without a lurch
+                if (step > maxStep) step = maxStep;
+                t = fit(tPrev + step);
+            }
+            if (std::fabs(dW) <= kNetWeightSnap && dt > 0.f) w = Clamp01(wAdv + dW * kw);
+        }
+        if (nRclk_ < kNetMaxLayers) rclk_[nRclk_++] = RemoteClock{r.id, r.hash, r.mirrored, r.dis, r.trick, t, w};
         L.tFixed = t;
-        L.wFixed = Clamp01(r.w + r.wSpeed * age) * Clamp01(fade);
+        L.wFixed = w * Clamp01(fade);
         L.legFixed = Clamp01(r.legW);
     }
     ToLocal(cs, parent_, n_, game_, localP_);
@@ -520,7 +574,7 @@ const Clip* Player::Choose(const ClipSet* set, const GameState& gs, bool trickOn
     };
     const Clip* win = nullptr;
     if (trickOn) for (auto& c : set->clips) {
-        if (!c.enabled || !(c.states & ST_Trick) || !feetOk(c) || !(c.stances & trickStance)) continue;
+        if (!c.enabled || c.foreign || !(c.states & ST_Trick) || !feetOk(c) || !(c.stances & trickStance)) continue;
         if (c.trickHash && c.trickHash != th) continue;
         if (better(c, win)) win = &c;
     }
@@ -532,7 +586,7 @@ const Clip* Player::Choose(const ClipSet* set, const GameState& gs, bool trickOn
             // 2026-11-25: the landing clip of one trick: only after that trick, in the trick's stance
             const bool namedLand = (c.states & ST_Landing) && (want & ST_Landing) && c.trickHash;
             if (namedLand && c.trickHash != gs.landTrickHash) continue;
-            if (!c.enabled || !(c.states & want) || !feetOk(c) || !(c.stances & (namedLand ? landStance : stances))) continue;
+            if (!c.enabled || c.foreign || !(c.states & want) || !feetOk(c) || !(c.stances & (namedLand ? landStance : stances))) continue;
             // 2026-11-25: a clip of one grind plays only on that grind (a clip with no grind name: every grind)
             if ((c.states & ST_Grind) && (want & ST_Grind) && c.trickHash && c.trickHash != gs.grindHash) continue;
             if (better(c, w)) w = &c;

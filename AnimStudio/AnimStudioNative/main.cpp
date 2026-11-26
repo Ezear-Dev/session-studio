@@ -48,7 +48,7 @@ using Lua = RC::LuaMadeSimple::Lua;
 
 namespace {
 
-constexpr int kVersion = 19;
+constexpr int kVersion = 22;
 constexpr int SKM_CST = 0x4b0;    // USkinnedMeshComponent::ComponentSpaceTransformsArray[2] (0x10 apart)
 constexpr int SKM_EDIT = 0x4f0;   // USkinnedMeshComponent::CurrentEditableComponentTransforms
 constexpr int VT_FBT = 0x938;     // FinalizeBoneTransform slot in the skater mesh vtable
@@ -379,6 +379,9 @@ struct PeerSlot {
     volatile LONG calls = 0, applied = 0, faults = 0, badNum = 0, frames = 0, posts = 0;
     volatile LONG missing = 0;         // layers of the last applied frame whose clip is not here
     volatile LONG ageMs = 0;
+    // receiver clock (Player::NetClockStats): jumps the old rule would have made at each new frame, in clip ms;
+    // the sums and the max are reset by each stats line
+    volatile LONG jumpN = 0, jumpSumMs = 0, jumpMaxMs = 0, snaps = 0;
 };
 PeerSlot g_peers[kPeers];
 SRWLOCK g_peerLock = SRWLOCK_INIT;
@@ -402,8 +405,16 @@ void PeerApplyImpl(PeerSlot& p, uint8_t* mesh, TArr*& arr, FTr*& data, int& n, b
     const float age = (float)(now - p.cacheAt);
     p.ageMs = (LONG)(age * 1000.f);
     int miss = 0;
-    if (p.pl->ApplyRemote(data, n, g_lib->Current(), p.cache, age, dt, &miss) > 0) InterlockedIncrement(&p.applied);
+    Player::NetClockStats clk;
+    if (p.pl->ApplyRemote(data, n, g_lib->Current(), p.cache, age, dt, &miss, &clk) > 0) InterlockedIncrement(&p.applied);
     p.missing = miss;
+    if (clk.newFrame && age < Player::kNetStale) {
+        const LONG ms = (LONG)(clk.jump * 1000.f + 0.5f);
+        InterlockedIncrement(&p.jumpN);
+        InterlockedExchangeAdd(&p.jumpSumMs, ms);
+        if (ms > p.jumpMaxMs) p.jumpMaxMs = ms;
+    }
+    if (clk.snaps) InterlockedExchangeAdd(&p.snaps, clk.snaps);
     post = true;
 }
 void PeerApply(PeerSlot& p, uint8_t* mesh, TArr*& arr, FTr*& data, int& n, bool& post) {
@@ -1068,12 +1079,15 @@ int nPeerStats(const Lua& lua) {
     double s = -1;
     ArgNum(lua, s);
     const int slot = (int)s;
-    char buf[260];
+    char buf[400];
     if (slot < 0 || slot >= kPeers) snprintf(buf, sizeof(buf), "unknown meshes: %ld calls, ours: %ld calls", g_otherCalls, g_mine);
     else {
-        const PeerSlot& p = g_peers[slot];
-        snprintf(buf, sizeof(buf), "frames %ld, hook calls %ld, posed %ld, leg pass %ld, clips missing here %ld, last frame age %ld ms, other bone count %ld, faults %ld",
-                 p.frames, p.calls, p.applied, p.posts, p.missing, p.ageMs, p.badNum, p.faults);
+        PeerSlot& p = g_peers[slot];
+        const LONG jn = InterlockedExchange(&p.jumpN, 0), js = InterlockedExchange(&p.jumpSumMs, 0);
+        const LONG jm = InterlockedExchange(&p.jumpMaxMs, 0), sn = InterlockedExchange(&p.snaps, 0);
+        snprintf(buf, sizeof(buf), "frames %ld, hook calls %ld, posed %ld, leg pass %ld, clips missing here %ld, last frame age %ld ms, other bone count %ld, faults %ld | smoothed clock jumps: mean %ld ms, max %ld ms over %ld frames, snaps %ld",
+                 p.frames, p.calls, p.applied, p.posts, p.missing, p.ageMs, p.badNum, p.faults,
+                 jn > 0 ? js / jn : 0L, jm, jn, sn);
     }
     lua.set_string(buf);
     return 1;
