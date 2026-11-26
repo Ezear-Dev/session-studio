@@ -15,11 +15,13 @@ Three parts work together:
 
 Work in progress. There is **no ready-made download yet**: you have to build it from source.
 
-- **Works:** flip tricks (per stance and foot), manual and nose manual, on foot, riding, pushing, crouch, landing,
+- **Works:** flip tricks (per stance and foot), manual and nose manual, on foot, pushing, crouch, landing,
   dismount, pose captures.
-- **Experimental:** multiplayer through SessionOpenMP (two-player test pending). Players need AnimStudio and
-  identical clip files to see each other's animations.
-- **Not supported yet:** grinds, grabs, walking and running (known issues). Powerslide is not checked.
+- **Experimental:**
+  - riding, walking and running: not stable yet;
+  - multiplayer through SessionOpenMP (two-player test pending). Players need AnimStudio and identical clip files
+    to see each other's animations.
+- **Not supported yet:** grinds and grabs. Powerslide is not checked.
 
 The sources were recently translated to English. They build and pass the offline tests, but this translated version
 has not been tested in game yet.
