@@ -24,6 +24,7 @@
 
 # Local only: working notes, plans, development test data, private tester package, generated pages
 /AnimStudio/HANDOFF.md
+/AnimStudio/MASTER-PROMPT.md
 /AnimStudio/PLAN-*.md
 /AnimStudio/STUDY-*.md
 /AnimStudio/EMOTES-design.md

@@ -145,6 +145,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmd, int) {
     ImGui_ImplDX11_Init(g_dev, g_ctx);
 
     App app(ExeDir());
+    app.SetGraphics(g_dev, g_ctx);   // 2026-11-26 (mannequin): the solid body of the 3D view
     g_app = &app;
     LARGE_INTEGER freq, last, now;
     QueryPerformanceFrequency(&freq);
@@ -198,6 +199,7 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmd, int) {
         g_occluded = (hr == DXGI_STATUS_OCCLUDED);
     }
     g_app = nullptr;
+    app.ReleaseGraphics();   // before the device goes
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();

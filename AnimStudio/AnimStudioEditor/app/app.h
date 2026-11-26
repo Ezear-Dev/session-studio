@@ -11,16 +11,27 @@
 #include "view_math.h"
 #include "imgui.h"
 #include "time_view.h"
+#include "mannequin.h"
+#include "board_mesh.h"
+#include <memory>
+
+struct ID3D11Device;
+struct ID3D11DeviceContext;
+class StageRenderer;
 
 class App {
 public:
     explicit App(std::wstring exeDir);
+    ~App();
     void Frame(float dt);                 // one UI frame (between ImGui::NewFrame and ImGui::Render)
     void RequestClose() { wantClose_ = true; }
     bool ShouldQuit() const { return quit_; }
     // --selftest: loads the folder, the skeleton and the figures; writes a report; 0 if the skeleton is loaded
     int SelfTest(std::string& report);
     const std::wstring& SettingsPath() const { return settings_; }   // UI Phase 1: main.cpp keeps the window placement there
+    // 2026-11-26 (mannequin): the graphics device for the solid body of the 3D view; released before the device
+    void SetGraphics(ID3D11Device* dev, ID3D11DeviceContext* ctx);
+    void ReleaseGraphics();
 
 private:
     // ---------------------------------------------------------------- UI Phase 1 (2026-11-25): workspace shell
@@ -161,7 +172,18 @@ private:
 
     int sel_ = -1;
     OrbitCamera cam_;
-    bool ghost_ = true, worldMode_ = false, showBoard_ = false   /* board preview hidden for now (P6, user request) */, showVolumes_ = true;
+    bool ghost_ = true, worldMode_ = false, showBoard_ = false   /* 2026-11-26 (mannequin stage 2): solid board, ui.board, off by default */, showVolumes_ = true;
+    // 2026-11-26 (mannequin): "View: Body / Skeleton" (ui.view); the body rig is calibrated once per skeleton
+    bool bodyView_ = true;
+    std::unique_ptr<StageRenderer> stage_;
+    std::string stageErr_;
+    bool stageErrShown_ = false;
+    MannequinRig mrig_;
+    bool mrigBuilt_ = false;
+    Mesh body_;
+    BoardRig brig_;   // 2026-11-26 (mannequin stage 2): the board bones, found with the body rig
+    Mesh board_;
+    void BuildBodyRig(const std::vector<FTr>& current);
     bool autoKey_ = true;                 // P6: a key is set as soon as a gesture ends
     bool autoKeyFailed_ = false;          // the last automatic key could not be set (no retry until a new change)
     bool dragCheckpointed_ = false;

@@ -13,6 +13,7 @@
 #include "paths.h"
 #include "ik.h"
 #include "workspace.h"
+#include "stage_renderer.h"
 #include <ctime>
 #include <shellapi.h>
 #include <shobjidl.h>
@@ -134,6 +135,8 @@ App::App(std::wstring exeDir) : exeDir_(std::move(exeDir)) {
         loopPreview_ = st.Get("timeline.loop") != "0";      // 2026-11-25: on unless turned off
         allRows_ = st.Get("timeline.allbones") == "1";
         showWelcome_ = st.Get("ui.welcomed") != "1";   // UI Phase 5: first launch
+        bodyView_ = st.Get("ui.view") != "skeleton";   // 2026-11-26 (mannequin): Body by default
+        showBoard_ = st.Get("ui.board") == "1";        // 2026-11-26 (mannequin stage 2): the board, OFF by default (approximate, see board_mesh.h)
         const std::string bd = st.Get("backupDir");
         backupRoot_ = bd.empty() ? DefaultBackupRoot() : Widen(bd);
     }
@@ -282,6 +285,7 @@ bool App::LoadSkeletonFile(std::string& err) {
     if (clipsDir_.empty()) { err = "clips folder unknown"; return false; }
     std::string text;
     if (!ReadFileText(clipsDir_ + L"\\_skeleton.json", text)) { err = "_skeleton.json not found: start the game once with the studio installed"; return false; }
+    mrigBuilt_ = false;   // 2026-11-26 (mannequin): calibrate the body again on the new skeleton
     return doc_.LoadSkeleton(text, err);
 }
 
@@ -1407,13 +1411,23 @@ void App::StageToolbar() {
     if (Tool("World##space", worldMode_, !rotating, st.ItemSpacing.x * 0.5f)) worldMode_ = true;
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("The rings stay aligned with the ground and the vertical.");
 
-    // display
-    Group(nullptr, {}, ChkW("Ghost") + st.ItemSpacing.x + ChkW("Volumes"));
+    // display: 2026-11-26 (mannequin) Body / Skeleton
+    Group("Show", {"Body", "Skeleton"});
+    if (Tool("Body##view", bodyView_, false, st.ItemSpacing.x) && !bodyView_) { bodyView_ = true; stageErrShown_ = false; SaveSetting(settings_, "ui.view", "body"); }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("A solid body: what is in front, which way a limb is twisted (yellow stripe = the bone's front face).\nIt is not your character: no clothes, no real skin. The game stays the real test.");
+    if (Tool("Skeleton##view", !bodyView_, false, st.ItemSpacing.x * 0.5f) && bodyView_) { bodyView_ = false; SaveSetting(settings_, "ui.view", "skeleton"); }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The bone lines, as before.");
+    Next(ChkW("Ghost") + st.ItemSpacing.x + (bodyView_ ? 0.f : ChkW("Volumes")), st.ItemSpacing.x);
     ImGui::Checkbox("Ghost", &ghost_);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Blue: the game's original animation, to compare.");
-    Next(ChkW("Volumes"), st.ItemSpacing.x);
-    ImGui::Checkbox("Volumes", &showVolumes_);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Limb volumes: the yellow line shows the bone's front face.\nA bone twisted on itself shows this way.");
+    Next(ChkW("Board"), st.ItemSpacing.x);   // 2026-11-26 (mannequin stage 2)
+    if (ImGui::Checkbox("Board", &showBoard_)) SaveSetting(settings_, "ui.board", showBoard_ ? "1" : "0");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("An APPROXIMATE board (light arrow = nose), from the animation's board bones.\nIt is not the board you see in game (driven by physics): it does not flip in tricks,\nand the feet may not sit exactly on it. Use it as a rough guide only.");
+    if (!bodyView_) {
+        Next(ChkW("Volumes"), st.ItemSpacing.x);
+        ImGui::Checkbox("Volumes", &showVolumes_);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Limb volumes: the yellow line shows the bone's front face.\nA bone twisted on itself shows this way.");
+    }
 
     // camera
     Group("View", {"Center (F)", "Reset", "1/4 turn", "Top"});
@@ -1565,54 +1579,58 @@ void App::ViewPanel() {
     }
     auto boneIdx = [&](const char* name) { for (int b = 0; b < n; b++) if (s.names[b] == name) return b; return -1; };
 
-    // board (P6): the deck follows the board skeleton of the recorded animation (SKXX_SkateSkel_Flipper)
-    if (showBoard_) {
-        const int fl = boneIdx("SKXX_SkateSkel_Flipper");
-        if (fl >= 0) {
-            const FTr& F = cs[fl];
-            std::vector<ImVec2> outline;
-            const int seg = 10;
-            auto deckZ = [](float x) { const float ax = std::fabs(x); return ax > 28.f ? 9.3f + (ax - 28.f) * 0.32f : 9.3f; };
-            for (int side = 0; side < 2; side++) {   // right side tail->nose, then left side nose->tail
-                for (int i = 0; i <= 24; i++) {
-                    const float x = -28.f + 56.f * (float)i / 24.f;
-                    const float y = side == 0 ? 10.3f : -10.3f;
-                    const float xx = side == 0 ? x : -x;
-                    float w[3]; Xf(F, xx, y, deckZ(xx), w);
-                    ImVec2 sp; if (PU(w, sp)) outline.push_back(sp);
-                }
-                for (int i = 1; i < seg; i++) {   // rounded nose / tail
-                    const float a = 3.14159265f * (float)i / (float)seg;
-                    const float sgn = side == 0 ? 1.f : -1.f;
-                    const float x = sgn * (28.f + 12.f * std::sin(a)), y = sgn * 10.3f * std::cos(a);
-                    float w[3]; Xf(F, x, y, deckZ(x), w);
-                    ImVec2 sp; if (PU(w, sp)) outline.push_back(sp);
-                }
-            }
-            if (outline.size() > 3) {
-                dl->AddConvexPolyFilled(outline.data(), (int)outline.size(), IM_COL32(40, 40, 44, 200));
-                dl->AddPolyline(outline.data(), (int)outline.size(), IM_COL32(200, 160, 90, 255), ImDrawFlags_Closed, 2.f);
-            }
-            for (float tx : {-21.f, 21.f}) {   // trucks and wheels
-                float a[3], b[3], c[3]; Xf(F, tx, 0, 8.5f, a); Xf(F, tx, -9.f, 2.7f, b); Xf(F, tx, 9.f, 2.7f, c);
-                ImVec2 sa, sb, sc;
-                if (PU(a, sa) && PU(b, sb) && PU(c, sc)) {
-                    dl->AddLine(sb, sc, IM_COL32(170, 170, 180, 255), 2.f);
-                    dl->AddLine(sa, ImVec2((sb.x + sc.x) * 0.5f, (sb.y + sc.y) * 0.5f), IM_COL32(170, 170, 180, 255), 2.f);
-                    float e[3]; Xf(F, tx, 9.f, 5.4f, e);
-                    ImVec2 se; float r = 4.f;
-                    if (PU(e, se)) r = std::max(2.f, std::hypot(se.x - sc.x, se.y - sc.y) * 0.5f);
-                    dl->AddCircleFilled(sb, r, IM_COL32(230, 225, 210, 255));
-                    dl->AddCircleFilled(sc, r, IM_COL32(230, 225, 210, 255));
-                }
-            }
-        }
-    }
+    // board (P6, line drawing): replaced on 2026-11-26 by the solid board of the stage picture (board_mesh.h)
 
     auto skip = [&](int b) { return s.names[b].rfind("SKXX_", 0) == 0 || s.names[b].find("IK_UPNODE") != std::string::npos; };
     // 2026-11-25 (user): the reference bones on the floor (Master, Root) and their link to the pelvis looked like a stick
     // holding the skater by the hips; they are not body parts, so they are not drawn
     auto refBone = [&](int b) { return b >= 0 && (s.names[b] == "AMXX_Master" || s.names[b] == "AMXX_Root"); };
+    // 2026-11-26 (mannequin): the solid body, drawn with depth into a picture, under the ghost, dots, handles and rings
+    bool body = false;
+    if ((bodyView_ || showBoard_) && stage_ && stage_->Ready()) {
+        if (!mrigBuilt_) BuildBodyRig(csV);
+        std::vector<const Mesh*> meshes;
+        bool bodyBuilt = false;
+        // 2026-11-26 (mannequin stage 2): the board from the recorded board bones (also in the skeleton view)
+        if (showBoard_ && doc_.HasFigure() && brig_.ok) {
+            float tmp[3];
+            const bool recorded = doc_.OriginPos(brig_.deck, t_, tmp);   // old figures: rotations only (set on its wheels)
+            if (BuildBoardMesh(brig_, csV, recorded, board_)) meshes.push_back(&board_);
+        }
+        if (bodyView_ && mrig_.ok) {
+            const bool warnSide[2] = {doc_.Shoulder(0, t_).warn, doc_.Shoulder(1, t_).warn};
+            auto rgba = [](int r, int g, int b) { return (uint32_t)r | ((uint32_t)g << 8) | ((uint32_t)b << 16) | 0xFF000000u; };
+            std::vector<uint32_t> cols(n);
+            for (int b = 0; b < n; b++) {
+                // 2026-11-26 second look: one clay colour (the timeline already shows what is animated)
+                uint32_t c = rgba(190, 188, 184);                                   // body
+                if (!doc_.IsEditable(b) && b != doc_.PelvisBone()) c = rgba(150, 150, 156);   // locked part: a darker grey
+                const int sd = doc_.ArmSide(b);
+                if (sd >= 0 && warnSide[sd] && s.names[b].find("Finger") == std::string::npos && s.names[b].find("Clavicle") == std::string::npos) c = rgba(232, 92, 72);   // shoulder at risk
+                if (b == sel_) c = rgba(255, 160, 40);                              // selected part
+                cols[b] = c;
+            }
+            BuildMannequinMesh(mrig_, csV, cols, body_, sel_ >= 0 ? sel_ : -1);   // the stripe on the selected part only
+            meshes.push_back(&body_);
+            bodyBuilt = true;
+        }
+        if (!meshes.empty()) {
+            float vp[16], eye[3];
+            StageViewProj(cam_, aspect, vp);
+            cam_.Eye(eye);   // display space: back to UE (Y mirrored)
+            float dir[3] = {cam_.target[0] - eye[0], -(cam_.target[1] - eye[1]), cam_.target[2] - eye[2]};
+            const float dl2 = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+            if (dl2 > 1e-6f) for (float& x : dir) x /= dl2;
+            if (ID3D11ShaderResourceView* srv = stage_->Render((int)std::lround(sz.x), (int)std::lround(sz.y), vp, dir, meshes)) {
+                dl->AddImage((ImTextureID)(intptr_t)srv, p0, ImVec2(p0.x + sz.x, p0.y + sz.y));
+                body = bodyBuilt;
+            }
+        }
+    }
+    if (bodyView_ && !body && !stageErrShown_) {   // the body cannot be drawn: the skeleton view, and why
+        stageErrShown_ = true;
+        Status("Body view unavailable (" + (stage_ ? std::string("the body could not be built from this skeleton") : stageErr_.empty() ? std::string("no graphics device") : stageErr_) + "): skeleton shown");
+    }
     if (ghost_) for (int b = 0; b < n; b++) {
         const int p = s.parents[b];
         if (p < 0 || skip(b) || refBone(b) || refBone(p)) continue;
@@ -1620,7 +1638,7 @@ void App::ViewPanel() {
         if (P(dgh[p], a) && P(dgh[b], c)) dl->AddLine(a, c, kColGhost, 3.f);
     }
     // limb volumes (P6): a box per bone along its axes, the bone's +Y face in bright: a twist of the bone is visible
-    if (showVolumes_) {
+    if (showVolumes_ && !body) {
         std::vector<int> mainChild(n, -1);
         std::vector<float> len(n, 0.f);
         for (int b = 0; b < n; b++) {
@@ -1671,7 +1689,7 @@ void App::ViewPanel() {
         }
     }
     const bool shWarn[2] = {doc_.Shoulder(0, t_).warn, doc_.Shoulder(1, t_).warn};   // 2026-11-25: arm likely to deform in game
-    for (int b = 0; b < n; b++) {
+    for (int b = 0; b < n && !body; b++) {   // bone lines: skeleton view only
         const int p = s.parents[b];
         if (p < 0 || skip(b) || refBone(b) || refBone(p)) continue;
         ImVec2 a, c;
@@ -1684,8 +1702,14 @@ void App::ViewPanel() {
         if (skip(b)) continue;
         ImVec2 a;
         if (!P(dcsV[b], a)) continue;
-        if (b == sel_) dl->AddCircleFilled(a, 5.f, kColSel);
-        else if (doc_.IsEditable(b)) dl->AddCircle(a, 3.5f, doc_.TrackOf(b) ? kColTrack : kColBone);
+        if (b == sel_) dl->AddCircleFilled(a, body ? 4.f : 5.f, kColSel);
+        else if (doc_.IsEditable(b)) {
+            if (body) {   // small dots on the body, dark rim so they read on a light surface
+                if (s.names[b].find("Finger") != std::string::npos) continue;
+                dl->AddCircleFilled(a, 2.6f, IM_COL32(40, 42, 50, 200));
+                dl->AddCircleFilled(a, 1.6f, doc_.TrackOf(b) ? kColTrack : kColBone);
+            } else dl->AddCircle(a, 3.5f, doc_.TrackOf(b) ? kColTrack : kColBone);
+        }
     }
     // P6 lot 2: limb handles (click = choose the limb and its tool)
     ImVec2 limbScr[kLimbs];
@@ -3072,4 +3096,36 @@ void App::Shortcuts() {
     if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_F, false)) CenterOnSelection();
     if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_Home, false)) JumpTo(0.f);   // UI Phase 4
     if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_End, false)) JumpTo(doc_.clip().duration);
+}
+
+// ------------------------------------------------------------------ 3D mannequin (2026-11-26, PLAN-MANNEQUIN stage 1)
+App::~App() = default;
+
+void App::SetGraphics(ID3D11Device* dev, ID3D11DeviceContext* ctx) {
+    stage_ = std::make_unique<StageRenderer>();
+    stageErr_.clear();
+    if (!stage_->Init(dev, ctx, stageErr_)) { stage_.reset(); if (stageErr_.empty()) stageErr_ = "unknown error"; }
+}
+
+void App::ReleaseGraphics() { stage_.reset(); }
+
+// which way the torso and the face look: calibrated once on a standing figure (the face looks the way of the chest
+// there), else a riding one, else the current pose
+void App::BuildBodyRig(const std::vector<FTr>& current) {
+    mrigBuilt_ = true;
+    std::vector<FTr> cal;
+    std::string skel, fig, err;
+    if (!clipsDir_.empty() && ReadFileText(clipsDir_ + L"\\_skeleton.json", skel)) {
+        for (const char* key : {"OnFoot_RGS_regular", "Riding_RGS_regular"}) {
+            FigureVariant v;
+            if (!ParseFigureKey(key, v) || !ReadFileText(clipsDir_ + L"\\_figures\\" + Widen(key) + L".json", fig)) continue;
+            EditorDoc tmp;
+            if (!tmp.LoadSkeleton(skel, err) || !tmp.LoadFigure(fig, v, err)) continue;
+            tmp.OriginPose(0.f, cal);
+            break;
+        }
+    }
+    if (cal.size() != (size_t)doc_.BoneCount()) cal = current;
+    mrig_ = BuildMannequinRig(doc_.skeleton(), cal);
+    brig_ = BuildBoardRig(doc_.skeleton());
 }

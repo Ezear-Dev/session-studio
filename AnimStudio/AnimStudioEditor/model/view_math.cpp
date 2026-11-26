@@ -150,3 +150,15 @@ void QToRotatorDeg(Quat q, float& pitch, float& yaw, float& roll) {   // FQuat::
         roll = std::atan2(-2.f * (q.w * q.x + q.y * q.z), 1.f - 2.f * (q.x * q.x + q.y * q.y)) * R2D;
     }
 }
+
+void StageViewProj(const OrbitCamera& c, float aspect, float out[16]) {
+    float v[16], pr[16], vp[16];
+    c.View(v);
+    c.Proj(aspect, pr);
+    Mul(pr, v, vp);
+    // point (x, y, z) taken as (x, -y, z): negate the second column
+    for (int r = 0; r < 4; r++) vp[4 + r] = -vp[4 + r];
+    // D3D depth: z' = (z + w) / 2
+    for (int col = 0; col < 4; col++) vp[col * 4 + 2] = 0.5f * (vp[col * 4 + 2] + vp[col * 4 + 3]);
+    for (int i = 0; i < 16; i++) out[i] = vp[i];
+}
