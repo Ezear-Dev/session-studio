@@ -1,0 +1,51 @@
+# Local only: other mods, backups and archived working material (not part of this repository)
+/ManualTurnRate/
+/AnimStudio/backup-before-english_2026-11-26/
+/AnimStudio/REPRISE.md
+/AnimStudio/ETUDE-faisabilite.md
+/AnimStudio/AUDIT-UI-2026-11-25.md
+/AnimStudio/P[0-9]*.md
+/AnimStudio/LOT5-design.md
+/AnimStudio/LANDING-SYNC-design.md
+/AnimStudio/audit/
+/AnimStudio/outils/
+/AnimStudio/installer-v0.13.cmd
+/AnimStudio/paquet-testeur/
+/AnimStudio/AnimStudioProbe/
+/AnimStudio/AnimStudioTrickProbe/
+/AnimStudio/AnimStudioNetTest/
+/AnimStudio/AnimStudioEditor/docs/Guide-debutant.*
+
+# Backups and packages
+*.zip
+/AnimStudio/tester-package/AnimStudio_*/
+
+# Built programs
+/AnimStudio/*.dll
+*.exe
+*.exp
+/AnimStudio/AnimStudioNative/dist/
+/AnimStudio/AnimStudioEditor/dist/
+
+# Downloaded libraries (they have their own Git repository)
+/AnimStudio/AnimStudioEditor/third_party/imgui/
+/AnimStudio/AnimStudioEditor/third_party/ImGuizmo/
+
+# Logs, dumps and test results
+*.log
+*.dmp
+*-resultats/
+
+# Local only: working notes, plans, development test data, private tester package, generated pages
+/AnimStudio/Claude_Code_Master_Prompt_AnimStudio.md
+/AnimStudio/AnimStudio_UI_Restructuring_Plan_Updated.md
+/AnimStudio/EMOTES-design.md
+/AnimStudio/RELEASE-CHECKLIST.md
+/AnimStudio/HANDOFF.md
+/AnimStudio/AnimStudio/clips/captures/
+/AnimStudio/AnimStudio/clips/test_*.sanim
+/AnimStudio/AnimStudioEditor/testdata/
+/AnimStudio/tester-package/
+/AnimStudio/AnimStudioEditor/docs/*.html
+/AnimStudio/AnimStudioNative/third_party/ue4ss/UE4SS.lib
+
