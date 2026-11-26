@@ -100,7 +100,7 @@ the scripts call `D:\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\v
 - The editor parses DLL log lines (`model/workspace.cpp`): changing a log line means updating the parser and its test.
 - Every new user-facing string is English; there is no translation layer any more.
 
-**UI principles** (from the owner's master prompt): simple by default, depth on demand (Creator / Studio mode, no
+**UI principles** (owner's rules): simple by default, depth on demand (Creator / Studio mode, no
 duplicated features); hard to break (undo for every edit, backup before overwrite, safe defaults); readable at a
 glance (warnings say what is wrong and offer a fix); **honest preview** (the editor is not the game: never imply
 they match unless checked in game). For each new feature, say what the casual player sees and what the advanced
@@ -133,3 +133,19 @@ creator gains.
   is identified by its content (`ContentId`, FNV-1a 64 without BOM and `\r`), never by its file name.
 - Figures (game recordings) are named `<Move>_<RGS|SWS|FKS|NLS>_<regular|goofy>`; a `.refaire` file asks the DLL to
   record a move again.
+
+## 6. Project memory management
+
+These files are the source of truth for project continuity:
+
+- `CLAUDE.md`: permanent project instructions and technical constraints.
+- `PROJECT_STATUS.md`: current project state and known issues.
+- `DEVELOPMENT_LOG.md`: significant development history and decisions.
+
+At the end of every significant development task:
+
+1. Update `PROJECT_STATUS.md` if the project state changed.
+2. Append significant technical decisions and milestones to `DEVELOPMENT_LOG.md`.
+3. Update `CLAUDE.md` only when permanent instructions or architecture change.
+4. Never claim a feature is working without verification.
+5. Never overwrite historical information without justification.
