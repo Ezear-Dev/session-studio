@@ -465,6 +465,10 @@ void App::Status(const std::string& s) { status_ = s; statusAge_ = 0.f; }
 
 bool App::CommitKeyNow(bool quiet) {
     if (!doc_.HasPending()) { if (!quiet) Status("nothing to key: rotate a bone first"); return false; }
+    if (doc_.LockedAt(doc_.KeyTime(t_))) {   // 2026-11-26 (task 3): the locked start / end stays the game's pose
+        Status("start and end are locked to the game's pose: pose between them, or discard the change");
+        return false;
+    }
     if (doc_.clip().mode == Mode::Additive && !doc_.HasFigure()) {
         Status("additive needs the game animation: do \"" + VariantTitleUi(var_) + "\" once in game");
         return false;
@@ -579,6 +583,10 @@ void App::Frame(float dt) {
 
     if (wantClose_) { wantClose_ = false; Request(Ask::Close); }
     PollGame(dt);
+    {   // 2026-11-26 (task 3): a trick's end is free when the trick has a landing clip for all its variants
+        std::string missing;
+        doc_.SetHasLandingCover(doc_.IsTrickClip() && HasLandingForAllVariants(doc_.clip(), missing));
+    }
 
     HeaderBar();
     TricksPanel();
@@ -1530,6 +1538,9 @@ void App::ViewPanel() {
     // posed only before the catch (LegFrozenAt), where both poses are the same.
     std::vector<FTr> csV = cs, dcsV = dcs;
     const bool legFrozen = sel_ >= 0 && sel_ < n && doc_.LegFrozenAt(sel_, t_);
+    // 2026-11-26: start / end locked to the game's pose: nothing is posed there (task 3)
+    const bool lockedHere = sel_ >= 0 && sel_ < n && doc_.LockedAt(doc_.KeyTime(t_));
+    const bool poseBlocked = legFrozen || lockedHere;
 
     auto PU = [&](const float u[3], ImVec2& out) {   // UE component point -> screen
         const float p[3] = {u[0], -u[1], u[2]};
@@ -1719,9 +1730,10 @@ void App::ViewPanel() {
     // manipulator (display space; back to UE component space before computing the local rotation)
     bool usingGizmo = false;
     int ikR, ikU, ikF, ikH;
-    const IkJoint ikKind = (ikMode_ && sel_ >= 0 && sel_ < n && !legFrozen) ? doc_.IkHandle(sel_, ikR, ikU, ikF, ikH) : IkJoint::None;
-    if (legFrozen) {   // no handle: the game takes the legs back from the catch
-        const char* msg = "After the catch, the game takes the legs back: pose them before the catch, or in the landing clip.";
+    const IkJoint ikKind = (ikMode_ && sel_ >= 0 && sel_ < n && !poseBlocked) ? doc_.IkHandle(sel_, ikR, ikU, ikF, ikH) : IkJoint::None;
+    if (poseBlocked) {   // no handle: the game takes the legs back from the catch, or a locked instant
+        const char* msg = lockedHere ? "Start and end are locked to the game's pose: pose between them (Clip tab to unlock)."
+                                     : "After the catch, the game takes the legs back: pose them before the catch, or in the landing clip.";
         dl->AddText(ImVec2(p0.x + 8, p0.y + sz.y - 2 * ImGui::GetTextLineHeightWithSpacing() - 4), IM_COL32(255, 217, 77, 255), msg);
     } else if (ikKind != IkJoint::None) {
         const int joint = ikKind == IkJoint::Mid ? ikF : ikKind == IkJoint::Root ? ikU : ikH;
@@ -1854,14 +1866,18 @@ void App::InspectorSelection() {
         ToolInfo(what, tool, col);
         ImGui::TextColored(col, "Tool: %s", tool.c_str());
     }
+    const bool lockedHere = sel_ >= 0 && doc_.LockedAt(doc_.KeyTime(t_));   // 2026-11-26: locked start / end (task 3)
+    if (lockedHere) ImGui::TextColored(ImVec4(1.f, 0.85f, 0.3f, 1.f), "%s", "Start and end are locked to the game's pose:\npose between them (Clip tab to unlock).");
     if (sel_ >= 0 && sel_ == doc_.PelvisBone()) {
+        ImGui::BeginDisabled(lockedHere);
         PelvisProps();
+        ImGui::EndDisabled();
     } else if (sel_ >= 0 && sel_ < n) {
         const std::string& name = doc_.skeleton().names[sel_];
         ImGui::SeparatorText(("Bone: " + Short(name)).c_str());
         const bool legFrozen = doc_.LegFrozenAt(sel_, t_);   // 2026-11-26: the game takes the legs back from the catch
-        if (legFrozen) ImGui::TextColored(ImVec4(1.f, 0.85f, 0.3f, 1.f), "%s", "After the catch, the game takes the legs back:\npose them before the catch, or in the landing clip.");
-        ImGui::BeginDisabled(legFrozen);
+        if (legFrozen && !lockedHere) ImGui::TextColored(ImVec4(1.f, 0.85f, 0.3f, 1.f), "%s", "After the catch, the game takes the legs back:\npose them before the catch, or in the landing clip.");
+        ImGui::BeginDisabled(legFrozen || lockedHere);
         float r[3];
         QToRotatorDeg(doc_.EditedRaw(sel_, t_), r[0], r[1], r[2]);
         if (studio_) {   // precise values (Studio); ring space and tool: Stage toolbar
@@ -2054,6 +2070,37 @@ void App::InspectorClip() {
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", "Replaces the keys: at the start, the pose at the end of the trick clip;\nat the end, the game's pose (the landing hands back to the game smoothly).");
     }
+    if (doc_.IsTrickClip() || doc_.IsLandingClip()) {   // 2026-11-26 (task 3): locked start and end
+        const bool avail = doc_.LockAvailable();
+        bool lk = doc_.LockEnds();
+        ImGui::BeginDisabled(!avail);
+        if (ImGui::Checkbox("Lock start and end", &lk)) {
+            if (doc_.HasPending()) Status("set or discard the pending change first (K)");
+            else if (!lk) { doc_.SetLockEnds(false); Status("start and end unlocked: they can be posed"); }
+            else if (doc_.LockPreview().empty()) { doc_.SetLockEnds(true); Status("start and end locked to the game's pose"); }
+            else popLock_ = true;   // some parts are posed there: ask first
+        }
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            if (!avail) ImGui::SetTooltip("%s", "Only in Add mode. A Replace clip is compared with the recording,\nnot with the game's live pose, so there is nothing to lock it to.");
+            else ImGui::SetTooltip("%s",
+                "Keeps the start and the end at the game's pose, so the clip joins the game smoothly.\n"
+                "Trick clip: the start is locked; the end too, unless this trick has a landing clip\n"
+                "for all its variants (then the landing takes over at the ground).\n"
+                "Landing clip: the end is locked; the start is free (it continues the trick).\n"
+                "With the end locked, the change eases back from your last key to the end,\n"
+                "including the hang time that stretches on higher jumps.");
+        }
+        if (avail && lk) {
+            const bool s = doc_.StartLocked(), e = doc_.EndLocked();
+            const char* what = s && e ? "Locked: start and end (padlocks on the timeline)."
+                             : s && doc_.HasLandingCover() ? "Locked: start. The end is free: the landing clip takes over."
+                             : s ? "Locked: start. The end is posed: bring it back to lock it."
+                             : e ? "Locked: end. The start is free: it continues the trick."
+                             : "";
+            if (*what) ImGui::TextDisabled("%s", what);
+        }
+    }
     EndWarnings(true);   // 2026-11-26: with their fix buttons
     if (doc_.CanDismount()) {   // 2026-11-25: the dismount part inside the riding clip
         bool dis = doc_.HasDismount();
@@ -2081,13 +2128,20 @@ void App::InspectorClip() {
     }
     if (!doc_.HasDismount()) {
         float lastKey = 0.f;
-        for (float k : doc_.KeyTimes(-1)) lastKey = std::max(lastKey, k);
+        const bool endLocked = doc_.EndLocked();   // 2026-11-26 (task 3): the locked end key moves with the end
+        for (float k : doc_.KeyTimes(-1)) if (!(endLocked && std::fabs(k - c.duration) < 1e-3f)) lastKey = std::max(lastKey, k);
         const EditorDoc::State st = doc_.SaveState();
         float dur = c.duration;
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 6.f);
-        if (ImGui::DragFloat("length (s)", &dur, 0.01f, std::max(0.1f, lastKey), 30.f, "%.2f")) c.duration = std::clamp(dur, std::max(0.1f, lastKey), 30.f);
+        if (ImGui::DragFloat("length (s)", &dur, 0.01f, std::max(0.1f, lastKey + (endLocked ? 1.f / 30.f : 0.f)), 30.f, "%.2f"))
+            doc_.SetDuration(std::clamp(dur, std::max(0.1f, lastKey + (endLocked ? 1.f / 30.f : 0.f)), 30.f));
         if (ImGui::IsItemActivated()) doc_.CheckpointState(st, "length");
         if (t_ > c.duration) t_ = c.duration;
+        // 2026-11-26: the game keeps the landing state up to 2 s (DLL v0.23; 0.8 s before)
+        if (doc_.IsLandingClip()) {
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("A landing clip plays for its whole length, up to 2 s.\nIt stops early as soon as you push, crouch, pop or start another move.");
+            if (c.duration > 2.f + 1e-3f) ImGui::TextColored(kWarn, "Only the first 2 s of a landing clip play in game.");
+        }
     }
     if (ImGui::Button("Copy to another variant...")) { askVar_ = var_; popCopy_ = true; }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Makes a copy of the clip for another stance or the other foot\n(automatic left/right mirror when needed).");
@@ -2227,6 +2281,10 @@ void App::CopyNow() {
 
 void App::PasteNow() {
     if (!doc_.CanPaste()) { Status("nothing to paste: copy a pose or keys first (Ctrl+C)"); return; }
+    if (!doc_.ClipboardHasKeys() && doc_.LockedAt(doc_.KeyTime(t_))) {   // 2026-11-26 (task 3)
+        Status("start and end are locked to the game's pose: paste the pose between them");
+        return;
+    }
     if (doc_.clip().mode == Mode::Additive && !doc_.HasFigure()) {
         Status("additive needs the game animation: do \"" + VariantTitleUi(var_) + "\" once in game");
         return;
@@ -2292,7 +2350,10 @@ void App::EndWarnings(bool withFix) {
                 tip = std::string("At the start of this landing, these parts differ from the end of the trick clip ") + lim +
                       ".\nThe landing takes over at the ground contact: they jump there.";
                 break;
+            default: break;   // StartNotGame: LockPreview only
         }
+        if (doc_.LockEnds() && e.kind == EditorDoc::EndIssue::TrickEndNoLanding)
+            tip += "\nThe end is not locked while it is posed: bringing it back locks it again.";
         ImGui::PushID(1000 + idx++);
         ImGui::PushStyleColor(ImGuiCol_Text, yellow);
         const bool click = ImGui::Selectable(("! " + line).c_str(), false, 0, ImVec2(withFix ? 0.f : ImGui::CalcTextSize(("! " + line).c_str()).x, 0));
@@ -2672,11 +2733,20 @@ void App::TimelinePanel() {
         if (dur > 0.f && X(dur) < q0.x + W) dl->AddRectFilled(ImVec2(X(dur) + 8.f, q0.y), ImVec2(q0.x + W, q0.y + rowH), IM_COL32(20, 21, 26, 255));
         const std::vector<float> keys = r.bones.empty() ? doc_.KeyTimes(-1) : doc_.KeyTimesBones(r.bones);
         const bool draggingThis = dragKey_ && dragBones_ == r.bones;
+        // 2026-11-26 (task 3): a locked start / end key is a padlock: not selectable, not movable, not deletable
+        auto drawLock = [&](float x, float my2, float rr) {
+            const ImU32 lc = IM_COL32(150, 175, 205, 255);
+            dl->AddRectFilled(ImVec2(x - rr * 0.75f, my2 - rr * 0.05f), ImVec2(x + rr * 0.75f, my2 + rr * 0.85f), lc, rr * 0.15f);
+            dl->PathArcTo(ImVec2(x, my2 - rr * 0.05f), rr * 0.48f, 3.14159f, 6.28318f, 10);
+            dl->PathStroke(lc, 0, std::max(1.5f, rr * 0.25f));
+        };
+        auto lockedKey = [&](float k) { return doc_.LockedAt(k) && !(doc_.IsTrickClip() && std::fabs(k - dur) < 1e-3f && !r.bones.empty() && std::all_of(r.bones.begin(), r.bones.end(), [&](int b) { return b >= 0 && b < doc_.BoneCount() && IsLegBone(doc_.skeleton().names[b]); })); };
         const float my = q0.y + rowH * 0.5f, rad = std::min(fs * 0.35f, rowH * 0.32f);
         for (float k : keys) {
             const float kt = (draggingThis && std::fabs(k - dragFromT_) < 1e-3f) ? dragKeyT_ : k;
             const float x = X(kt);
             if (!InView(x)) continue;   // outside the zoomed part
+            if (lockedKey(k)) { drawLock(x, q0.y + rowH * 0.5f, std::min(fs * 0.35f, rowH * 0.32f)); continue; }
             const bool picked = KeySelected(r.bones, k);
             const float rr = picked ? rad * 1.35f : rad;
             const ImVec2 pts[4] = {ImVec2(x, my - rr), ImVec2(x + rr, my), ImVec2(x, my + rr), ImVec2(x - rr, my)};
@@ -2689,8 +2759,12 @@ void App::TimelinePanel() {
             if (picked) dl->AddPolyline(pts, 4, IM_COL32(255, 255, 255, 255), ImDrawFlags_Closed, 2.f);
             hits.push_back(Hit{r.bones, k, x, my});
         }
+        if (ri == 0) for (float lt : {0.f, dur})   // the padlocks also show on an empty clip
+            if (doc_.LockedAt(lt) && InView(X(lt)) && std::none_of(keys.begin(), keys.end(), [&](float k) { return std::fabs(k - lt) < 1e-3f; })) drawLock(X(lt), my, rad);
         float hit = -1.f;
-        for (float k : keys) if (InView(X(k)) && std::fabs(X(k) - io.MousePos.x) < fs * 0.5f) hit = k;
+        for (float k : keys) if (!lockedKey(k) && InView(X(k)) && std::fabs(X(k) - io.MousePos.x) < fs * 0.5f) hit = k;
+        bool lockHover = false;
+        for (float lt : {0.f, dur}) if (doc_.LockedAt(lt) && InView(X(lt)) && std::fabs(X(lt) - io.MousePos.x) < fs * 0.5f) lockHover = true;
         if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
             if (r.primary >= 0 && (doc_.IsEditable(r.primary) || r.primary == doc_.PelvisBone()) && !inRow) { sel_ = r.primary; prevSel_ = sel_; }
             if (io.KeyShift) {
@@ -2710,6 +2784,8 @@ void App::TimelinePanel() {
             if (!KeySelected(r.bones, hit)) { keySel_.clear(); keySel_.push_back(KeySel{r.bones, hit}); }
             openKeyMenu_ = true;
         }
+        if (ImGui::IsItemHovered() && hit < 0.f && lockHover)
+            ImGui::SetTooltip("%s", "Locked: the game's pose, so the clip joins the game smoothly.\nPose between the start and the end (Clip tab: Lock start and end).");
         if (ImGui::IsItemHovered() && hit >= 0.f) {
             const int ip = doc_.KeyInterp(hit, r.bones.empty() ? -1 : r.bones.front());
             ImGui::SetTooltip("%.2f s · %s · %s\nclick: select, drag: move\nShift+click: add to the selection, right-click: menu", hit, r.label.c_str(), ip >= 0 ? kInterpName[ip] : "?");
@@ -2762,7 +2838,7 @@ void App::TimelinePanel() {
                 doc_.CheckpointState(st, "move key");
                 if (doc_.EffectiveDrive() != Drive::ManualRatio) t_ = dragKeyT_;
                 keySel_.clear(); keySel_.push_back(KeySel{dragBones_, dragKeyT_});
-            } else Status("cannot move: a key already exists at that time on this row");
+            } else Status(doc_.LockedAt(dragKeyT_) ? "cannot move: the start and end are locked to the game's pose" : "cannot move: a key already exists at that time on this row");
         } else if (doc_.EffectiveDrive() != Drive::ManualRatio) { askTime_ = dragFromT_; Request(Ask::ChangeTime); }
         dragBones_.clear();
     }
@@ -2793,6 +2869,21 @@ void App::Dialogs() {
     // UI Phase 2: Library file actions
     if (popRename_) { ImGui::OpenPopup("Rename the clip"); popRename_ = false; libErr_.clear(); }
     if (popDelete_) { ImGui::OpenPopup("Delete the clip"); popDelete_ = false; }
+    if (popLock_) { ImGui::OpenPopup("Lock start and end"); popLock_ = false; }
+    if (ImGui::BeginPopupModal("Lock start and end", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {   // 2026-11-26 (task 3)
+        ImGui::TextWrapped("%s", "These parts are posed where the lock puts the game's pose back:");
+        for (const EditorDoc::EndIssue& e : doc_.LockPreview()) {
+            std::string parts;
+            for (size_t i = 0; i < e.bones.size(); i++) parts += (i ? ", " : "") + BoneLabelUi(doc_.skeleton().names[e.bones[i]]);
+            if (e.pelvis) parts += parts.empty() ? "Pelvis" : ", Pelvis";
+            ImGui::BulletText("%s: %s", e.kind == EditorDoc::EndIssue::StartNotGame ? "at the start" : "at the end", parts.c_str());
+        }
+        ImGui::TextDisabled("%s", "The keys between them are kept. Ctrl+Z undoes it.");
+        if (ImGui::Button("Reset them and lock")) { doc_.SetLockEnds(true); Status("start and end locked to the game's pose (Ctrl+Z undoes it)"); ImGui::CloseCurrentPopup(); }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
     if (ImGui::BeginPopupModal("Rename the clip", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text("New name for %s:", libFile_.c_str());
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 20.f);

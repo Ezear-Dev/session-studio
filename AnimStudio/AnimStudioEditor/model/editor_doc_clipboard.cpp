@@ -78,6 +78,7 @@ int EditorDoc::CopyKeys(const std::vector<KeyRef>& keys) {
 }
 
 EditorDoc::PasteResult EditorDoc::Paste(float t) {
+    LockGuard lockGuard{*this};   // 2026-11-26: locked start and end, after the change
     PasteResult r;
     if (clipKind_ == CB_None) return r;
     if (!std::isfinite(t)) t = 0.f;

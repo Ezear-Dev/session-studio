@@ -130,6 +130,7 @@ TrickMarkers EditorDoc::Markers() const {
 }
 
 int EditorDoc::SeedLandingFromTrick(const Clip& trick, bool keepKeys) {
+    LockGuard lockGuard{*this};   // 2026-11-26: locked start and end, after the change
     if (!IsLandingClip() || !(trick.states & ST_Trick)) return 0;
     if (keepKeys && (!clip_.tracks.empty() || !clip_.pelvis.empty())) return 0;
     float end = trick.markers.ok ? trick.markers.ground : trick.duration;

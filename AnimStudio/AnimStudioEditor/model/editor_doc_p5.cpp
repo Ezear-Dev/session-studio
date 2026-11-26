@@ -215,8 +215,10 @@ std::vector<float> EditorDoc::KeyTimesBones(const std::vector<int>& bones) const
 }
 
 bool EditorDoc::MoveKeysBones(const std::vector<int>& bones, float from, float to) {
+    LockGuard lockGuard{*this};   // 2026-11-26: locked start and end, after the change
     if (!std::isfinite(to) || to < 0.f || to > clip_.duration) return false;
     if (std::fabs(from - to) < kKeyEps) return true;
+    if (LockedAt(from) || LockedAt(to)) return false;   // 2026-11-26: a locked key does not move, nothing moves onto it
     const bool pel = PelvisBone() >= 0 && std::find(bones.begin(), bones.end(), PelvisBone()) != bones.end();
     if (pel) {   // P6 lot 2
         bool hasFrom = false, hasTo = false;
@@ -250,12 +252,14 @@ bool EditorDoc::MoveKeysBones(const std::vector<int>& bones, float from, float t
 }
 
 void EditorDoc::DeleteKeysBones(const std::vector<int>& bones, float t) {
+    LockGuard lockGuard{*this};   // 2026-11-26: locked start and end, after the change
     for (int b : bones) if (IsEditable(b) || (b >= 0 && b == PelvisBone())) DeleteKeysAt(t, b);   // never the locked tracks
 }
 
 
 // ------------------------------------------------------------------ P6: copy a clip to another variant
 void EditorDoc::RetargetVariant(const FigureVariant& v) {
+    LockGuard lockGuard{*this};   // 2026-11-26: locked start and end, after the change
     ClearClipboard();   // another variant: copy / paste stays inside one clip
     Clip c = clip_;
     const bool before = AuthorMirrored(c);
@@ -290,6 +294,7 @@ void EditorDoc::RetargetVariant(const FigureVariant& v) {
 }
 
 int EditorDoc::SeedKeys() {
+    LockGuard lockGuard{*this};   // 2026-11-26: locked start and end, after the change
     if (!HasFigure() || !clip_.tracks.empty() || !IsTrickClip() || !HasSkeleton()) return 0;
     std::vector<float> times{0.f};
     for (int ph : {2, 4}) {   // flip, landing

@@ -268,6 +268,7 @@ TEST(p6_editor_seed_keys) {
     FigureVariant v = LegacyVariant(FIG_Kickflip);
     CHECK(d.LoadFigure(FigureToJson(f), v, err));
     d.NewClip(v);
+    d.SetLockEnds(false);   // seeding alone (the locked ends: test_end_lock.cpp)
     const int n = d.SeedKeys();
     int editable = 0;
     for (int b = 0; b < d.BoneCount(); b++) if (d.IsEditable(b)) editable++;

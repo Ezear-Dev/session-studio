@@ -66,6 +66,14 @@ movements in the game.
 - **Copy the game's pose** ("Game" line of the timeline): pick a moment of the game's movement with the slider,
   then this button copies that pose to the playhead, on the picked part (or the whole body). Handy to put an arm
   back as in the game.
+- **Lock start and end** (Clip tab, on for new trick and landing clips): the start and the end stay at the game's
+  pose, so the clip joins the game without a jump. A trick's end is free when the trick has a landing clip (the
+  landing takes over); a landing's start is free (it continues the trick). Padlocks on the timeline show the
+  locked instants: pose between them. Untick it to pose them yourself.
+- **Copy / paste** (Ctrl+C / Ctrl+V): copies the selected keys, or your pose of the selected part, and pastes it at
+  the playhead, inside the open clip.
+- **Yellow warnings** (Clip tab and timeline): a part is not back at the game's pose at the end of a trick or
+  landing. Click to go there; the button next to it fixes it.
 - **In game**: **Ctrl+F3** turns the studio on or off, **Ctrl+F4** freezes the skater's current pose into
   `clips\captures` (**Captures** tab of the Library).
 - **The game's replay** already contains your clips: the studio stands by during a replay.

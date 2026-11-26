@@ -216,6 +216,7 @@ private:
     Mode askMode_ = Mode::Additive;
     void DefaultMode();
     bool popPending_ = false, popUnsaved_ = false, popMode_ = false, popOverwrite_ = false, popCopy_ = false;
+    bool popLock_ = false;   // 2026-11-26 (task 3): confirm turning the lock on over posed start / end
     bool openDialog_ = false, saveDialog_ = false, dirDialog_ = false, wantClose_ = false, quit_ = false;
     bool afterSave_ = false;
     std::string overwriteName_;

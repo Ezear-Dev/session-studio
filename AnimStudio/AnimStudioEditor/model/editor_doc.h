@@ -180,7 +180,7 @@ public:
     void DeleteKeysBones(const std::vector<int>& bones, float t);
 
     // ---------------------------------------------------------------- lot 5
-    // a new trick figure goes on 0.8 s after the ground (phase 5): that tail is what landing clips are edited over
+    // a new trick figure goes on 2 s after the ground (phase 5; 0.8 s before 2026-11-26): that tail is what landing clips are edited over
     float GroundAt() const;               // figure time of the ground contact, -1 if the figure has no ground part
     float GroundTail() const;             // seconds recorded after the ground (0 if none)
     // ---------------------------------------------------------------- landing sync (2026-11-25)
@@ -262,7 +262,7 @@ public:
     // A part "differs from the game's pose" by more than kEndDeg degrees, the pelvis by more than kEndCm cm.
     static constexpr float kEndDeg = 3.f, kEndCm = 1.f;
     struct EndIssue {
-        enum Kind { TrickEndNoLanding, LandingEndNotBack, LandingStartMismatch };
+        enum Kind { TrickEndNoLanding, LandingEndNotBack, LandingStartMismatch, StartNotGame /* LockPreview only */ };
         Kind kind = TrickEndNoLanding;
         std::vector<int> bones;   // the parts concerned (bone indices)
         bool pelvis = false;      // the pelvis offset too
@@ -275,6 +275,30 @@ public:
     // end issues: a game-pose key at the end for the listed parts; start mismatch: the trick's end for the listed parts.
     // One undo step. false if nothing changed.
     bool FixEndIssue(const EndIssue& e, const Clip* linkedTrick);
+
+    // ---------------------------------------------------------------- locked start and end (2026-11-26, task 3)
+    // Add mode trick and landing clips (LockAvailable). The switch is the extra root field "lockEnds" of the file
+    // (missing = off: clips made before; new trick and landing clips: on). Locked instant = the game's pose there.
+    //   trick:   start locked; end locked unless the trick has a landing clip for all its variants (SetHasLandingCover)
+    //   landing: start free (it continues the trick); end locked
+    // A trick that loses its landing cover while its end is posed keeps that pose (nothing is erased, the end warning
+    // shows); its end locks again once it is back within kEndDeg / kEndCm (the fix button does that).
+    // Legs are never locked at the end of a trick clip (the game takes them back from the catch).
+    bool LockEnds() const;
+    // one undo step. on: the locked instants are reset to the game's pose (LockPreview tells what changes)
+    void SetLockEnds(bool on);
+    bool LockAvailable() const { return clip_.mode == Mode::Additive && (IsTrickClip() || IsLandingClip()); }
+    void SetHasLandingCover(bool on) { landCover_ = on; }   // changes no key
+    bool HasLandingCover() const { return landCover_; }
+    bool StartLocked() const;
+    bool EndLocked() const;
+    bool LockedAt(float t) const;     // t is a locked instant (start or end)
+    // what turning the lock on would reset: StartNotGame (t = 0) and the end kind (t = end), the parts that are posed there
+    std::vector<EndIssue> LockPreview() const;
+    // locked instants back to the game's pose. Every key writer calls it last (inside the caller's undo step).
+    void ApplyEndLock();
+    // clip length (>= 0.1 s); with the end locked, the end key moves with the end (no zero key left in the middle)
+    void SetDuration(float d);
 
     // undo / redo (at most 200 steps)
     struct State { Clip clip; std::map<int, Quat> pending; bool pelPending = false; float pel[3] = {0, 0, 0}; };
@@ -336,4 +360,17 @@ private:
     float cbPel_[3] = {0, 0, 0};
     struct CbKey { float dt; std::vector<std::pair<int, Key>> bones; bool hasPel = false; PosKey pel{}; };
     std::vector<CbKey> cbKeys_;           // keys: one entry per copied (row, time), dt from the first one
+    // locked ends
+    bool landCover_ = false;              // the trick has a landing clip for all its variants (given by the app)
+    void LockKeysAt(float t, bool skipLegs);
+    bool EndLockedRule() const;           // the end lock rule alone (without the "trick end still posed" exception)
+    void ApplyEndLockFrom(bool endLockedBefore);   // the end is locked if it was before the change, or is now
+    struct LockGuard {
+        EditorDoc& d; bool end;
+        explicit LockGuard(EditorDoc& x) : d(x), end(x.EndLocked()) {}
+        ~LockGuard() { d.ApplyEndLockFrom(end); }
+    };
 };
+// 2026-11-26: a bool extra root field of a clip ("lockEnds"): set or replaced, read (missing = def)
+void SetClipExtraBool(Clip& c, const char* name, bool v);
+bool ClipExtraBool(const Clip& c, const char* name, bool def);

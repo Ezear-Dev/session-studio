@@ -33,7 +33,7 @@ A clip targets one or more **states** and, for each, **stances** and **feet**.
 | `Riding` | Riding (standing) | on the board, on the ground, nothing else going on |
 | `Pushing` | Pushing | a push; falls back to the Riding clip when it has none |
 | `Crouch` | Crouch | on the board, crouched; the only ground state with Fakie / Nollie |
-| `Landing` | Landing | 0.8 s after a trick returns to the ground (or a landing without trick). A landing clip may name its trick (`trigger.trick`): it then plays only after that trick, in that trick's stance, and wins over the generic Landing clip |
+| `Landing` | Landing | From the moment a trick returns to the ground (or a landing without trick): 0.8 s, or as long as the landing clip, up to 2 s. Past 0.8 s, pushing, crouching, a new trick or any other move ends it. A landing clip may name its trick (`trigger.trick`): it then plays only after that trick, in that trick's stance, and wins over the generic Landing clip |
 | `Dismount` | — | used through the Riding clip's dismount part (below) |
 | `Powerslide` | Powerslide | **not checked yet** |
 | `Grind`, `Grab` | hidden | **not detected reliably**: grinds share one recording, grabs are untested |
@@ -111,6 +111,7 @@ in each bone's local space, the pelvis offset is in cm in component space (Z up)
 | `play.dismount` | s | riding clips: the part played once when the feet leave the board |
 | `keys[].interp` | `smooth` / `linear` / `step` | curve to the next key |
 | `weights` | 0..1 per bone | how much of the track applies |
+| `lockEnds` | bool | editor only (the game ignores it): trick and landing clips keep their start / end at the game's pose |
 
 `_studio.json` in the clips folder holds two expert settings: `mirrorConv` (per-bone mirror convention overrides) and
 `legPostPass` (re-solve the legs after other mods, on by default).
@@ -131,6 +132,14 @@ in each bone's local space, the pelvis offset is in cm in component space (Z up)
   **Empty rows too** also lists the bones without keys.
 - **Copy the game's pose**: copies the recorded game pose at the "Game" slider time to the playhead, for the picked
   bone and its children (or every editable bone); a key right away with Auto key on.
+- **Lock start and end** (Add mode trick and landing clips): locked instants are keyed at the game's pose after every
+  edit. Trick: start locked, end locked unless the trick has an enabled landing clip for all its variants (legs never
+  locked at a trick's end). Landing: end locked, start free. A trick end posed beyond 3 degrees / 1 cm when the trick
+  loses its landing cover is kept (warning) until it is brought back. Changing the length moves the locked end key.
+- **Copy / paste** inside the open clip: a pose (your change, keyed like a normal key) or keys (spacing and
+  interpolation kept, snapped to frames, keys past the end skipped).
+- **End warnings**: parts more than 3 degrees / 1 cm from the game's pose at a trick or landing end, or a landing
+  start different from its trick's end. Legs are ignored at a trick's end.
 - **Backups**: every save copies the previous version to `Documents\AnimStudio\backups\<clip>\` (20 kept per clip).
   Delete from the Library moves the file there too.
 

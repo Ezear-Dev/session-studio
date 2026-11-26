@@ -138,6 +138,7 @@ std::vector<EditorDoc::EndIssue> EditorDoc::EndIssues(const Clip* linkedTrick, b
 }
 
 bool EditorDoc::FixEndIssue(const EndIssue& e, const Clip* linkedTrick) {
+    LockGuard lockGuard{*this};   // 2026-11-26: locked start and end, after the change
     if (clip_.mode != Mode::Additive) return false;
     const State before = SaveState();
     bool changed = false;
@@ -184,4 +185,130 @@ bool EditorDoc::FixEndIssue(const EndIssue& e, const Clip* linkedTrick) {
     }
     if (changed) CheckpointState(before, e.kind == EndIssue::LandingStartMismatch ? "take the end of the trick" : "back to the game's pose");
     return changed;
+}
+
+// ------------------------------------------------------------------ locked start and end (task 3)
+void SetClipExtraBool(Clip& c, const char* name, bool v) {
+    JValue j; j.t = JValue::Bool; j.b = v;
+    for (auto& kv : c.extra) if (kv.first == name) { kv.second = j; return; }
+    c.extra.emplace_back(name, j);
+}
+bool ClipExtraBool(const Clip& c, const char* name, bool def) {
+    for (auto& kv : c.extra) if (kv.first == name) return kv.second.t == JValue::Bool ? kv.second.b : def;
+    return def;
+}
+
+namespace {
+constexpr float kPreviewDeg = 0.05f, kPreviewCm = 0.01f;   // "posed there" for LockPreview: any visible change
+}
+
+bool EditorDoc::LockEnds() const { return ClipExtraBool(clip_, "lockEnds", false); }
+
+void EditorDoc::SetLockEnds(bool on) {
+    if (on == LockEnds() && ClipExtraBool(clip_, "lockEnds", !on) == on) return;
+    const State before = SaveState();
+    SetClipExtraBool(clip_, "lockEnds", on);
+    if (on && LockAvailable()) {   // the user confirmed: every locked instant goes back to the game's pose
+        if (StartLocked()) LockKeysAt(0.f, false);
+        if (EndLockedRule()) LockKeysAt(clip_.duration, IsTrickClip());
+    }
+    CheckpointState(before, on ? "lock start and end" : "unlock start and end");
+}
+
+bool EditorDoc::EndLockedRule() const {
+    if (!LockEnds() || !LockAvailable()) return false;
+    return IsLandingClip() || !landCover_;
+}
+bool EditorDoc::StartLocked() const { return LockEnds() && LockAvailable() && IsTrickClip(); }
+bool EditorDoc::EndLocked() const {
+    if (!EndLockedRule()) return false;
+    if (IsLandingClip()) return true;
+    // a trick whose end KEY is still posed (it lost its landing cover): left as it is until it is back (the fix button).
+    // A track with no key at the end only carries its last key on: the lock gives it its end key.
+    const float end = clip_.duration;
+    for (auto& tr : clip_.tracks) {
+        if (!EditableName(tr.bone) || IsLegBone(tr.bone)) continue;
+        for (auto& k : tr.keys)
+            if (std::fabs(k.t - end) < kKeyEps && AngleDeg(QSlerp(QIdent, k.q, tr.weight)) > kEndDeg) return false;
+    }
+    for (auto& k : clip_.pelvis) if (std::fabs(k.t - end) < kKeyEps && Len3(k.v) > kEndCm) return false;
+    return true;
+}
+bool EditorDoc::LockedAt(float t) const {
+    if (StartLocked() && std::fabs(t) < kKeyEps) return true;
+    return EndLocked() && std::fabs(t - clip_.duration) < kKeyEps;
+}
+
+std::vector<EditorDoc::EndIssue> EditorDoc::LockPreview() const {
+    std::vector<EndIssue> out;
+    if (!LockAvailable()) return out;
+    const int n = BoneCount();
+    auto posed = [&](EndIssue::Kind kind, float t, bool skipLegs) {
+        EndIssue e;
+        e.kind = kind;
+        e.t = t;
+        for (int b = 0; b < n; b++) {
+            if (!IsEditable(b) || (skipLegs && leg_[b])) continue;
+            const Track* tr = TrackOf(b);
+            if (!tr) continue;
+            const float a = AngleDeg(Effective(clip_, *tr, t));
+            if (a > kPreviewDeg) { e.bones.push_back(b); e.maxDeg = std::max(e.maxDeg, a); }
+        }
+        if (!clip_.pelvis.empty() && PelvisBone() >= 0) {
+            float v[3];
+            EvalClipPelvis(clip_, t, false, v);
+            const float l = Len3(v);
+            if (l > kPreviewCm) { e.pelvis = true; e.maxCm = l; }
+        }
+        if (!e.bones.empty() || e.pelvis) out.push_back(std::move(e));
+    };
+    if (IsTrickClip()) posed(EndIssue::StartNotGame, 0.f, false);
+    if (IsLandingClip() || !landCover_)
+        posed(IsTrickClip() ? EndIssue::TrickEndNoLanding : EndIssue::LandingEndNotBack, clip_.duration, IsTrickClip());
+    return out;
+}
+
+void EditorDoc::LockKeysAt(float t, bool skipLegs) {
+    for (auto& tr : clip_.tracks) {
+        if (!EditableName(tr.bone) || (skipLegs && IsLegBone(tr.bone))) continue;   // locked tracks are never written
+        if (tr.keys.empty()) continue;
+        PutKey(tr.keys, t, QIdent);
+    }
+    if (!clip_.pelvis.empty()) { const float z[3] = {0, 0, 0}; PutPel(clip_.pelvis, t, z); }
+    // a track left with only game-pose keys on locked instants changes nothing: removed (else deleting every key of
+    // a part would never remove it, the locked keys coming back)
+    auto onlyLocked = [&](float kt) { return LockedAt(kt); };
+    clip_.tracks.erase(std::remove_if(clip_.tracks.begin(), clip_.tracks.end(), [&](const Track& tr) {
+        if (!EditableName(tr.bone)) return false;
+        for (auto& k : tr.keys) if (!onlyLocked(k.t) || AngleDeg(k.q) > 1e-3f) return false;
+        return true;
+    }), clip_.tracks.end());
+    bool pelOnly = !clip_.pelvis.empty();
+    for (auto& k : clip_.pelvis) if (!onlyLocked(k.t) || Len3(k.v) > 1e-4f) pelOnly = false;
+    if (pelOnly) clip_.pelvis.clear();
+}
+
+void EditorDoc::ApplyEndLock() { ApplyEndLockFrom(EndLocked()); }
+
+void EditorDoc::ApplyEndLockFrom(bool endLockedBefore) {
+    if (StartLocked()) LockKeysAt(0.f, false);
+    // locked before the change (a pose put on the end is undone) or now (a trick end back within the limits)
+    if (EndLockedRule() && (endLockedBefore || EndLocked())) LockKeysAt(clip_.duration, IsTrickClip());
+}
+
+void EditorDoc::SetDuration(float d) {
+    if (!std::isfinite(d)) return;
+    d = std::max(0.1f, d);
+    const float old = clip_.duration;
+    if (std::fabs(d - old) < kKeyEps) return;
+    const bool locked = EndLocked();
+    if (locked) {   // the locked end key goes with the end (it is the game's pose: dropped, put back below)
+        for (auto& tr : clip_.tracks) {
+            if (!EditableName(tr.bone)) continue;
+            tr.keys.erase(std::remove_if(tr.keys.begin(), tr.keys.end(), [&](const Key& k) { return std::fabs(k.t - old) < kKeyEps && AngleDeg(k.q) < 1e-3f; }), tr.keys.end());
+        }
+        clip_.pelvis.erase(std::remove_if(clip_.pelvis.begin(), clip_.pelvis.end(), [&](const PosKey& k) { return std::fabs(k.t - old) < kKeyEps && Len3(k.v) < 1e-4f; }), clip_.pelvis.end());
+    }
+    clip_.duration = d;
+    ApplyEndLockFrom(locked);
 }

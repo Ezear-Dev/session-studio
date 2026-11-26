@@ -174,11 +174,13 @@ void EditorDoc::ApplyFigureDefaults(Clip& c, const FigureVariant& v) const {
     if (!StateLoops(v.state)) {   // trick clip: a single pass, from the pop to the landing
         c.loop = false;
         c.hold = false;
-        // lot 5: the air part only (a new figure also holds 0.8 s on the ground, for the landing part option)
+        // lot 5: the air part only (a new figure also holds 2 s on the ground, for the landing clip; 0.8 s before 2026-11-26)
         const float air = GroundAt() > 0.f ? GroundAt() : FigureDuration();
         c.duration = (HasFigure() && variant_ == v && air > 0.f) ? air : 1.0f;
         c.blendIn = 0.05f; c.blendOut = 0.15f;
         if (v.state == ST_Landing) { c.blendIn = 0.12f; c.blendOut = 0.30f; }   // comes in at the contact, over the trick clip
+        // 2026-11-26: new trick and landing clips have their start / end locked to the game's pose (can be turned off)
+        if (v.state == ST_Trick || v.state == ST_Landing) SetClipExtraBool(c, "lockEnds", true);
     }
     // 2026-11-25: walking follows the game's steps: one clip = one stride of the recording (cycle drive)
     if ((v.state == ST_Walking || v.state == ST_Running) && HasFigure() && variant_ == v && hasCycle_) {   // running too
@@ -413,6 +415,7 @@ bool EditorDoc::Pending(int bone, Quat* q) const {
 }
 
 void EditorDoc::CommitKey(float t) {
+    LockGuard lockGuard{*this};   // 2026-11-26: locked start and end, after the change
     if (!std::isfinite(t)) t = 0.f;
     const float tPose = std::clamp(t, 0.f, clip_.duration);   // the instant shown (its original animation)
     t = KeyTime(tPose);                                        // where the key goes (0 for a held pose)
@@ -503,6 +506,7 @@ void EditorDoc::CommitKey(float t) {
 }
 
 void EditorDoc::DeleteKeysAt(float t, int bone) {
+    LockGuard lockGuard{*this};   // 2026-11-26: locked start and end, after the change
     for (size_t i = 0; i < clip_.tracks.size(); i++) {
         if (bone >= 0 && (int)i != TrackIndex(bone)) continue;
         if (bone < 0 && !EditableName(clip_.tracks[i].bone)) continue;   // "all" = all editable bones: never the locked tracks
@@ -515,8 +519,10 @@ void EditorDoc::DeleteKeysAt(float t, int bone) {
 }
 
 bool EditorDoc::MoveKeys(float from, float to) {
+    LockGuard lockGuard{*this};   // 2026-11-26: locked start and end, after the change
     if (!std::isfinite(to) || to < 0.f || to > clip_.duration) return false;
     if (std::fabs(from - to) < kKeyEps) return true;
+    if (LockedAt(from) || LockedAt(to)) return false;   // a locked key does not move, nothing moves onto it
     for (auto& tr : clip_.tracks) {
         bool hasFrom = false, hasTo = false;
         for (auto& k : tr.keys) { if (std::fabs(k.t - from) < kKeyEps) hasFrom = true; if (std::fabs(k.t - to) < kKeyEps) hasTo = true; }
@@ -566,6 +572,7 @@ void EditorDoc::MirrorCopy(int bone, float t) {
 }
 
 void EditorDoc::SetMode(Mode m) {
+    LockGuard lockGuard{*this};   // 2026-11-26: locked start and end, after the change
     if (clip_.mode == m) return;
     ClearClipboard();   // key values mean something else in the other mode
     for (auto& tr : clip_.tracks) {

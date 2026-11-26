@@ -89,7 +89,7 @@ TEST(p5b_recorder_kickflip_one_shot) {
     r.Tick(g0, q.data(), nullptr, kRecBones, 1.f / 60.f);
     FigureRec out; int id = 0;
     CHECK(!r.TakeFinished(out, id));
-    RunKF(r, 1, 0.8f, 1.7f, PhaseAt);   // pop (serial 0 -> 1) then ground at 0.8 s, then the 0.8 s ground tail (lot 5)
+    RunKF(r, 1, 0.8f, 3.0f, PhaseAt);   // pop (serial 0 -> 1) then ground at 0.8 s, then the 2 s ground tail
     CHECK(r.TakeFinished(out, id));
     CHECK(id == 5);
     CHECK(out.times.size() >= 24 + FigureRecorder::kGroundTail && out.times.size() <= 26 + FigureRecorder::kGroundTail);
@@ -105,17 +105,17 @@ TEST(p5b_recorder_kickflip_one_shot) {
 
 TEST(p5b_recorder_kickflip_first_tick_with_kickflip_starts) {
     FigureRecorder r; r.Reset(kRecBones);
-    RunKF(r, 7, 0.8f, 1.7f, PhaseAt);
+    RunKF(r, 7, 0.8f, 3.0f, PhaseAt);
     FigureRec out; int id = 0;
     CHECK(r.TakeFinished(out, id));
 }
 
 TEST(p6_recorder_trick_not_wanted) {
     FigureRecorder r; r.Reset(kRecBones);
-    RunKF(r, 1, 0.8f, 1.7f, PhaseAt, false);
+    RunKF(r, 1, 0.8f, 3.0f, PhaseAt, false);
     FigureRec out; int id = 0;
     CHECK(!r.TakeFinished(out, id));
-    RunKF(r, 2, 0.8f, 1.7f, PhaseAt, true, 9);
+    RunKF(r, 2, 0.8f, 3.0f, PhaseAt, true, 9);
     CHECK(r.TakeFinished(out, id) && id == 9);
 }
 
@@ -133,7 +133,7 @@ TEST(p5b_recorder_short_kickflip_discarded) {
     RunKF(r, 1, 0.4f, 1.f, PhaseAt);   // 0.4 s: ~13 frames
     FigureRec out; int id = 0;
     CHECK(!r.TakeFinished(out, id));
-    RunKF(r, 2, 0.8f, 1.7f, PhaseAt);
+    RunKF(r, 2, 0.8f, 3.0f, PhaseAt);
     CHECK(r.TakeFinished(out, id));
 }
 
@@ -160,7 +160,7 @@ TEST(p5b_recorder_new_pop_mid_recording) {
 TEST(p6_recorder_trick_from_manual) {   // a pop during a manual ends the manual recording and records the trick
     FigureRecorder r; r.Reset(kRecBones);
     std::vector<Quat> q(kRecBones, QIdent);
-    for (int i = 0; i < 60 * 3; i++) {
+    for (int i = 0; i < 60 * 4; i++) {
         GameState g{i < 30, false, false, false, 0.f};
         g.kickflip = i >= 30 && i < 90; g.popSerial = i >= 30 ? 1 : 0; g.trickPhase = 1;
         g.figId = g.kickflip ? 5 : g.manual ? 1 : 0; g.figWanted = g.figId != 0;
@@ -482,6 +482,7 @@ EditorDoc KDoc(const FigureRec* fig) {
     CHECK(d.LoadSkeleton(SkeletonToJson(s), err));
     if (fig) CHECK(d.LoadFigure(FigureToJson(*fig), err));
     d.NewClip(FIG_Kickflip);
+    d.SetLockEnds(false);     // written before the locked start and end (2026-11-26)
     return d;
 }
 } // namespace
