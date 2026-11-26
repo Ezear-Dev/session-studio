@@ -6,10 +6,19 @@ using namespace app_detail;
 // ------------------------------------------------------------------ UI Phase 2 (2026-11-25): Library
 // Top: the variant (stance x feet) and whether the game's animation is recorded, always visible.
 // Tabs: Tricks (what to animate), Clips (files, with enable / rename / duplicate / delete), Captures (Ctrl+F4 poses).
+// Redesign step 2 (2026-11-27): Browse shows it on the whole window; Animate shows it as a drawer over the stage (B).
+// Temporary: step 6 replaces it with the real Browse workspace.
 void App::TricksPanel() {
     const Layout L = Lay();
-    Place(0, L.top, L.left, L.h - L.top - L.status - L.bottom - L.gap);
-    BeginPanel("Library", kPanel);
+    Place(L.lib.x, L.lib.y, L.lib.w, L.lib.h);
+    if (ws_ == 1) {   // drawer: above the stage, with a close button; brought to the front when it opens
+        static int lastFrame = -10;
+        if (ImGui::GetFrameCount() != lastFrame + 1) ImGui::SetNextWindowFocus();
+        lastFrame = ImGui::GetFrameCount();
+        bool open = true;
+        BeginPanel("Library", kPanel & ~ImGuiWindowFlags_NoBringToFrontOnFocus, &open);
+        if (!open) drawer_ = false;
+    } else BeginPanel("Library", kPanel);
     if (clipsDir_.empty()) {   // empty state: nothing can be listed without the game's clips folder
         ImGui::TextWrapped("The game's clips folder is not chosen yet.");
         ImGui::TextDisabled("...\\Win64\\Mods\\SessionAnimLoader\\clips");
@@ -70,6 +79,11 @@ void App::TricksPanel() {
     } else {
         Badge("Do it once in game", kAlert);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Do \"%s\" once in game (mod installed):\nthe mod records the game's movement by itself, then you can edit it here.", VariantTitleUi(var_).c_str());
+    }
+    if (ws_ == 0) {   // Browse: go and animate what is picked
+        ImGui::Spacing();
+        if (ui::Button("Animate this variant", ui::Kind::Primary)) SetWorkspace(1);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Opens the Animate workspace (3D view and timeline) on %s (Tab).", VariantTitleUi(var_).c_str());
     }
 
     // ---- tabs

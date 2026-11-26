@@ -21,6 +21,7 @@ App::App(std::wstring exeDir) : exeDir_(std::move(exeDir)) {
         loopPreview_ = st.Get("timeline.loop") != "0";      // 2026-11-25: on unless turned off
         allRows_ = st.Get("timeline.allbones") == "1";
         showWelcome_ = st.Get("ui.welcomed") != "1";   // UI Phase 5: first launch
+        ws_ = st.Get("ui.workspace") == "browse" ? 0 : 1;   // redesign step 2: Animate unless Browse was left open
         bodyView_ = st.Get("ui.view") != "skeleton";   // 2026-11-26 (mannequin): Body by default
         showBoard_ = st.Get("ui.board") == "1";        // 2026-11-26 (mannequin stage 2): the board, OFF by default (approximate, see board_mesh.h)
         const std::string bd = st.Get("backupDir");
@@ -351,7 +352,17 @@ void App::DefaultMode() {
 
 bool App::Dirty() const { return ClipToJson(doc_.clip()) != savedText_; }
 
-void App::Status(const std::string& s) { status_ = s; statusAge_ = 0.f; }
+void App::Status(const std::string& s) {
+    status_ = s;
+    statusAge_ = 0.f;
+    // redesign step 2: kept for the game pill popup (the status strip is gone)
+    char clock[16] = "";
+    const std::time_t now = std::time(nullptr);
+    std::tm lt{};
+    if (localtime_s(&lt, &now) == 0) std::strftime(clock, sizeof(clock), "%H:%M:%S", &lt);
+    msgs_.push_back(Msg{clock, s});
+    if (msgs_.size() > 12) msgs_.erase(msgs_.begin());
+}
 
 bool App::CommitKeyNow(bool quiet) {
     if (!doc_.HasPending()) { if (!quiet) Status("nothing to key: rotate a bone first"); return false; }
@@ -478,13 +489,17 @@ void App::Frame(float dt) {
         doc_.SetHasLandingCover(doc_.IsTrickClip() && HasLandingForAllVariants(doc_.clip(), missing));
     }
 
+    // redesign step 2: two workspaces (Browse: the Library; Animate: stage, inspector, timeline, Library drawer)
     HeaderBar();
-    TricksPanel();
-    ViewPanel();
-    PropsPanel();
-    TimelinePanel();
-    StatusBar();
+    if (ws_ == 0) TricksPanel();
+    else {
+        ViewPanel();
+        PropsPanel();
+        TimelinePanel();
+        if (drawer_) TricksPanel();   // drawn after the stage: on top of it
+    }
     Splitters();
+    Toast();
     WelcomeWindow();   // UI Phase 5
     Dialogs();
     Shortcuts();

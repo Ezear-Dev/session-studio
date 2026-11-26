@@ -130,10 +130,10 @@ inline ImU32 U32(const ImVec4& c) { return ImGui::ColorConvertFloat4ToU32(c); }
 inline void Badge(const char* text, const ImVec4& col) { ui::Chip(text, col); }
 inline void Dot(const ImVec4& col) { ui::StatusDot(col); }
 // a panel window whose title uses the title font (Segoe UI Semibold); the content keeps the body font
-inline bool BeginPanel(const char* name, ImGuiWindowFlags flags) {
+inline bool BeginPanel(const char* name, ImGuiWindowFlags flags, bool* open = nullptr) {
     ImFont* f = theme::Strong();
     if (f) ImGui::PushFont(f, 0.f);
-    const bool r = ImGui::Begin(name, nullptr, flags);
+    const bool r = ImGui::Begin(name, open, flags);
     if (f) ImGui::PopFont();
     return r;
 }

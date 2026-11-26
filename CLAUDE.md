@@ -39,7 +39,7 @@ DLL ──writes──► SessionAnimLoader.native.log ──parsed by──► 
   (split over `editor_doc_*.cpp` by feature), IK, mannequin and board meshes, time view, view math, workspace
   (settings, backups, library file operations, game log parsing), paths.
 - `SessionStudio/app/` = interface only: one `App` class (`app.h`) split by panel since 2026-11-26 —
-  `app.cpp` (core: files, clips, confirmations, frame), `app_shell.cpp` (layout, header, welcome, status strip),
+  `app.cpp` (core: files, clips, confirmations, frame), `app_shell.cpp` (workspaces layout, top bar, game pill, toasts, welcome),
   `app_library.cpp`, `app_stage.cpp`, `app_inspector.cpp`, `app_timeline.cpp`, `app_dialogs.cpp` (dialogs,
   shortcuts); shared helpers in `app_internal.h` (namespace `app_detail`); `ui_theme.*` (palette, style, fonts, icons:
   **every colour comes from here**) and `ui_widgets.*` (themed buttons, toggles, switch, chips); `stage_renderer.cpp` (D3D11 mannequin render), `main.cpp` (window, loop, `--selftest`).

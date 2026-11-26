@@ -5,7 +5,7 @@ using namespace app_detail;
 
 void App::PropsPanel() {
     const Layout L = Lay();
-    Place(L.w - L.right, L.top, L.right, L.h - L.top - L.status - L.bottom - L.gap);
+    Place(L.insp.x, L.insp.y, L.insp.w, L.insp.h);
     BeginPanel("Inspector", kPanel);
     // Creator / Studio: what is shown, never what the clip contains (UI Phase 3)
     {

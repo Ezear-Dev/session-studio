@@ -178,7 +178,7 @@ void App::PelvisProps() {
 
 void App::ViewPanel() {
     const Layout L = Lay();
-    Place(L.left + L.gap, L.top, L.w - L.left - L.right - 2.f * L.gap, L.h - L.top - L.status - L.bottom - L.gap);
+    Place(L.stage.x, L.stage.y, L.stage.w, L.stage.h);
     BeginPanel("3D view", kPanel | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     if (skeletonOk_) StageToolbar();   // UI Phase 3; above the canvas: never over the rings
     const ImVec2 p0 = ImGui::GetCursorScreenPos();

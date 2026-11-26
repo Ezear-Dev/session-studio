@@ -210,6 +210,11 @@ void App::TimelineTransport() {
             else Status("set or discard the pending change first (K)");
         }
     }
+    // redesign step 2 (2026-11-27): Auto key lives with the transport (record style: red dot when on)
+    ImGui::SameLine(0, fs * 0.6f);
+    if (ui::RecordToggle("Auto key", autoKey_)) autoKey_ = !autoKey_;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip(autoKey_ ? "Auto key is ON: every gesture sets a key at the time shown.\nClick to turn it off (then you set keys yourself with K)."
+                                                           : "Auto key is OFF: you set the key yourself with K (or the \"+ key\" button).\nClick to turn it on.");
     ImGui::SameLine(0, fs);
     // time and frame readout (30 images per second, like the game's recordings)
     ImGui::AlignTextToFramePadding();
@@ -319,7 +324,7 @@ void App::TimelineViewBar() {
 
 void App::TimelinePanel() {
     const Layout L = Lay();
-    Place(0, L.h - L.status - L.bottom, L.w, L.bottom);
+    Place(L.time.x, L.time.y, L.time.w, L.time.h);
     BeginPanel("Timeline", kPanel | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     // selected keys that no longer exist (undo, another clip, deleted) leave the selection
     keySel_.erase(std::remove_if(keySel_.begin(), keySel_.end(), [&](const KeySel& k) {

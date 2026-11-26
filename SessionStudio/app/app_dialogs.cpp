@@ -1,5 +1,6 @@
 // Session Studio -- confirmation and file dialogs, keyboard shortcuts.
 #include "app_internal.h"
+#include "imgui_internal.h"   // SetKeyOwner (Tab)
 
 using namespace app_detail;
 
@@ -44,7 +45,7 @@ void App::Dialogs() {
     }
     if (ImGui::BeginPopupModal("Delete the clip", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text("Delete %s?", libFile_.c_str());
-        ImGui::TextWrapped("It will be removed from the game and moved to the backups\n(\"Backups\" button at the bottom): you can get it back.");
+        ImGui::TextWrapped("It will be removed from the game and moved to the backups\n(\"...\" menu at the top right, \"Open the backups\"): you can get it back.");
         if (libFile_ == fileName_) ImGui::TextColored(kAlert, "It is the open clip: it stays shown, as a clip not saved yet.");
         if (ui::Button("Delete", ui::Kind::Danger)) { ImGui::CloseCurrentPopup(); DeleteClip(libFile_); }
         ImGui::SameLine();
@@ -189,6 +190,9 @@ void App::Dialogs() {
 void App::Shortcuts() {
     ImGuiIO& io = ImGui::GetIO();
     if (io.WantTextInput || ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId)) return;
+    // redesign step 2: Tab switches the workspace, so ImGui's keyboard navigation must not also use it to move the
+    // focus between buttons (Space would then press a focused button instead of playing). Text fields keep Tab.
+    ImGui::SetKeyOwner(ImGuiKey_Tab, ImGui::GetID("##workspace_tab"));
     const bool ctrl = io.KeyCtrl;
     if (dragKey_ || ImGuizmo::IsUsing() || ImGui::IsAnyItemActive()) return;   // no undo in the middle of a drag
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
@@ -197,6 +201,12 @@ void App::Shortcuts() {
     }
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Y, false)) { if (doc_.Redo()) AfterUndoRedo(); else Status("nothing to redo"); }
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_S, false)) Request(Ask::Save);
+    // redesign step 2 (2026-11-27): new shortcuts
+    if (ctrl && ImGui::IsKeyPressed(ImGuiKey_N, false)) Request(Ask::New);
+    if (ctrl && ImGui::IsKeyPressed(ImGuiKey_O, false)) openDialog_ = true;
+    if (!ctrl && !io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_Tab, false)) SetWorkspace(ws_ == 0 ? 1 : 0);
+    if (!ctrl && ws_ == 1 && ImGui::IsKeyPressed(ImGuiKey_B, false)) drawer_ = !drawer_;
+    if (ws_ != 1) return;   // Browse: the editing keys below act on the 3D view and the timeline, not shown there
     if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_K, false)) CommitKeyNow();
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_C, false)) CopyNow();    // 2026-11-26: keys if selected, else my pose
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_V, false)) PasteNow();

@@ -35,12 +35,23 @@ public:
 
 private:
     // ---------------------------------------------------------------- UI Phase 1 (2026-11-25): workspace shell
-    struct Layout { float top, status, gap, left, right, bottom, w, h; };
-    Layout Lay() const;                   // panel sizes (pixels) from the saved proportions, clamped to the window
+    // redesign step 2 (2026-11-27): two workspaces. Animate = stage + inspector over a full-width timeline, the Library
+    // as a drawer over the stage; Browse = the Library on the whole window. No status strip (game pill in the top bar).
+    struct Rect { float x, y, w, h; };
+    struct Layout { float top, gap, left, right, bottom, w, h; Rect stage, insp, time, lib; };
+    Layout Lay() const;                   // panel rectangles (pixels) from the saved proportions, clamped to the window
     void Splitters();                     // drag handles between the panels (double-click: default size)
     void SaveLayout();
-    void HeaderBar();                     // replaces TopBar: context, save state, file actions, undo/redo, auto key
-    void StatusBar();                     // game / save / reload / skeleton / source animation / folders / message
+    void HeaderBar();                     // logo, workspace, variant, clip, save state, game pill, Save, undo / redo, ⋯ menu
+    void GameStatus(std::string& text, ImVec4& col) const;   // the game pill: game + mod state and the last reload
+    void GamePopup();                     // what the status strip used to show: game, mod, save, skeleton, folders, messages
+    void MoreMenuItems();                 // the ⋯ menu
+    void Toast();                         // the last message, briefly, at the bottom-right of the stage (or window)
+    int ws_ = 1;                          // workspace: 0 Browse, 1 Animate (saved "ui.workspace")
+    bool drawer_ = false;                 // Animate: the Library drawer is open (B)
+    void SetWorkspace(int w);
+    struct Msg { std::string clock, text; };
+    std::vector<Msg> msgs_;               // the last messages (game pill), newest last
     void PollGame(float dt);              // game process, mod files, log (install state, reload of the last save)
     void OpenInExplorer(const std::wstring& dir);
     // ---------------------------------------------------------------- UI Phase 2 (2026-11-25): Library

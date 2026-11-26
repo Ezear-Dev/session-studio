@@ -1,4 +1,4 @@
-// Session Studio -- workspace shell: layout, splitters, header, welcome window, game polling, status strip.
+// Session Studio -- workspace shell: layout, splitters, top bar, game pill, welcome window, game polling, messages.
 #include "app_internal.h"
 
 using namespace app_detail;
@@ -9,19 +9,30 @@ App::Layout App::Lay() const {
     const float fs = ImGui::GetFontSize();
     Layout L{};
     L.w = d.x; L.h = d.y;
-    L.top = fs * 2.6f;
-    L.status = ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.f;
+    L.top = std::round(fs * 2.75f);
     L.gap = std::max(4.f, std::round(fs * 0.35f));
-    // sides: at least a usable width each, and the Stage keeps at least 20 font sizes
-    L.left = std::clamp(leftU_ * fs, fs * 12.f, std::max(fs * 12.f, L.w * 0.35f));
-    L.right = std::clamp(rightU_ * fs, fs * 14.f, std::max(fs * 14.f, L.w * 0.40f));
-    const float stageMin = fs * 20.f;
-    const float over = L.left + L.right + 2.f * L.gap + stageMin - L.w;
-    if (over > 0.f) { const float k = std::max(0.f, (L.left + L.right - over) / (L.left + L.right)); L.left *= k; L.right *= k; }
-    // timeline: at least 7 font sizes, and the middle row keeps at least 12
-    const float maxB = std::max(fs * 7.f, L.h - L.top - L.status - L.gap - fs * 12.f);
-    const float wantB = bottomDefault_ ? std::min(bottomU_ * fs, L.h * 0.30f) : bottomU_ * fs;
+    // the content area: an outer margin of one gap around the panels (the window background shows between them)
+    const float x0 = L.gap, x1 = std::max(x0 + 1.f, L.w - L.gap), y0 = L.top, y1 = std::max(y0 + 1.f, L.h - L.gap);
+    const float cw = x1 - x0, ch = y1 - y0;
+    if (ws_ == 0) {   // Browse: the Library on the whole content area
+        L.lib = {x0, y0, cw, ch};
+        L.left = L.right = L.bottom = 0.f;
+        return L;
+    }
+    // Animate. Timeline: 38 % of the height until the user drags its edge; at least 7 font sizes, the stage keeps 12
+    const float maxB = std::max(fs * 7.f, ch - L.gap - fs * 12.f);
+    const float wantB = bottomDefault_ ? ch * 0.38f : bottomU_ * fs;
     L.bottom = std::clamp(wantB, fs * 7.f, maxB);
+    const float midH = std::max(1.f, ch - L.bottom - L.gap);
+    // Inspector on the right; the stage keeps at least 24 font sizes
+    L.right = std::clamp(rightU_ * fs, fs * 14.f, std::max(fs * 14.f, cw * 0.32f));
+    if (cw - L.right - L.gap < fs * 24.f) L.right = std::max(fs * 10.f, cw - L.gap - fs * 24.f);
+    L.stage = {x0, y0, std::max(1.f, cw - L.right - L.gap), midH};
+    L.insp = {x1 - L.right, y0, L.right, midH};
+    L.time = {x0, y1 - L.bottom, cw, L.bottom};
+    // the Library drawer, over the left part of the stage
+    L.left = std::clamp(leftU_ * fs, fs * 14.f, std::max(fs * 14.f, L.stage.w * 0.6f));
+    L.lib = {x0, y0, std::min(L.left, L.stage.w), midH};
     return L;
 }
 
@@ -30,19 +41,21 @@ void App::SaveLayout() {
     LoadSettings(settings_, st);
     st.SetFloat("layout.left", leftU_);
     st.SetFloat("layout.right", rightU_);
-    st.SetFloat("layout.bottom", bottomU_);
+    if (bottomDefault_) st.Set("layout.bottom", "");   // the default: 38 % of the height, whatever the window size
+    else st.SetFloat("layout.bottom", bottomU_);
     SaveSettings(settings_, st);
 }
 
 void App::Splitters() {
+    if (ws_ != 1) return;   // Browse has no splitter
     const Layout L = Lay();
     const float fs = ImGui::GetFontSize();
-    const float midH = L.h - L.top - L.status - L.bottom - L.gap;
-    struct S { const char* id; float x, y, w, h; int kind; };   // kind 0 left, 1 right, 2 bottom
-    const S ss[3] = {{"##split_gauche", L.left, L.top, L.gap, midH, 0},
-                     {"##split_droite", L.w - L.right - L.gap, L.top, L.gap, midH, 1},
-                     {"##split_bas", 0.f, L.top + midH, L.w, L.gap, 2}};
+    struct S { const char* id; float x, y, w, h; int kind; };   // kind 0 drawer edge, 1 inspector edge, 2 timeline edge
+    const S ss[3] = {{"##split_gauche", L.lib.x + L.lib.w, L.lib.y, L.gap, L.lib.h, 0},
+                     {"##split_droite", L.insp.x - L.gap, L.insp.y, L.gap, L.insp.h, 1},
+                     {"##split_bas", L.time.x, L.time.y - L.gap, L.time.w, L.gap, 2}};
     for (const S& s : ss) {
+        if (s.kind == 0 && !drawer_) continue;
         Place(s.x, s.y, s.w, s.h);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
@@ -62,11 +75,11 @@ void App::Splitters() {
         if (ImGui::IsItemDeactivated()) {
             // store what is really shown (the clamped size), not a value beyond the limits
             const Layout N = Lay();
-            leftU_ = N.left / fs; rightU_ = N.right / fs; bottomU_ = N.bottom / fs;
+            if (s.kind == 0) leftU_ = N.left / fs; else if (s.kind == 1) rightU_ = N.right / fs; else bottomU_ = N.bottom / fs;
             SaveLayout();
         }
         if (hov && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-            if (s.kind == 0) leftU_ = kDefLeft; else if (s.kind == 1) rightU_ = kDefRight; else bottomU_ = kDefBottom;
+            if (s.kind == 0) leftU_ = kDefLeft; else if (s.kind == 1) rightU_ = kDefRight; else { bottomU_ = kDefBottom; bottomDefault_ = true; }
             SaveLayout();
         }
         const ImVec2 p = ImGui::GetItemRectMin(), q = ImGui::GetItemRectMax();
@@ -79,15 +92,23 @@ void App::Splitters() {
     }
 }
 
+// redesign step 2 (2026-11-27): one light top bar. Left: logo, workspace, Library drawer. Centre: what is edited
+// (variant, clip). Right: save state, game pill, Save, undo / redo, ⋯ menu. New / Open / Save as / Help: ⋯ menu.
+// Auto key moved to the timeline transport; the status strip became the game pill and its popup.
 void App::HeaderBar() {
     const Layout L = Lay();
     const float fs = ImGui::GetFontSize();
+    const ImGuiStyle& st = ImGui::GetStyle();
+    const float h = ImGui::GetFrameHeight();
     Place(0, 0, L.w, L.top);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.f);
     ImGui::Begin("##haut", nullptr, kPanel | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar);
-    ImGui::SetCursorPosY((L.top - ImGui::GetFrameHeight()) * 0.5f);
-    // logo mark (orange rounded square, drawn) and the name in the title font
+    ImGui::PopStyleVar();
+    const float y = std::round((L.top - h) * 0.5f);
+    ImGui::SetCursorPosY(y);
+
+    // ---- left: logo mark (orange rounded square, drawn), the name in the title font, the workspaces
     {
-        const float h = ImGui::GetFrameHeight();
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float m = std::round(h * 0.1f);
         ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -102,58 +123,136 @@ void App::HeaderBar() {
     ImGui::TextUnformatted("Session Studio");
     if (theme::Strong()) ImGui::PopFont();
     ImGui::SameLine(0, fs * 1.2f);
-    Badge(VariantTitleUi(var_).c_str(), theme::Text);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The trick (or ground state), stance and foot you are editing.\nChange them in the left column.");
-    ImGui::SameLine(0, fs * 0.8f);
+    {
+        static const char* kWs[2] = {"Browse", "Animate"};
+        int w = ws_;
+        if (ui::Segmented("##workspace", kWs, 2, &w)) SetWorkspace(w);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Browse: find and pick what to animate (the Library on the whole window).\nAnimate: the 3D view and the timeline.\nTab switches between them.");
+    }
+    if (ws_ == 1) {
+        ImGui::SameLine(0, st.ItemSpacing.x);
+        if (ui::Toggle("Library##drawer", drawer_)) drawer_ = !drawer_;
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip(drawer_ ? "Close the Library (B)" : "Open the Library over the 3D view (B):\ntricks, stances and feet, your clips, captures.");
+    }
+    const float leftEnd = ImGui::GetItemRectMax().x - ImGui::GetWindowPos().x;
+
+    // ---- right group, laid out from the right edge: widths first
+    std::string saveTxt;
+    ImVec4 saveCol;
+    if (doc_.HasPending() && !autoKey_) { saveTxt = "Change without key"; saveCol = theme::Warn; }
+    else if (fileName_.empty()) { saveTxt = Dirty() ? "Never saved · changed" : "Never saved"; saveCol = Dirty() ? theme::Warn : theme::Text2; }
+    else if (Dirty()) { saveTxt = "Not saved"; saveCol = theme::Warn; }
+    else { saveTxt = "Saved"; saveCol = theme::Good; }
+    std::string gameTxt;
+    ImVec4 gameCol;
+    GameStatus(gameTxt, gameCol);
+    const bool icons = theme::HasIcons();
+    auto IconW = [&](const char* fallback) { return icons ? h : ImGui::CalcTextSize(fallback).x + st.FramePadding.x * 2.f; };
+    const float dotW = fs * 0.44f + fs * 0.33f;
+    const float wSave = dotW + ImGui::CalcTextSize(saveTxt.c_str()).x;
+    const float wPill = ImGui::CalcTextSize(gameTxt.c_str()).x + fs * 1.2f + fs * 0.9f;
+    const float wBtn = ImGui::CalcTextSize("Save").x + st.FramePadding.x * 2.f;
+    const float gapS = st.ItemSpacing.x, gapL = fs * 1.1f;
+    const float right = wSave + gapL + wPill + gapL + wBtn + gapS + IconW("Undo") + gapS * 0.5f + IconW("Redo") + gapS + IconW("...");
+    const float rx = ImGui::GetWindowContentRegionMax().x - right;
+
+    // ---- centre: the variant (click: the Library) and the clip
+    {
+        const std::string var = VariantTitleUi(var_) + (icons ? "  " + theme::Glyph(theme::Icon::Down) : std::string("  v"));
+        const std::string clip = fileName_.empty() ? std::string("new clip") : fileName_;
+        const float wv = ImGui::CalcTextSize(var.c_str()).x + st.FramePadding.x * 2.f, wc = ImGui::CalcTextSize(clip.c_str()).x;
+        const float total = wv + gapS + wc;
+        float cx = (L.w - total) * 0.5f;                       // centred in the window when it fits
+        cx = std::clamp(cx, leftEnd + gapL, std::max(leftEnd + gapL, rx - gapL - total));
+        ImGui::SameLine(cx);
+        if (ui::Button((var + "##breadcrumb").c_str(), ui::Kind::Ghost)) {
+            if (ws_ == 1) drawer_ = !drawer_;
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip(ws_ == 1 ? "The trick (or ground state), stance and foot you are editing.\nClick: open the Library to change them."
+                                                               : "The trick (or ground state), stance and foot you are editing.");
+        ImGui::SameLine(0, gapS * 0.5f);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextColored(theme::Text2, "%s", clip.c_str());
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", fileName_.empty() ? "This clip is not a file yet: Save (Ctrl+S) gives it an automatic name." : "The clip file open, in the game's clips folder.");
+    }
+
+    // ---- right
+    ImGui::SameLine(std::max(rx, ImGui::GetCursorPosX() + gapL));
+    ImGui::SetCursorPosY(y);
+    ui::StatusDot(saveCol);
     ImGui::AlignTextToFramePadding();
-    ImGui::Text("Clip: %s", fileName_.empty() ? "new clip" : fileName_.c_str());
-    ImGui::SameLine(0, fs * 0.6f);
-    // save state
-    if (doc_.HasPending() && !autoKey_) Badge("Change without key", kAlert);
-    else if (fileName_.empty()) Badge(Dirty() ? "Never saved · changed" : "Never saved", Dirty() ? kAlert : kMuted);
-    else if (Dirty()) Badge("Not saved", kAlert);
-    else Badge("Saved", kGood);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", fileName_.empty()
-        ? "This clip is not on disk yet. Save (Ctrl+S) creates it in the game's clips folder."
+    ImGui::TextColored(saveCol, "%s", saveTxt.c_str());
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", doc_.HasPending() && !autoKey_ ? "A bone was changed without setting a key: K sets it at the time shown."
+        : fileName_.empty() ? "This clip is not on disk yet. Save (Ctrl+S) creates it in the game's clips folder."
         : Dirty() ? "Some changes are not in the file yet. Save (Ctrl+S) to keep them."
                   : "The file on disk holds everything you see.");
-
-    // file actions
-    ImGui::SameLine(0, fs * 1.5f);
-    if (ui::Button("New")) Request(Ask::New);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("New clip for the variant shown.");
-    ImGui::SameLine();
-    if (ui::Button("Open...")) openDialog_ = true;
-    ImGui::SameLine();
+    ImGui::SameLine(0, gapL);
+    {   // the game pill: click for the details (what the status strip used to show)
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        ImGui::InvisibleButton("##gamepill", ImVec2(wPill, h));
+        const bool hov = ImGui::IsItemHovered();
+        if (ImGui::IsItemClicked()) ImGui::OpenPopup("##game");
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(p, ImVec2(p.x + wPill, p.y + h), theme::U32(gameCol, hov ? 0.22f : 0.13f), h * 0.5f);
+        dl->AddRect(p, ImVec2(p.x + wPill, p.y + h), theme::U32(gameCol, 0.45f), h * 0.5f);
+        dl->AddCircleFilled(ImVec2(p.x + fs * 0.7f, p.y + h * 0.5f), fs * 0.2f, theme::U32(gameCol));
+        dl->AddText(ImVec2(p.x + fs * 1.2f, p.y + (h - fs) * 0.5f), theme::U32(gameCol), gameTxt.c_str());
+        if (hov) ImGui::SetTooltip("The game and the mod, and what the game did with your last save.\nClick for the details, the folders and the last messages.");
+        ImGui::SetNextWindowSizeConstraints(ImVec2(fs * 22.f, 0.f), ImVec2(fs * 34.f, L.h * 0.8f));
+        if (ImGui::BeginPopup("##game")) { GamePopup(); ImGui::EndPopup(); }
+    }
+    ImGui::SameLine(0, gapL);
     if (ui::Button("Save", ui::Kind::Primary)) Request(Ask::Save);   // the only orange filled button
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Save (Ctrl+S)\nWrites the clip to the game's clips folder (automatic name for a new clip).\nThe previous version is copied to the backups first.\nThe bottom bar tells you whether the game reloaded it.");
-    ImGui::SameLine();
-    if (ui::Button("Save as...")) Request(Ask::SaveAs);
-
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Save (Ctrl+S)\nWrites the clip to the game's clips folder (automatic name for a new clip).\nThe previous version is copied to the backups first.\nThe game pill (left of this button) tells you whether the game reloaded it.");
     // undo / redo (never called "Annuler": that word is the Cancel of every dialog)
-    ImGui::SameLine(0, fs * 1.5f);
+    ImGui::SameLine(0, gapS);
     if (!doc_.CanUndo()) ImGui::BeginDisabled();
-    if (ui::IconButton("undo", theme::Icon::Undo, "Undo")) { if (doc_.Undo()) AfterUndoRedo(); }
+    if (ui::IconButton("undo", theme::Icon::Undo, "Undo", false, ui::Kind::Ghost)) { if (doc_.Undo()) AfterUndoRedo(); }
     if (!doc_.CanUndo()) ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
         ImGui::SetTooltip(doc_.CanUndo() ? "Undo: %s (Ctrl+Z)" : "Nothing to undo (Ctrl+Z)", doc_.UndoLabel());
-    ImGui::SameLine(0, ImGui::GetStyle().ItemSpacing.x * 0.5f);
+    ImGui::SameLine(0, gapS * 0.5f);
     if (!doc_.CanRedo()) ImGui::BeginDisabled();
-    if (ui::IconButton("redo", theme::Icon::Redo, "Redo")) { if (doc_.Redo()) AfterUndoRedo(); }
+    if (ui::IconButton("redo", theme::Icon::Redo, "Redo", false, ui::Kind::Ghost)) { if (doc_.Redo()) AfterUndoRedo(); }
     if (!doc_.CanRedo()) ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
         ImGui::SetTooltip(doc_.CanRedo() ? "Redo: %s (Ctrl+Y)" : "Nothing to redo (Ctrl+Y)", doc_.RedoLabel());
-
-    // auto key: always visible, it changes what every gesture does (record style: red dot when on)
-    ImGui::SameLine(0, fs * 1.5f);
-    if (ui::RecordToggle("Auto key", autoKey_)) autoKey_ = !autoKey_;
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip(autoKey_ ? "Auto key is ON: every gesture sets a key at the time shown.\nClick to turn it off (then you set keys yourself with K)."
-                                                           : "Auto key is OFF: you set the key yourself with K (or the \"+ key\" button).\nClick to turn it on.");
-    // UI Phase 5: the welcome window (setup check, the 5 steps, the guide) can come back at any time
-    ImGui::SameLine(0, fs * 1.5f);
-    if (ui::IconButton("help", theme::Icon::Help, "Help")) showWelcome_ = true;
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Help: checks the installation, recalls the steps and opens the guide.");
+    ImGui::SameLine(0, gapS);
+    if (ui::IconButton("more", theme::Icon::More, "...", false, ui::Kind::Ghost)) ImGui::OpenPopup("##more");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("New, open, save as, Studio mode, help, folders");
+    if (ImGui::BeginPopup("##more")) { MoreMenuItems(); ImGui::EndPopup(); }
     ImGui::End();
+}
+
+void App::SetWorkspace(int w) {
+    if (w == ws_) return;
+    ws_ = w;
+    if (ws_ == 0) playing_ = false;   // nothing plays behind the Library
+    SaveSetting(settings_, "ui.workspace", ws_ == 0 ? "browse" : "animate");
+}
+
+void App::MoreMenuItems() {
+    if (ImGui::MenuItem("New clip", "Ctrl+N")) Request(Ask::New);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("A new clip for the variant shown.");
+    if (ImGui::MenuItem("Open...", "Ctrl+O")) openDialog_ = true;
+    if (ImGui::MenuItem("Save as...")) Request(Ask::SaveAs);
+    ImGui::Separator();
+    bool st = studio_;
+    if (ImGui::MenuItem("Studio mode", nullptr, &st)) { studio_ = st; SaveSetting(settings_, "ui.studio", studio_ ? "1" : "0"); }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Studio: precise values, track weights, bone list, Advanced tab.\nOff (Creator): the essentials. The clip does not change.");
+    ImGui::Separator();
+    if (ImGui::MenuItem("Welcome and setup check")) showWelcome_ = true;
+    if (ImGui::MenuItem("Open the guide")) OpenGuide();
+    ImGui::Separator();
+    if (ImGui::MenuItem("Open the clips folder")) OpenInExplorer(clipsDir_);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Opens in Explorer:\n%s", clipsDir_.empty() ? "(not chosen yet)" : Narrow(clipsDir_).c_str());
+    if (ImGui::MenuItem("Open the backups")) {
+        const std::string stem = fileName_.size() > 6 ? fileName_.substr(0, fileName_.size() - 6) : std::string();
+        const std::wstring d = backupRoot_ + (stem.empty() ? L"" : L"\\" + Widen(stem));
+        OpenInExplorer(DirExists(d) ? d : backupRoot_);
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Previous versions of your clips (the last 20 per clip),\ncopied before every save, outside the game folder:\n%s", Narrow(backupRoot_).c_str());
+    if (ImGui::MenuItem("Change the clips folder...")) dirDialog_ = true;
 }
 
 // ------------------------------------------------------------------ UI Phase 5 (2026-11-25): onboarding
@@ -209,7 +308,7 @@ void App::WelcomeWindow() {
         "1. Do the move once in game: its original movement is recorded by itself (it turns green in the Library).",
         "2. In the Library, pick the move, the stance and the foot.",
         "3. Pick a body part (buttons above the view, keys 1 to 7) and pull or rotate it: a key is set by itself.",
-        "4. Save (Ctrl+S): the clip is written into the game, which reloads it within a second. The bottom bar confirms it.",
+        "4. Save (Ctrl+S): the clip is written into the game, which reloads it within a second. The game pill at the top confirms it.",
         "5. Do the move again in game to see the result. Only your skater changes, on your screen.",
     };
     for (const char* st : steps) ImGui::TextWrapped("%s", st);
@@ -221,7 +320,7 @@ void App::WelcomeWindow() {
     ImGui::SameLine();
     if (ImGui::Button("Open the guide")) OpenGuide();
     ImGui::SameLine();
-    ImGui::TextDisabled("%s", "(\"Help\" button at the top to come back here)");
+    ImGui::TextDisabled("%s", "(the ... menu at the top right, \"Welcome and setup check\", brings it back)");
     ImGui::End();
     if (start || !open) {
         showWelcome_ = false;
@@ -267,105 +366,133 @@ void App::PollGame(float dt) {
     }
 }
 
-void App::StatusBar() {
-    const Layout L = Lay();
-    const float fs = ImGui::GetFontSize();
-    Place(0, L.h - L.status, L.w, L.status);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, theme::Bg1);
-    ImGui::Begin("##etat", nullptr, kPanel | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar);
-    ImGui::PopStyleColor();
-    const float sp = fs * 1.2f;
+// redesign step 2 (2026-11-27): the status strip became the game pill (short state) and its popup (details).
+void App::GameStatus(std::string& t, ImVec4& col) const {
+    // 1. the game and the in-game mod; sev: 0 fine, 1 warning, 2 error (the worst one gives the colour)
+    int sev = 0;
+    bool good = false;
+    if (gameBin_.empty()) { sev = 1; t = "Game folder unknown"; }
+    else if (!modNative_ || !modLua_) { sev = 2; t = "Mod not installed"; }
+    else if (!gameRunning_) t = "Game closed";
+    else if (logFound_ && logHooked_) { if (logStudioOn_ == 0) sev = 1; else good = true; t = logStudioOn_ == 0 ? "In game · mod off" : "In game · mod on"; }
+    else if (logFound_ && logRefused_) { sev = 2; t = "In game · mod refused"; }
+    else { sev = 1; t = "In game · mod not active yet"; }
+    // 2. what the game did with the last save
+    const LastSave& s = lastSave_;
+    if (s.any && !s.unchanged) {
+        if (!s.backupErr.empty()) { t += " · backup failed"; sev = 2; }
+        if (s.reload == (int)ReloadKind::Loaded) { t += " · reloaded " + s.reloadTime; good = true; }
+        else if (s.reload == (int)ReloadKind::Refused) { t += " · save REFUSED"; sev = 2; }
+        else if (s.reload == (int)ReloadKind::KeptPrevious) { t += " · previous version kept"; sev = 2; }
+        else if (s.reload == (int)ReloadKind::ReadFailed) { t += " · cannot read the file"; sev = std::max(sev, 1); }
+        else if (gameRunning_ && s.age < 10.f) t += " · waiting for the game...";
+        else if (gameRunning_) { t += " · no reload reported"; sev = std::max(sev, 1); }
+    }
+    col = sev == 2 ? theme::Bad : sev == 1 ? theme::Warn : good ? theme::Good : theme::Text2;
+}
 
-    // 1. the game and the in-game mod
+void App::GamePopup() {
+    const float fs = ImGui::GetFontSize();
+    auto Row = [&](const char* label, const std::string& value, const ImVec4& col) {
+        ImGui::TextColored(theme::Text2, "%s", label);
+        ImGui::SameLine(fs * 9.f);
+        ImGui::PushTextWrapPos(0.f);
+        ImGui::TextColored(col, "%s", value.c_str());
+        ImGui::PopTextWrapPos();
+    };
+    if (theme::Strong()) ImGui::PushFont(theme::Strong(), 0.f);
+    ImGui::TextUnformatted("Game and mod");
+    if (theme::Strong()) ImGui::PopFont();
     {
-        ImVec4 col = kMuted;
         std::string t;
-        if (gameBin_.empty()) { col = kAlert; t = "Game: folder unknown"; }
-        else if (!modNative_ || !modLua_) { col = kBad; t = "Mod not installed in the game"; }
-        else if (!gameRunning_) { col = kMuted; t = "Game: closed"; }
-        else if (logFound_ && logHooked_) { col = logStudioOn_ == 0 ? kAlert : kGood; t = logStudioOn_ == 0 ? "Game: running · mod off (Ctrl+F3)" : "Game: running · mod on"; }
-        else if (logFound_ && logRefused_) { col = kBad; t = "Game: running · mod refused"; }
-        else { col = kAlert; t = "Game: running · mod not active yet"; }
-        Dot(col);
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(col, "%s", t.c_str());
-        if (ImGui::IsItemHovered()) {
-            std::string tip = "Game folder: " + (gameBin_.empty() ? std::string("unknown (the clips folder is not ...\\Mods\\SessionAnimLoader\\clips)") : Narrow(gameBin_));
-            tip += std::string("\nNative mod (SessionAnimLoaderNative): ") + (modNative_ ? "installed" : "missing or disabled");
-            tip += std::string("\nLua mod (SessionAnimLoader): ") + (modLua_ ? "installed" : "missing or disabled");
-            tip += std::string("\nGame running: ") + (gameRunning_ ? "yes" : "no");
-            if (logFound_) {
-                tip += "\nLast game session: SessionAnimLoaderNative v0." + std::to_string(logVersion_) + (logHooked_ ? ", hooked to the animation" : ", not hooked");
-                if (!logInstall_.empty() && !logHooked_) tip += "\n  " + logInstall_;
-            } else tip += "\nGame log (SessionAnimLoader.native.log): missing";
-            tip += "\n\nThe mod hooks in about 10 s after the skater appears. Ctrl+F3 in game turns it on or off.";
-            ImGui::SetTooltip("%s", tip.c_str());
-        }
+        ImVec4 c;
+        GameStatus(t, c);
+        Row("Now", t, c);
     }
-    // 2. the last save and what the game did with it
-    ImGui::SameLine(0, sp);
-    {
-        ImVec4 col = kMuted;
+    Row("Game folder", gameBin_.empty() ? std::string("unknown (the clips folder is not ...\\Mods\\SessionAnimLoader\\clips)") : Narrow(gameBin_), gameBin_.empty() ? theme::Warn : theme::Text);
+    Row("Native mod", modNative_ ? "installed" : "missing or disabled", modNative_ ? theme::Text : theme::Bad);
+    Row("Lua mod", modLua_ ? "installed" : "missing or disabled", modLua_ ? theme::Text : theme::Bad);
+    Row("Game running", gameRunning_ ? "yes" : "no", theme::Text);
+    if (logFound_) {
+        Row("Last session", "SessionAnimLoaderNative v0." + std::to_string(logVersion_) + (logHooked_ ? ", hooked to the animation" : ", not hooked"), logHooked_ ? theme::Text : theme::Warn);
+        if (!logInstall_.empty() && !logHooked_) Row("", logInstall_, theme::Text2);
+    } else Row("Game log", "SessionAnimLoader.native.log missing", theme::Warn);
+    ImGui::TextDisabled("%s", "The mod hooks in about 10 s after the skater appears. Ctrl+F3 in game turns it on or off.");
+
+    ImGui::Spacing();
+    if (theme::Strong()) ImGui::PushFont(theme::Strong(), 0.f);
+    ImGui::TextUnformatted("Last save");
+    if (theme::Strong()) ImGui::PopFont();
+    const LastSave& s = lastSave_;
+    if (!s.any) ImGui::TextColored(theme::Text2, "%s", "Not saved since start.");
+    else {
+        ImVec4 col = theme::Text;
         std::string t;
-        const LastSave& s = lastSave_;
-        if (!s.any) t = "Not saved since start";
-        else {
-            t = "Saved " + s.clock + " · ";
-            if (!s.backupErr.empty()) { col = kBad; t += "previous version NOT backed up · "; }
-            if (s.unchanged) t += "same as the file: nothing to reload";
-            else if (s.reload == (int)ReloadKind::Loaded) { col = s.backupErr.empty() ? kGood : col; t += "reloaded by the game at " + s.reloadTime; }
-            else if (s.reload == (int)ReloadKind::Refused) { col = kBad; t += "REFUSED by the game (see details)"; }
-            else if (s.reload == (int)ReloadKind::KeptPrevious) { col = kBad; t += "error: the game keeps the previous version"; }
-            else if (s.reload == (int)ReloadKind::ReadFailed) { col = kAlert; t += "the game cannot read the file (it retries)"; }
-            else if (!gameRunning_) t += "game closed: loaded at next start";
-            else if (s.age < 10.f) { col = kAlert; t += "waiting for the game..."; }
-            else { col = kAlert; t += "the game reported no reload"; }
-        }
-        Dot(col);
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(col, "%s", t.c_str());
-        if (ImGui::IsItemHovered() && s.any) {
-            std::string tip = "File: " + Narrow(clipsDir_) + "\\" + s.file;
-            tip += "\nPrevious version: " + (!s.backupErr.empty() ? "not backed up (" + s.backupErr + ")" : s.backup.empty() ? (s.unchanged ? std::string("unchanged") : std::string("none (new file)")) : Narrow(s.backup));
-            if (!s.reloadDetail.empty()) tip += "\nThe game wrote: " + s.reloadDetail;
-            if (s.reload == 0 && !s.unchanged && gameRunning_ && s.age >= 10.f) tip += "\nIs the mod on in game? Look at the dot on the left.";
-            tip += "\n\n\"Reloaded\" means the game read the file without error.\nTo see the result, do the move in game.";
-            ImGui::SetTooltip("%s", tip.c_str());
-        }
+        if (s.unchanged) t = "same as the file: nothing to reload";
+        else if (s.reload == (int)ReloadKind::Loaded) { col = theme::Good; t = "reloaded by the game at " + s.reloadTime; }
+        else if (s.reload == (int)ReloadKind::Refused) { col = theme::Bad; t = "REFUSED by the game"; }
+        else if (s.reload == (int)ReloadKind::KeptPrevious) { col = theme::Bad; t = "error: the game keeps the previous version"; }
+        else if (s.reload == (int)ReloadKind::ReadFailed) { col = theme::Warn; t = "the game cannot read the file (it retries)"; }
+        else if (!gameRunning_) t = "game closed: loaded at next start";
+        else if (s.age < 10.f) { col = theme::Warn; t = "waiting for the game..."; }
+        else { col = theme::Warn; t = "the game reported no reload: is the mod on in game?"; }
+        Row("Saved at", s.clock, theme::Text);
+        Row("File", Narrow(clipsDir_) + "\\" + s.file, theme::Text);
+        Row("Game", t, col);
+        if (!s.reloadDetail.empty()) Row("The game wrote", s.reloadDetail, theme::Text2);
+        Row("Previous version", !s.backupErr.empty() ? "NOT backed up (" + s.backupErr + ")" : s.backup.empty() ? (s.unchanged ? std::string("unchanged") : std::string("none (new file)")) : Narrow(s.backup),
+            !s.backupErr.empty() ? theme::Bad : theme::Text2);
+        ImGui::TextDisabled("%s", "\"Reloaded\" means the game read the file without error. To see the result, do the move in game.");
     }
-    // 3. skeleton and source animation
-    ImGui::SameLine(0, sp);
-    Dot(skeletonOk_ ? kGood : kBad);
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(skeletonOk_ ? kMuted : kBad, skeletonOk_ ? "Skeleton: %d bones" : "Skeleton missing", doc_.BoneCount());
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip(skeletonOk_ ? "The skater's skeleton, written by the game (_skeleton.json)." : "Start the game once with the mod installed: it writes _skeleton.json.");
-    ImGui::SameLine(0, sp);
-    const bool ready = doc_.HasFigure();
-    Dot(ready ? kGood : kAlert);
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(ready ? kMuted : kAlert, ready ? "Game animation: ready" : "Game animation: to do in game");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip(ready ? "The game's movement for this variant is recorded: you edit on top of it."
-                                                        : "Do \"%s\" once in game: the mod records the movement by itself.", VariantTitleUi(var_).c_str());
-    // 4. folders
-    ImGui::SameLine(0, sp);
-    if (ImGui::SmallButton("Clips folder")) OpenInExplorer(clipsDir_);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Opens in Explorer:\n%s", clipsDir_.empty() ? "(not chosen yet)" : Narrow(clipsDir_).c_str());
+
+    ImGui::Spacing();
+    if (theme::Strong()) ImGui::PushFont(theme::Strong(), 0.f);
+    ImGui::TextUnformatted("Editor");
+    if (theme::Strong()) ImGui::PopFont();
+    Row("Skeleton", skeletonOk_ ? std::to_string(doc_.BoneCount()) + " bones (_skeleton.json)" : std::string("missing: start the game once with the mod"), skeletonOk_ ? theme::Text : theme::Bad);
+    Row("This variant", doc_.HasFigure() ? "game animation recorded" : "do \"" + VariantTitleUi(var_) + "\" once in game", doc_.HasFigure() ? theme::Good : theme::Warn);
+    if (ui::Button("Clips folder")) OpenInExplorer(clipsDir_);
     ImGui::SameLine();
-    if (ImGui::SmallButton("Backups")) {
+    if (ui::Button("Backups")) {
         const std::string stem = fileName_.size() > 6 ? fileName_.substr(0, fileName_.size() - 6) : std::string();
         const std::wstring d = backupRoot_ + (stem.empty() ? L"" : L"\\" + Widen(stem));
         OpenInExplorer(DirExists(d) ? d : backupRoot_);
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Previous versions of your clips (the last 20 per clip),\ncopied before every save, outside the game folder:\n%s", Narrow(backupRoot_).c_str());
     ImGui::SameLine();
-    if (ImGui::SmallButton("Change...")) dirDialog_ = true;
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Choose another game clips folder.");
-    // 5. the last message
-    if (!status_.empty()) {
-        ImGui::SameLine(0, sp);
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(statusAge_ < 12.f ? theme::Warn : kMuted, "%s", status_.c_str());
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", status_.c_str());
+    if (ui::Button("Change folder...")) { dirDialog_ = true; ImGui::CloseCurrentPopup(); }
+    ImGui::SameLine();
+    if (ui::Button("Setup check")) { showWelcome_ = true; ImGui::CloseCurrentPopup(); }
+
+    ImGui::Spacing();
+    if (theme::Strong()) ImGui::PushFont(theme::Strong(), 0.f);
+    ImGui::TextUnformatted("Last messages");
+    if (theme::Strong()) ImGui::PopFont();
+    if (msgs_.empty()) ImGui::TextColored(theme::Text2, "%s", "None yet.");
+    for (size_t i = msgs_.size(); i-- > 0;) {
+        ImGui::TextColored(theme::Text3, "%s", msgs_[i].clock.c_str());
+        ImGui::SameLine(fs * 4.5f);
+        ImGui::PushTextWrapPos(0.f);
+        ImGui::TextUnformatted(msgs_[i].text.c_str());
+        ImGui::PopTextWrapPos();
     }
-    ImGui::End();
+}
+
+// the last message for a few seconds, at the bottom-right of the stage (Animate) or of the window (Browse);
+// drawn above everything, never catches the mouse
+void App::Toast() {
+    if (status_.empty() || statusAge_ > 6.f) return;
+    const Layout L = Lay();
+    const float fs = ImGui::GetFontSize();
+    const float a = std::clamp((6.f - statusAge_) / 0.8f, 0.f, 1.f) * std::clamp(statusAge_ / 0.12f, 0.f, 1.f);   // fade in and out
+    const float maxW = fs * 26.f;
+    const ImVec2 ts = ImGui::CalcTextSize(status_.c_str(), nullptr, false, maxW);
+    const float px = fs * 0.8f, py = fs * 0.5f;
+    const float rx = ws_ == 1 ? L.stage.x + L.stage.w - fs * 0.8f : L.w - L.gap - fs * 0.8f;
+    const float by = ws_ == 1 ? L.stage.y + L.stage.h - fs * 0.8f : L.h - L.gap - fs * 0.8f;
+    const ImVec2 p0(rx - ts.x - px * 2.f - fs * 0.2f, by - ts.y - py * 2.f), p1(rx, by);
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    dl->AddRectFilled(p0, p1, theme::U32(theme::Raised, 0.97f * a), fs * 0.4f);
+    dl->AddRect(p0, p1, theme::U32(theme::Line, a), fs * 0.4f);
+    dl->AddRectFilled(p0, ImVec2(p0.x + fs * 0.2f, p1.y), theme::U32(theme::AccentHi, a), fs * 0.4f, ImDrawFlags_RoundCornersLeft);
+    dl->AddText(nullptr, 0.f, ImVec2(p0.x + fs * 0.2f + px, p0.y + py), theme::U32(theme::Text, a), status_.c_str(), nullptr, maxW);
 }

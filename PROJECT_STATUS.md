@@ -121,7 +121,8 @@ the user also asked for care on the stage mannequin (hands with fingers, feet). 
 |---|---|---|
 | 0. Split `app.cpp` into panel files, no visible change | done, GAME ✔ (editor) | build OK; `--selftest` exit 0; `test.cmd` ALL PASS (18607); user: 5 checks OK, 2026-11-26 (commit `1e96473`) |
 | 1. Theme: palette, style, fonts, icons, widgets; colours of the existing panels moved to the theme (layout unchanged) | done, GAME ✔ (editor): user 5 checks OK, 2026-11-26 | build OK; `--selftest`: "fonts: Segoe UI yes, Semibold yes, icons SegoeIcons.ttf 31/31" (glyphs exist; that they show the intended pictures is not verified); `test.cmd` ALL PASS (18607) |
-| 2-8 (shell, stage, inspector, timeline, browse, dialogs, polish) | not started | — |
+| 2. Shell: Browse / Animate workspaces, light top bar (variant, clip, save state, game pill + popup, Save, undo / redo, ... menu), no status strip, Library as Browse page or drawer (B), toasts, Auto key in the transport, shortcuts Tab / B / Ctrl+N / Ctrl+O | done, GAME ✔ (editor): user 7 checks OK, 2026-11-27 | build OK; `--selftest` exit 0; `test.cmd` ALL PASS (18607). Guides (`Getting-Started`, `Reference`) still describe the old layout: step 8 |
+| 3-8 (stage, inspector, timeline, browse, dialogs, polish) | not started | — |
 
 Sections 6.2-6.6 below are the preparation notes written before the design; where they differ from the spec, the
 spec wins (e.g. §6.6 order).

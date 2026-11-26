@@ -74,6 +74,12 @@ Important steps, technical decisions, problems and their solutions. Current stat
   toggle, chip and status dot. Fonts and icons come from `C:\Windows\Fonts` (Segoe UI, Segoe UI Semibold, Segoe Fluent
   Icons or Segoe MDL2 Assets): nothing shipped, no licence question; without the icon font, buttons show text.
   The old colour names (`kAccent`...) now point at the theme, so every panel changed colour without logic changes.
+- **Step 2: workspaces and a light top bar (11-27)**: `ws_` (Browse / Animate, saved `ui.workspace`) and `Lay()`
+  rectangles per workspace; the status strip became the game pill (short state, worst colour wins) and its popup
+  (game, mod, last save, skeleton, folders, last messages); `Status()` messages also show as a toast. New, Open,
+  Save as, Studio mode, help and folders moved to the ... menu; Auto key to the timeline transport. Tab switches the
+  workspace: the shell claims the Tab key (`SetKeyOwner`) so ImGui's keyboard navigation cannot focus a button with
+  it (Space would then press that button instead of playing). Editing keys are ignored in Browse.
 
 ## Problems met and solutions
 
