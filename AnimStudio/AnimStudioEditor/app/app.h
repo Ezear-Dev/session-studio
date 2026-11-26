@@ -201,6 +201,13 @@ private:
     void ToggleKey(const std::vector<int>& bones, float t);
     void DeleteSelectedKeys();
     void SetSelectedInterp(int interp);
+    // 2026-11-26 copy / paste inside the open clip: selected keys if any, else my pose of the selected part
+    void CopyNow();
+    void PasteNow();
+    // 2026-11-26 ends of trick and landing clips: a short yellow line per issue (click: the part and the instant);
+    // withFix: a fix button under each (Inspector)
+    bool HasLandingForAllVariants(const Clip& trick, std::string& missing) const;
+    void EndWarnings(bool withFix);
 
     Ask ask_ = Ask::None;
     float askTime_ = 0.f;

@@ -1525,11 +1525,11 @@ void App::ViewPanel() {
     // gestures (rings, IK arrows) start from the pose WITHOUT the leg weight: what they set is a key value
     std::vector<FTr> csG = cs, dcsG = dcs;
     if (doc_.IsTrickClip()) { doc_.ComponentPose(t_, csG, false, true); for (int b = 0; b < n; b++) dcsG[b] = Disp(csG[b]); }
-    std::vector<FTr> csV = cs, dcsV = dcs;   // pose shown: the chosen leg is shown as it is grabbed (no weight)
-    if (doc_.IsTrickClip() && sel_ >= 0 && sel_ < n && IsLegBone(s.names[sel_])) {
-        const bool left = s.names[sel_].find("_L_") != std::string::npos;
-        for (int b = 0; b < n; b++) if (IsLegBone(s.names[b]) && (s.names[b].find("_L_") != std::string::npos) == left) { dcsV[b] = dcsG[b]; csV[b] = csG[b]; }
-    }
+    // pose shown: the same whether a leg is selected or not, as in game. 2026-11-26 fix (user: a foot moved at 0.53 s
+    // went back when another bone was picked): the selected leg used to be drawn without the leg weight. Legs are
+    // posed only before the catch (LegFrozenAt), where both poses are the same.
+    std::vector<FTr> csV = cs, dcsV = dcs;
+    const bool legFrozen = sel_ >= 0 && sel_ < n && doc_.LegFrozenAt(sel_, t_);
 
     auto PU = [&](const float u[3], ImVec2& out) {   // UE component point -> screen
         const float p[3] = {u[0], -u[1], u[2]};
@@ -1719,8 +1719,11 @@ void App::ViewPanel() {
     // manipulator (display space; back to UE component space before computing the local rotation)
     bool usingGizmo = false;
     int ikR, ikU, ikF, ikH;
-    const IkJoint ikKind = (ikMode_ && sel_ >= 0 && sel_ < n) ? doc_.IkHandle(sel_, ikR, ikU, ikF, ikH) : IkJoint::None;
-    if (ikKind != IkJoint::None) {
+    const IkJoint ikKind = (ikMode_ && sel_ >= 0 && sel_ < n && !legFrozen) ? doc_.IkHandle(sel_, ikR, ikU, ikF, ikH) : IkJoint::None;
+    if (legFrozen) {   // no handle: the game takes the legs back from the catch
+        const char* msg = "After the catch, the game takes the legs back: pose them before the catch, or in the landing clip.";
+        dl->AddText(ImVec2(p0.x + 8, p0.y + sz.y - 2 * ImGui::GetTextLineHeightWithSpacing() - 4), IM_COL32(255, 217, 77, 255), msg);
+    } else if (ikKind != IkJoint::None) {
         const int joint = ikKind == IkJoint::Mid ? ikF : ikKind == IkJoint::Root ? ikU : ikH;
         const bool leg = IsLegBone(s.names[sel_]);
         const char* label = ikKind == IkJoint::Mid ? (leg ? "IK knee" : "IK elbow") : ikKind == IkJoint::Root ? "IK shoulder" : (leg ? "IK foot" : "IK hand");
@@ -1856,6 +1859,9 @@ void App::InspectorSelection() {
     } else if (sel_ >= 0 && sel_ < n) {
         const std::string& name = doc_.skeleton().names[sel_];
         ImGui::SeparatorText(("Bone: " + Short(name)).c_str());
+        const bool legFrozen = doc_.LegFrozenAt(sel_, t_);   // 2026-11-26: the game takes the legs back from the catch
+        if (legFrozen) ImGui::TextColored(ImVec4(1.f, 0.85f, 0.3f, 1.f), "%s", "After the catch, the game takes the legs back:\npose them before the catch, or in the landing clip.");
+        ImGui::BeginDisabled(legFrozen);
         float r[3];
         QToRotatorDeg(doc_.EditedRaw(sel_, t_), r[0], r[1], r[2]);
         if (studio_) {   // precise values (Studio); ring space and tool: Stage toolbar
@@ -1932,6 +1938,7 @@ void App::InspectorSelection() {
         }
         if (ImGui::Button("Game pose")) { doc_.Checkpoint("game pose"); doc_.SetPending(sel_, doc_.OriginForClip(sel_, t_)); }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Puts this bone back as in the game's animation, at this time.");
+        ImGui::EndDisabled();
     } else {   // nothing selected: a guide with every body part
         ImGui::TextWrapped("Pick a body part: click it in the view, or here.");
         for (int k = 0; k < kLimbs; k++) {
@@ -1950,6 +1957,27 @@ void App::InspectorSelection() {
         if (ImGui::Button("Set key (K)")) CommitKeyNow();
         ImGui::SameLine();
         if (ImGui::Button("Discard")) { doc_.Checkpoint("discard"); doc_.DiscardPending(); }
+    }
+    {   // 2026-11-26: copy / paste my pose inside this clip
+        const bool part = doc_.IsEditable(sel_) || (sel_ >= 0 && sel_ == doc_.PelvisBone());
+        ImGui::SeparatorText("Copy / paste");
+        if (ImGui::Button(part ? "Copy my pose of this part" : "Copy my pose of the whole body")) {
+            const std::vector<KeySel> keep = keySel_;   // the button copies the pose, even with keys selected
+            keySel_.clear();
+            CopyNow();
+            keySel_ = keep;
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Copies YOUR change at the playhead (%.2f s), not the game's pose%s.\nPaste it at another time of this clip (Ctrl+V).\nTo put a part back as in the game, use \"Copy the game's pose\" above the timeline.\nCtrl+C copies the selected keys instead, if any.",
+                              t_, part ? " (this part and what it carries)" : " (pelvis offset included)");
+        ImGui::SameLine();
+        if (!doc_.CanPaste()) ImGui::BeginDisabled();
+        if (ImGui::Button("Paste (Ctrl+V)##insp")) PasteNow();
+        if (!doc_.CanPaste()) ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("%s", !doc_.CanPaste() ? "Copy a pose or keys first. The clipboard empties when you open another clip."
+                                    : doc_.ClipboardHasKeys() ? "Pastes the copied keys, the first one at the playhead (same spacing and interpolation)."
+                                                              : "Keys the copied pose at the playhead. The other keys keep their pose.");
     }
 
     if (studio_ && ImGui::CollapsingHeader("Bone list")) {
@@ -2026,6 +2054,7 @@ void App::InspectorClip() {
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", "Replaces the keys: at the start, the pose at the end of the trick clip;\nat the end, the game's pose (the landing hands back to the game smoothly).");
     }
+    EndWarnings(true);   // 2026-11-26: with their fix buttons
     if (doc_.CanDismount()) {   // 2026-11-25: the dismount part inside the riding clip
         bool dis = doc_.HasDismount();
         const bool can = doc_.HasDismountFigure();
@@ -2179,6 +2208,114 @@ void App::SetSelectedInterp(int interp) {
     }
 }
 
+void App::CopyNow() {
+    if (!keySel_.empty()) {
+        std::vector<EditorDoc::KeyRef> refs;
+        for (auto& k : keySel_) refs.push_back(EditorDoc::KeyRef{k.bones, k.t});
+        const int n = doc_.CopyKeys(refs);
+        if (n) Status(std::to_string(n) + (n > 1 ? " keys copied" : " key copied") + ": Ctrl+V pastes them at the playhead");
+        else Status("nothing to copy: the selected keys hold no editable part");
+        return;
+    }
+    const bool pelSel = sel_ >= 0 && sel_ == doc_.PelvisBone();
+    const bool part = doc_.IsEditable(sel_) || pelSel;
+    const int n = doc_.CopyPose(t_, part ? sel_ : -1);
+    const std::string what = part ? (pelSel ? std::string("the pelvis") : BoneLabelUi(doc_.skeleton().names[sel_])) : std::string("the whole body");
+    if (n) Status("your pose of " + what + " copied (" + std::to_string(n) + (n > 1 ? " parts" : " part") + "): Ctrl+V pastes it at the playhead");
+    else Status("nothing to copy: " + what + " has no change at this time");
+}
+
+void App::PasteNow() {
+    if (!doc_.CanPaste()) { Status("nothing to paste: copy a pose or keys first (Ctrl+C)"); return; }
+    if (doc_.clip().mode == Mode::Additive && !doc_.HasFigure()) {
+        Status("additive needs the game animation: do \"" + VariantTitleUi(var_) + "\" once in game");
+        return;
+    }
+    if (doc_.HasPending()) {
+        if (!autoKey_) { Status("set or discard the pending change first (K)"); return; }
+        CommitKeyNow(true);   // auto key: the change of the last gesture becomes its key first
+    }
+    const bool keys = doc_.ClipboardHasKeys();
+    const EditorDoc::PasteResult r = doc_.Paste(t_);
+    std::string s;
+    if (r.pasted == 0) s = "nothing pasted";
+    else if (keys) s = std::to_string(r.pasted) + (r.pasted > 1 ? " keys pasted" : " key pasted");
+    else s = "pose pasted at frame " + std::to_string((int)std::lround(t_ / kFrame));
+    if (r.outOfClip) s += ", " + std::to_string(r.outOfClip) + " past the end of the clip skipped";
+    if (r.refused) s += ", " + std::to_string(r.refused) + " not editable in this clip";
+    Status(s);
+}
+
+bool App::HasLandingForAllVariants(const Clip& trick, std::string& missing) const {
+    std::vector<const Clip*> cs;
+    for (auto& ci : clips_) if (ci.err.empty()) cs.push_back(&ci.clip);   // enabled landing clips of that trick only (checked inside)
+    return LandingCoversAllVariants(trick, cs, missing);
+}
+
+void App::EndWarnings(bool withFix) {
+    if (!doc_.IsTrickClip() && !doc_.IsLandingClip()) return;
+    std::string missing;
+    bool all = false;
+    const Clip* lt = nullptr;
+    if (doc_.IsTrickClip()) all = HasLandingForAllVariants(doc_.clip(), missing);
+    else if (!var_.trick.empty()) lt = TrickClipFor(var_);
+    const std::vector<EditorDoc::EndIssue> issues = doc_.EndIssues(lt, all);
+    const ImVec4 yellow(1.f, 0.85f, 0.3f, 1.f);
+    int idx = 0;
+    for (const EditorDoc::EndIssue& e : issues) {
+        std::string parts;
+        int shown = 0;
+        for (int b : e.bones) {
+            if (shown == 4) { parts += " +" + std::to_string(e.bones.size() - 4) + " more"; break; }
+            parts += (shown ? ", " : "") + BoneLabelUi(doc_.skeleton().names[b]);
+            shown++;
+        }
+        if (e.pelvis) parts += parts.empty() ? "Pelvis" : ", Pelvis";
+        std::string line, tip;
+        char lim[96];
+        snprintf(lim, sizeof(lim), "(up to %.0f°%s)", e.maxDeg, e.pelvis ? (", pelvis " + std::to_string((int)std::lround(e.maxCm)) + " cm").c_str() : "");
+        switch (e.kind) {
+            case EditorDoc::EndIssue::TrickEndNoLanding:
+                line = "Not back at the end: " + parts;
+                tip = std::string("At the end of this trick clip, these parts still differ from the game's pose ") + lim + ".\n" +
+                      (missing.empty() ? std::string("This trick has no landing clip") : "No landing clip of this trick for: " + missing) +
+                      ",\nso at the ground contact the clip fades out over its blend out:\nthese parts snap back to the game's pose quickly.\n"
+                      "Fix: end them at the game's pose, or make a landing clip (\"Landing of this trick\").\nLegs are not checked: the game takes them back after the catch.";
+                break;
+            case EditorDoc::EndIssue::LandingEndNotBack:
+                line = "Not back at the end of the landing: " + parts;
+                tip = std::string("At the end of this landing clip, these parts still differ from the game's pose ") + lim +
+                      ".\nThe landing hands back to the game there: they snap back quickly.";
+                break;
+            case EditorDoc::EndIssue::LandingStartMismatch:
+                line = "Start differs from the end of the trick: " + parts;
+                tip = std::string("At the start of this landing, these parts differ from the end of the trick clip ") + lim +
+                      ".\nThe landing takes over at the ground contact: they jump there.";
+                break;
+        }
+        ImGui::PushID(1000 + idx++);
+        ImGui::PushStyleColor(ImGuiCol_Text, yellow);
+        const bool click = ImGui::Selectable(("! " + line).c_str(), false, 0, ImVec2(withFix ? 0.f : ImGui::CalcTextSize(("! " + line).c_str()).x, 0));
+        ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\n\nClick: selects the part and goes to that instant.", tip.c_str());
+        if (click) {
+            sel_ = !e.bones.empty() ? e.bones.front() : doc_.PelvisBone();
+            JumpTo(e.t);
+        }
+        if (withFix) {
+            const char* label = e.kind == EditorDoc::EndIssue::LandingStartMismatch ? "Take the end of the trick for these parts" : "Bring these parts back at the end";
+            if (ImGui::SmallButton(label)) {
+                if (doc_.HasPending()) Status("set or discard the pending change first (K)");
+                else if (doc_.FixEndIssue(e, lt)) Status(e.kind == EditorDoc::EndIssue::LandingStartMismatch ? "start of the landing = end of the trick, for these parts" : "these parts end at the game's pose (Ctrl+Z undoes it)");
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", e.kind == EditorDoc::EndIssue::LandingStartMismatch
+                ? "Sets the start of the landing to the trick's end, for the listed parts only.\nThe other keys are kept."
+                : "Adds a key at the end of the clip with the game's pose, for the listed parts only.\nThe other keys are kept.");
+        }
+        ImGui::PopID();
+    }
+}
+
 // UI Phase 4: the transport row (time, frames, keys, interpolation)
 void App::JumpTo(float t) {
     if (doc_.EffectiveDrive() == Drive::ManualRatio) return;
@@ -2259,6 +2396,12 @@ void App::TimelineTransport() {
         if (ImGui::Button("- selected keys (Del)")) DeleteSelectedKeys();
     } else if (ImGui::Button("- key")) { doc_.Checkpoint("delete key"); doc_.DeleteKeysAt(doc_.KeyTime(t_), (doc_.IsEditable(sel_) || pelSel) ? sel_ : -1); }
     ImGui::SameLine();
+    if (doc_.CanPaste()) {   // 2026-11-26 copy / paste
+        if (ImGui::Button("Paste (Ctrl+V)")) PasteNow();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", doc_.ClipboardHasKeys() ? "Pastes the copied keys, the first one at the playhead (same spacing and interpolation)."
+                                                                             : "Keys the copied pose at the playhead. The other keys keep their pose.");
+        ImGui::SameLine();
+    }
     // interpolation: of the selected keys, else of the key of the selected bone under the playhead
     {
         int cur = -1;
@@ -2357,6 +2500,7 @@ void App::TimelinePanel() {
     const float fs = ImGui::GetFontSize();
     static const char* kInterpName[3] = {"smooth", "linear", "constant"};
 
+    EndWarnings(false);   // 2026-11-26: parts not back at the end of a trick / landing clip
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Game    ");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("The game's original movement, to compare with (the blue ghost).");
@@ -2627,6 +2771,8 @@ void App::TimelinePanel() {
         ImGui::TextDisabled("%d key(s)", (int)keySel_.size());
         ImGui::Separator();
         if (ImGui::MenuItem("Delete", "Del")) DeleteSelectedKeys();
+        if (ImGui::MenuItem("Copy", "Ctrl+C")) CopyNow();
+        if (ImGui::MenuItem("Paste at the playhead", "Ctrl+V", false, doc_.CanPaste())) PasteNow();
         ImGui::Separator();
         for (int m = 0; m < 3; m++) if (ImGui::MenuItem(kInterpName[m])) SetSelectedInterp(m);
         ImGui::EndPopup();
@@ -2817,6 +2963,8 @@ void App::Shortcuts() {
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Y, false)) { if (doc_.Redo()) AfterUndoRedo(); else Status("nothing to redo"); }
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_S, false)) Request(Ask::Save);
     if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_K, false)) CommitKeyNow();
+    if (ctrl && ImGui::IsKeyPressed(ImGuiKey_C, false)) CopyNow();    // 2026-11-26: keys if selected, else my pose
+    if (ctrl && ImGui::IsKeyPressed(ImGuiKey_V, false)) PasteNow();
     if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_Delete, false) && !keySel_.empty()) DeleteSelectedKeys();   // lot 5
     if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) && !keySel_.empty()) keySel_.clear();
     for (int k = 0; k < kLimbs; k++)   // P6 lot 2: limbs

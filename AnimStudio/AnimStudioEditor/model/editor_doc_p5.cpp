@@ -256,6 +256,7 @@ void EditorDoc::DeleteKeysBones(const std::vector<int>& bones, float t) {
 
 // ------------------------------------------------------------------ P6: copy a clip to another variant
 void EditorDoc::RetargetVariant(const FigureVariant& v) {
+    ClearClipboard();   // another variant: copy / paste stays inside one clip
     Clip c = clip_;
     const bool before = AuthorMirrored(c);
     SetClipVariant(c, v);

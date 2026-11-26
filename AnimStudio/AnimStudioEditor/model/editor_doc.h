@@ -35,6 +35,9 @@ bool SplitLandingPart(const Clip& trick, Clip& air, Clip& land);
 bool ConvertForLandingSync(const Clip& in, const TrickMarkers& m, Clip& air, Clip& land, bool& hasLand);
 // lot 5: clear name of a bone for the timeline ("AMXX_L_Forearm" -> "L Forearm", "AMXX_Spine3" -> "Upper back")
 std::string BoneLabel(const std::string& name);
+// 2026-11-26: every variant (stance x feet) of a trick clip has an enabled landing clip of that trick among `clips`
+// (a generic landing clip does not count). missing: the variants without one ("switch regular, ..."), "" if none.
+bool LandingCoversAllVariants(const Clip& trick, const std::vector<const Clip*>& clips, std::string& missing);
 
 // IK handle: hand or foot, elbow or knee, shoulder
 enum class IkJoint { None, End, Mid, Root };
@@ -91,6 +94,10 @@ public:
     const std::vector<int>& Phases() const { return fig_.phases; }
     float PhaseStart(int phase) const;   // time of the 1st frame of this phase (clamped to 0..4), -1 if absent
     float LegWeightAt(float t) const;    // leg weight of a trick clip: 1 before the catch, then 0 within 0.12 s; 1 without phases
+    // 2026-11-26: a leg bone of a trick clip from the catch on: the game takes the legs back there, so it is not posed
+    bool LegFrozenAt(int bone, float t) const {
+        return IsTrickClip() && bone >= 0 && bone < (int)leg_.size() && leg_[bone] && LegWeightAt(t) < 0.999f;
+    }
     const SkeletonFile& skeleton() const { return skel_; }
     const MirrorMap& mirror() const { return map_; }
 
@@ -232,6 +239,43 @@ public:
     // The hand keeps its position and orientation. false if the arm cannot be solved (nothing changed).
     bool FixShoulder(int side, float t, bool clavicle, bool reduceTwist);
 
+    // ---------------------------------------------------------------- copy / paste (2026-11-26), inside the open clip
+    // The clipboard holds MY CHANGE (key values), not the game's pose. It is emptied when another clip or variant is
+    // opened, or when the mode changes.
+    struct KeyRef { std::vector<int> bones; float t; };   // a timeline key: bones of its row (empty = "All"), time
+    struct PasteResult { int pasted = 0, outOfClip = 0, refused = 0; };
+    // the change at t of the part root and what it carries (-1 = whole body, pelvis offset included; the pelvis bone
+    // = the pelvis offset only). Only parts with keys (or a pending change) are taken. Returns the parts copied.
+    int CopyPose(float t, int root);
+    // the keys at those rows and times (values and interpolation). Returns the keys copied.
+    int CopyKeys(const std::vector<KeyRef>& keys);
+    // a pose is keyed at t like a normal key (other keyed instants keep their pose); keys keep their spacing and
+    // interpolation, the first one at t, snapped to frames, replacing keys there; keys past the end are skipped.
+    // One undo step if something changed. Nothing is pasted while a change is pending (refused = everything).
+    PasteResult Paste(float t);
+    bool CanPaste() const { return clipKind_ != CB_None; }
+    bool ClipboardHasKeys() const { return clipKind_ == CB_Keys; }
+    void ClearClipboard() { clipKind_ = CB_None; cbPose_.clear(); cbKeys_.clear(); cbHasPel_ = false; }
+
+    // ---------------------------------------------------------------- ends of trick and landing clips (2026-11-26)
+    // Add mode trick and landing clips only (Replace, loops, held poses, dismount parts: never an issue).
+    // A part "differs from the game's pose" by more than kEndDeg degrees, the pelvis by more than kEndCm cm.
+    static constexpr float kEndDeg = 3.f, kEndCm = 1.f;
+    struct EndIssue {
+        enum Kind { TrickEndNoLanding, LandingEndNotBack, LandingStartMismatch };
+        Kind kind = TrickEndNoLanding;
+        std::vector<int> bones;   // the parts concerned (bone indices)
+        bool pelvis = false;      // the pelvis offset too
+        float maxDeg = 0.f, maxCm = 0.f;
+        float t = 0.f;            // the instant concerned (end of the clip, or 0 for the landing start)
+    };
+    // trick clip: its end, unless the trick has a landing for all its variants (legs ignored: the game takes them back
+    // 0.12 s after the catch). Landing clip: its end, and its start against linkedTrick's end (its trick clip, may be null).
+    std::vector<EndIssue> EndIssues(const Clip* linkedTrick, bool hasLandingForAllVariants) const;
+    // end issues: a game-pose key at the end for the listed parts; start mismatch: the trick's end for the listed parts.
+    // One undo step. false if nothing changed.
+    bool FixEndIssue(const EndIssue& e, const Clip* linkedTrick);
+
     // undo / redo (at most 200 steps)
     struct State { Clip clip; std::map<int, Quat> pending; bool pelPending = false; float pel[3] = {0, 0, 0}; };
     State SaveState() const { State s{clip_, pending_, pelPending_}; for (int k = 0; k < 3; k++) s.pel[k] = pel_[k]; return s; }
@@ -284,4 +328,12 @@ private:
     IkJoint ikKind_ = IkJoint::None;      // handle of the current gesture
     FTr ikBaseRoot_[2] = {};              // clavicle parent, clavicle: pose at the start of a shoulder gesture
     std::vector<Snap> undo_, redo_;
+    // clipboard (copy / paste)
+    enum ClipKind { CB_None, CB_Pose, CB_Keys };
+    ClipKind clipKind_ = CB_None;
+    std::map<int, Quat> cbPose_;          // pose: key value of each bone
+    bool cbHasPel_ = false;               // pose: pelvis offset copied
+    float cbPel_[3] = {0, 0, 0};
+    struct CbKey { float dt; std::vector<std::pair<int, Key>> bones; bool hasPel = false; PosKey pel{}; };
+    std::vector<CbKey> cbKeys_;           // keys: one entry per copied (row, time), dt from the first one
 };

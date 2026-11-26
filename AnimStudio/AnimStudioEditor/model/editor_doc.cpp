@@ -121,6 +121,7 @@ bool EditorDoc::LoadFigure(const std::string& json, const FigureVariant& v, std:
     if (HasSkeleton() && r.bones != BoneCount())
         return Fail(err, "recording made with another skeleton (" + std::to_string(r.bones) + " bones instead of " + std::to_string(BoneCount()) + "): record it again in game");
     fig_ = std::move(r);
+    if (!(variant_ == v)) ClearClipboard();   // another variant (the same one reloaded keeps the clipboard)
     variant_ = v;
     ComputeCycle();
     SetClipForFigure();
@@ -129,6 +130,7 @@ bool EditorDoc::LoadFigure(const std::string& json, const FigureVariant& v, std:
 
 void EditorDoc::ClearFigure(const FigureVariant& v) {
     fig_ = FigureRec{};
+    if (!(variant_ == v)) ClearClipboard();
     variant_ = v;
     hasCycle_ = false;
     SetClipForFigure();
@@ -156,6 +158,7 @@ void EditorDoc::NewClip(const FigureVariant& v) {
     pending_.clear();
     pelPending_ = false;
     undo_.clear(); redo_.clear();
+    ClearClipboard();
 }
 
 void EditorDoc::ApplyFigureDefaults(Clip& c, const FigureVariant& v) const {
@@ -198,6 +201,7 @@ bool EditorDoc::OpenClip(const std::string& json, const std::string& file, std::
     pending_.clear();
     pelPending_ = false;
     undo_.clear(); redo_.clear();
+    ClearClipboard();
     return true;
 }
 
@@ -563,6 +567,7 @@ void EditorDoc::MirrorCopy(int bone, float t) {
 
 void EditorDoc::SetMode(Mode m) {
     if (clip_.mode == m) return;
+    ClearClipboard();   // key values mean something else in the other mode
     for (auto& tr : clip_.tracks) {
         int b = -1;
         for (int i = 0; i < BoneCount(); i++) if (skel_.names[i] == tr.bone) { b = i; break; }
