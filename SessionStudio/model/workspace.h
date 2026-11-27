@@ -85,7 +85,11 @@ bool MoveToBackups(const std::wstring& path, const std::wstring& root, const std
 // version goes to the backups first. false with err.
 bool SetClipEnabledFile(const std::wstring& path, bool enabled, const std::wstring& backupRoot, std::string& err);
 // Copies a clip to dst under a new clip name, disabled (so it does not compete with the original in game).
-bool DuplicateClipFile(const std::wstring& src, const std::wstring& dst, std::string& err);
+// link: the copy gets this one (clip.h); turnOff false: it stays on or off as the original (a linked landing).
+bool DuplicateClipFile(const std::wstring& src, const std::wstring& dst, std::string& err, const std::string* link = nullptr,
+                       bool turnOff = true);
+// Rewrites a clip file with another "link", as SetClipEnabledFile does.
+bool SetClipLinkFile(const std::wstring& path, const std::string& link, const std::wstring& backupRoot, std::string& err);
 // Renames a clip file (refuses to replace an existing file). The clip's own "name" field is left as it is.
 bool RenameClipFile(const std::wstring& from, const std::wstring& to, std::string& err);
 // Does this clip change anything in game? Additive clips whose every key is (almost) no rotation and whose pelvis keys

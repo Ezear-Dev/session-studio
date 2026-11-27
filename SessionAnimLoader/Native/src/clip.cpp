@@ -250,8 +250,12 @@ bool ParseClip(const std::string& text, const std::string& file, Clip& out, std:
             for (auto& tr : c.tracks) if (tr.bone == kv.first) tr.weight = (float)kv.second.n;
         }
     }
+    if (const JValue* link = root.get("link")) {   // 2026-11-27 v0.29
+        if (link->t != JValue::Str) return Fail(err, "link: text expected");
+        c.link = link->s;
+    }
     // unknown root fields: kept as they are (the editor writes them back on save)
-    static const char* kKnown[] = {"format", "version", "name", "enabled", "mirrorForGoofy", "trigger", "play", "blend", "mode", "tracks", "weights", "pelvis"};
+    static const char* kKnown[] = {"format", "version", "name", "enabled", "mirrorForGoofy", "trigger", "play", "blend", "mode", "tracks", "weights", "pelvis", "link"};
     for (auto& kv : root.o) {
         bool known = false;
         for (const char* k : kKnown) if (kv.first == k) { known = true; break; }
@@ -314,6 +318,7 @@ std::string ClipToJson(const Clip& c) {
     JPut(root, "blend", std::move(blend));
     JPut(root, "mode", JStr(c.mode == Mode::Replace ? "replace" : "additive"));
     JPut(root, "mirrorForGoofy", JBool(c.mirror));
+    if (!c.link.empty()) JPut(root, "link", JStr(c.link));   // written only when there is one: older files unchanged
     JValue weights = JObj();
     for (auto& tr : c.tracks) if (tr.weight != 1.f) JPut(weights, tr.bone, JNum(tr.weight));
     if (!weights.o.empty()) JPut(root, "weights", std::move(weights));

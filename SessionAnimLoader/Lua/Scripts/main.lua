@@ -7,7 +7,7 @@
 -- Results: [SessionAnimLoader] lines in UE4SS.log + SessionAnimLoader.native.log next to the exe.
 -- Rules: everything runs in the per-frame hook (game thread), the keys only raise a flag.
 
-local VERSION = "v0.28"
+local VERSION = "v0.29"
 local TAG = "[SessionAnimLoader] "
 local HOOK_FN = "/Script/SessionGame.SkaterCharacterBase:GetSkateboardingAnimParams"
 

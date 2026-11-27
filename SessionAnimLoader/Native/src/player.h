@@ -2,6 +2,7 @@
 // Called from the FinalizeBoneTransform hook: no UObject read, no waiting.
 #pragma once
 #include <cstdint>
+#include <string>
 #include <utility>
 #include "clip.h"
 #include "board.h"
@@ -130,6 +131,7 @@ private:
         bool netHave;
         float tFixed, wFixed, legFixed;           // remote layer (ApplyRemote): fixed time / final weight / leg weight; -1 = local
     };
+    static uint64_t LinkHash(const std::string& link);
     int BlendLayers(FTr* cs, const ClipSet* set, const GameState& gs, float dt, bool newPop, bool remote);
     void Rebind(const ClipSet* set);
     int FindLiveLayer(const Clip* c, bool mirrored, bool dis = false) const;
@@ -195,4 +197,8 @@ private:
     const Clip* pend_ = nullptr;
     float pendT_ = 0.f, gapT_ = 0.f;
     bool prevKick_ = false;
+    // 2026-11-27 v0.29: link of the trick clip that played since the last pop ("": none, or an older clip): the landing
+    // of that trick is then the one with the same link
+    // Kept as a hash (0 = none): written by the pose hook, also read by the Lua side (LandingClipLength): no string there
+    volatile uint64_t trickLink_ = 0;   // like masterTarget_: one aligned word, no lock
 };

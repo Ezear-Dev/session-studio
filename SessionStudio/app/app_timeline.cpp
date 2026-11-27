@@ -81,7 +81,9 @@ bool App::HasLandingForAllVariants(const Clip& trick, std::string& missing) cons
     // place of its file: the end of a new trick can be posed before anything is saved
     const bool mine = hasComp_ && !landLocked_;
     const std::string& landFile = inLanding_ ? fileName_ : comp_.fileName;
-    for (auto& ci : clips_) if (ci.err.empty() && !(mine && !landFile.empty() && ci.file == landFile)) cs.push_back(&ci.clip);   // enabled landing clips of that trick only (checked inside)
+    // a trick clip not saved yet takes no older landing: at Save it gets a link and a landing of its own
+    const bool newTrick = trick.link.empty() && (hasComp_ && inLanding_ ? comp_.fileName : fileName_).empty();
+    for (auto& ci : clips_) if (ci.err.empty() && !(newTrick && ci.clip.trickHash) && !(mine && !landFile.empty() && ci.file == landFile)) cs.push_back(&ci.clip);   // enabled landing clips of that trick only (checked inside)
     if (mine) cs.push_back(&(inLanding_ ? doc_ : comp_.doc).clip());
     return LandingCoversAllVariants(trick, cs, missing);
 }

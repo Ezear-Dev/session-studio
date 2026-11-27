@@ -14,6 +14,16 @@ int PlayingClip(const std::vector<const Clip*>& clips, const FigureVariant& v);
 // the clip to open when the user picks v: the one that plays, else the first one made for v (even off); -1: none
 int ClipToOpen(const std::vector<const Clip*>& clips, const FigureVariant& v);
 
+// 2026-11-27: each trick clip has its own landing clip (same "link", see clip.h). Landing clips without a link (older
+// files, one for every clip of the trick) go to ONE trick clip without a link: the one that is on, else the first.
+std::string NewLinkId();   // 16 random hex characters
+// the landing clip to show with the saved trick clip clips[trick] on the landing variant lv (-1: none; trick -1: none)
+int LandingForTrick(const std::vector<const Clip*>& clips, int trick, const FigureVariant& lv);
+// the landing clips that go with clips[trick] alone (deleted, copied and renamed with it)
+std::vector<int> LandingsOfTrick(const std::vector<const Clip*>& clips, int trick);
+// the trick clip the landing clip clips[landing] goes with (-1: none)
+int TrickOfLanding(const std::vector<const Clip*>& clips, int landing);
+
 struct LibEntry {                 // what to list (the app fills it: ground states, then the trick list)
     FigureVariant base;           // stance normal, regular
     std::string title, category, note;

@@ -11,6 +11,26 @@ was checked for each); the v0.24 results below still describe what was checked i
 - **CODE** — present in the code, no user test result found in the notes.
 - **✘** — tried and did not work, or parked.
 
+## 0. Mod v0.29: one landing per trick clip (2026-11-27, after the v0.28 release)
+
+User report: deleting a clip left its landing; "3 kickflip clips = 3 landing clips". Cause: no link between the two
+files; editor and game picked the landing by trick name, so every clip of a trick shared ONE landing (and the seam
+link rewrote its start to fit whichever clip was open). User's choice: the link also holds in game. New optional clip
+field `link`. The owner states that nobody has installed the v0.28 release yet.
+
+| Item | State | Evidence |
+|---|---|---|
+| Game rule (a linked landing plays only after its trick clip; older clips as before) | OFFLINE ✔; **in game ✔** with two kickflip clips (user, 2026-11-27) | `test_landing_link.cpp`, user report |
+| Library rules (which landing goes with which trick clip, older shared landing) | OFFLINE ✔ | same file |
+| Editor: save links the pair; open / delete / duplicate / rename keep it together; Save as makes a new pair; notes in the clip lists | Save and delete **✔** (user, 2026-11-27: two kickflips with their own landing; deleting one removed its landing, and the dialog said so). Duplicate, rename, Save as, and linking an older shared landing: **not verified** | interface code, no test; `--selftest` exit 0; user report |
+| Tests and build | 2 FAIL out of 19227 (the same two board / shoe checks as in §4) | `test.cmd`, `build.cmd` |
+| Installed | **v0.29** DLL + Lua (hashes equal to `dist`), editor in `SessionStudio\dist`; rollback: `_archive\installed-before-v0.29` (mod, clips) and `_archive\dist-before-v0.29`. The 7 clips of that day load with `--check-clips` | 2026-11-27 |
+| Release | After the user's test: commit, push and package asked for. Until the `v0.29` GitHub release is published, the public release is v0.28. Multiplayer not tried on v0.29 | — |
+
+Older files: an unlinked landing goes with the unlinked trick clip that is on (else the first); Save then writes the
+link into both (backup first). The user's two KickFlip landings have no trick clip left: they stay, labelled "landing
+without a trick clip", and stop playing after a kickflip clip that has a link.
+
 ## 1. Build and test state
 
 | Item | State | Evidence |
@@ -25,7 +45,7 @@ was checked for each); the v0.24 results below still describe what was checked i
 The check count depends on the machine: tests on real game clips are skipped when the game folder is missing
 (earlier notes quote 10842 or 4924 checks for older states).
 
-## 1b. First release, v0.28 (2026-11-27: declared the official release by the owner, committed and pushed; **no GitHub release page yet**)
+## 1b. First release, v0.28 (2026-11-27: declared the official release by the owner, committed and pushed; **GitHub release `v0.28` published by the owner**)
 
 User decisions: GPL-3.0 for everything; release number = mod v0.28; a zip with `INSTALLER.cmd` that installs UE4SS only
 when it is missing; the installer asks where to put the editor; no clip and no recording shipped.
@@ -38,7 +58,7 @@ when it is missing; the installer asks where to put the editor; no clip and no r
 | Installer (`installer\`) | OFFLINE ✔ on made-up game folders, with `-Yes` | fresh install, update (clips, `_studio.json`, UE4SS settings and editor settings kept; old DLL backed up), unknown / 3.0.0 / newer-layout UE4SS and leftover `dwmapi.dll` refused, 3.0.1 other build accepted, wrong folder, unextracted zip. The Steam search function alone finds the real game folder (nothing installed). **Not tested:** the questions, the folder windows, the desktop shortcut, a double-click on a downloaded zip (Windows warnings), a PC without the VC++ runtime |
 | Editor icon and version details | in the exe | version 0.28.0.0 read from the exe; icon extracted from it at 256 / 48 / 32 / 16 px and looked at. **Title bar and taskbar icon: user check pending** |
 | Source zip | builds | DLL and editor built from the extracted zip alone (VS 2022) |
-| Docs | `README.md` rewritten, new `INSTALL.md`, `THIRD-PARTY-NOTICES.txt`; guides updated | not read by the user yet. README's "download from Releases" is true only once a release is published |
+| Docs | `README.md` rewritten, new `INSTALL.md`, `THIRD-PARTY-NOTICES.txt`; guides updated | not read by the user yet. the release README points to is published (below) |
 | Tests | **2 FAIL out of 19133** (the two board / shoe checks on local recordings, §4) | `test.cmd`, 2026-11-27 |
 | `dist\SessionStudio.exe` | the new build with the icon (same file as in the package) | replaced once the user's editor was closed; `--selftest` of a copy of that build exit 0. Previous binaries: `_archive\backups\dist_before-release-v0.28_2026-11-27` |
 
@@ -98,7 +118,11 @@ Open before publishing: a first start without the points above (another PC, down
 clip copied to another PC. Older list: the in-game test of a clean install; `--check-clips`; with / without ExpandedTricks and a clip
 copied to another PC (`notes/RELEASE-CHECKLIST.md`); goofy mirror and replay were checked on older versions only for
 parts of this; multiplayer not tested since v0.21. "Version 3 only" or "or later" is not decided (the texts say
-version 3). The repository is private: the GitHub release page and the visibility are the user's decisions.
+version 3). The lines above that speak of "before publishing" are from before the publication.
+
+**Published (11-27), checked through GitHub's public API without login:** repository public; release 0.28 (not a
+draft, not a pre-release, latest), tag on commit `c45108b`; the three files have the same size and SHA-256 as in
+`release\out`. **Not checked:** a download and installation of the published zip, on this or another PC.
 
 ## 2. Session Anim Loader (game mod)
 

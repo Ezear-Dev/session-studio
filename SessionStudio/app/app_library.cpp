@@ -231,6 +231,8 @@ void App::LibraryClips() {
         if (ImGui::BeginPopup("##menu")) { ClipMenuItems(ci.file, false); ImGui::EndPopup(); }
         // second line: what it targets, and problems
         std::string sub = clipsAll_ ? VariantTitleUi(VariantOfClip(c)) + " · " : std::string();
+        const std::string note = LandingNote(ci.file);
+        if (!note.empty()) sub += note + " · ";
         sub += c.mode == Mode::Additive ? "add" : "replace";
         char len[16];
         snprintf(len, sizeof(len), " · %.2f s", c.duration);
@@ -316,33 +318,66 @@ void App::DuplicateClip(const std::string& file) {
     const std::string stem = file.substr(0, file.size() - 6);
     const std::string dst = UniqueClipName(clipsDir_, stem, "_copie");
     std::string err;
-    if (!DuplicateClipFile(clipsDir_ + L"\\" + Widen(file), clipsDir_ + L"\\" + Widen(dst), err)) { Status("cannot copy: " + err); return; }
+    bool isTrick = false;
+    for (auto& ci : clips_) if (ci.file == file && ci.err.empty()) isTrick = (ci.clip.states & ST_Trick) && ci.clip.trickHash;
+    const std::vector<std::string> landings = LandingFilesOf(file);
+    const std::string id = isTrick ? NewLinkId() : std::string();   // the copy of a trick clip is a new trick clip
+    if (!DuplicateClipFile(clipsDir_ + L"\\" + Widen(file), clipsDir_ + L"\\" + Widen(dst), err, isTrick ? &id : nullptr)) { Status("cannot copy: " + err); return; }
+    std::string with;
+    for (const std::string& l : landings) {   // its landing is copied with it (it plays only after the copy)
+        const std::string name = LandingName(dst);
+        if (!DuplicateClipFile(clipsDir_ + L"\\" + Widen(l), clipsDir_ + L"\\" + Widen(name), err, &id, false)) { Status("copy made, but not its landing " + l + ": " + err); scanAge_ = 99.f; return; }
+        with = " with its landing";
+    }
     scanAge_ = 99.f;
-    Status("copy made: " + dst + " (off)");
+    Status("copy made: " + dst + " (off)" + with);
 }
 
 void App::RenameClip(const std::string& file, const std::string& raw) {
     std::string name = raw, err;
     if (!NormalizeClipName(name, err)) { libErr_ = err; return; }
     if (name == file) { popRenameClose_ = true; return; }
+    const std::vector<std::string> landings = LandingFilesOf(file);
     if (!RenameClipFile(clipsDir_ + L"\\" + Widen(file), clipsDir_ + L"\\" + Widen(name), err)) { libErr_ = err; return; }
-    if (file == fileName_) { fileName_ = name; doc_.clip().file = name; }
-    if (lastSave_.file == file) lastSave_.file = name;
+    auto renamed = [&](const std::string& from, const std::string& to) {
+        if (fileName_ == from) { fileName_ = to; doc_.clip().file = to; }
+        if (hasComp_ && comp_.fileName == from) { comp_.fileName = to; comp_.doc.clip().file = to; }
+        if (lastSave_.file == from) lastSave_.file = to;
+    };
+    renamed(file, name);
+    // a landing still named after the trick clip follows the new name (the link itself does not depend on names)
+    const std::string oldLanding = "Landing-" + file, newLanding = "Landing-" + name;
+    for (const std::string& l : landings)
+        if (l == oldLanding && RenameClipFile(clipsDir_ + L"\\" + Widen(l), clipsDir_ + L"\\" + Widen(newLanding), err)) renamed(l, newLanding);
     scanAge_ = 99.f;
     popRenameClose_ = true;
     Status("renamed: " + file + " -> " + name);
 }
 
 void App::DeleteClip(const std::string& file) {
-    const std::wstring path = clipsDir_ + L"\\" + Widen(file);
+    RefreshClips();
+    const std::vector<std::string> landings = LandingFilesOf(file);   // read before the trick clip is gone
     std::wstring dest;
     std::string err;
-    if (!MoveToBackups(path, backupRoot_, "supprime", BackupStamp(), &dest, err)) { Status("cannot delete: " + err); return; }
-    if (file == fileName_) {   // the document stays open, as a clip that is no longer on disk
-        fileName_.clear();
-        doc_.clip().file.clear();
-        savedText_.clear();
+    if (!MoveToBackups(clipsDir_ + L"\\" + Widen(file), backupRoot_, "supprime", BackupStamp(), &dest, err)) { Status("cannot delete: " + err); return; }
+    std::string with;
+    std::vector<std::string> gone{file};
+    for (const std::string& l : landings) {
+        if (!MoveToBackups(clipsDir_ + L"\\" + Widen(l), backupRoot_, "supprime", BackupStamp(), nullptr, err)) { with += " -- WARNING, its landing " + l + " is still there: " + err; continue; }
+        gone.push_back(l);
+        with += " (and its landing " + l + ")";
     }
+    bool openTrickGone = false, openLandingGone = false;
+    const std::string trickSlot = hasComp_ && inLanding_ ? comp_.fileName : fileName_;
+    const std::string landSlot = !hasComp_ ? std::string() : inLanding_ ? fileName_ : comp_.fileName;
+    for (const std::string& g : gone) {
+        if (g == trickSlot) openTrickGone = true;
+        if (g == landSlot) openLandingGone = true;
+        if (g == fileName_) { fileName_.clear(); doc_.clip().file.clear(); savedText_.clear(); }   // the document stays open, as a clip no longer on disk
+        if (hasComp_ && g == comp_.fileName) { comp_.fileName.clear(); comp_.doc.clip().file.clear(); comp_.savedText.clear(); }
+    }
+    RefreshClips();
+    if (openLandingGone && !openTrickGone) BuildLandingPart();   // its landing alone was deleted: back to the game's
     scanAge_ = 99.f;
-    Status("« " + file + "\" removed from the game, moved to the backups: " + Narrow(dest));
+    Status("« " + file + "\" removed from the game, moved to the backups: " + Narrow(dest) + with);
 }

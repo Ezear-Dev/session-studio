@@ -7,7 +7,7 @@ rollback paths. If documents and code disagree, **trust the code and tell the us
 ## 1. What the project is
 
 Animation tools for the game **Session: Skate Sim** (Unreal Engine 4.27, Windows, Steam). Unofficial fan project,
-private GitHub repository, to be released open source later. Never change the repository's visibility unasked.
+public GitHub repository, GPL-3.0, first release `v0.28` published 2026-11-27. Never change the repository's visibility unasked.
 
 | Part | Folder | In the game's `Win64\Mods` | Role |
 |---|---|---|---|
@@ -126,7 +126,7 @@ creator gains.
 - Skate Style and other closed tools: ideas only, no code, no assets. ReSkate Animator Studio is GPL-3.0 (per our
   study): ask before reusing any of its code. No game asset in the repository.
 - **Licence: GPL-3.0 for the whole project** (owner's choice, 2026-11-27; copyright "Ezear-Dev"). A distributed binary
-  needs its source beside it (the source zip, as long as the repository is private). Third-party notices:
+  needs its source beside it (the source zip, attached to the same release). Third-party notices:
   `THIRD-PARTY-NOTICES.txt` (update it when a dependency changes).
 
 ## 5. Technical facts you must not rediscover
@@ -157,6 +157,8 @@ creator gains.
   `play.legsAfterCatch` (v0.28).
 - The 3D mannequin's shoe soles come from the skeleton's reference toe offset (sole up = foot bone X), never from a
   recorded pose.
+- A trick clip and **its own** landing clip share the field `link` (v0.29): in game a linked landing plays only after
+  that trick clip. Never pick a landing by trick name alone (`model/library.h`: `LandingForTrick`, `LandingsOfTrick`).
 - Replay = `CustomMovementMode == 6`: the mod stands by (the replay already records our layer).
 - Mirroring is per bone; the right hand's local frame is turned 180° from the left. The editor mirrors its 3D view on
   Y (Unreal is left-handed). The game mesh has no twist bones (raised arm without clavicle crushes the shoulder).

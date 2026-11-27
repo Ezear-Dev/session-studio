@@ -601,7 +601,9 @@ EditorDoc::Snap EditorDoc::MakeSnap(const char* label) const {
 }
 
 void EditorDoc::Restore(Snap& s) {
+    const std::string link = clip_.link;   // says which files go together (set by Save), not an edit: undo leaves it
     clip_ = std::move(s.clip);
+    clip_.link = link;
     pending_ = std::move(s.pending);
     pelPending_ = s.pelPending;
     for (int k = 0; k < 3; k++) pel_[k] = s.pel[k];

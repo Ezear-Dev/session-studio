@@ -22,6 +22,9 @@ struct Track { std::string bone; int index = -1; float weight = 1.f; std::vector
 struct PosKey { float t; float v[3]; bool smooth; bool step = false; };
 struct Clip {
     std::string file, name;
+    // 2026-11-27 v0.29 (optional root field "link"): a trick clip and its landing clip carry the same id. In game a
+    // landing with a link plays only after the trick clip with that link; "" = an older clip (matched by trick name)
+    std::string link;
     bool enabled = true;
     uint32_t states = 0;
     // P6 (ST_Trick): targeted trick by its base name ("" = every flip trick); trickHash = TrickHash(trick)

@@ -364,11 +364,23 @@ bool SetClipEnabledFile(const std::wstring& path, bool enabled, const std::wstri
     return true;
 }
 
-bool DuplicateClipFile(const std::wstring& src, const std::wstring& dst, std::string& err) {
+bool SetClipLinkFile(const std::wstring& path, const std::string& link, const std::wstring& backupRoot, std::string& err) {
+    Clip c;
+    if (!LoadClipFile(path, c, err)) return false;
+    if (c.link == link) return true;
+    if (!BackupClip(path, backupRoot, BackupStamp(), 20, nullptr, err)) return false;
+    c.link = link;
+    if (!WriteAll(path, ClipToJson(c))) { err = "cannot write (file open elsewhere?)"; return false; }
+    return true;
+}
+
+bool DuplicateClipFile(const std::wstring& src, const std::wstring& dst, std::string& err, const std::string* link,
+                       bool turnOff) {
     if (Exists(dst)) { err = "a file already has this name"; return false; }
     Clip c;
     if (!LoadClipFile(src, c, err)) return false;
-    c.enabled = false;
+    if (turnOff) c.enabled = false;
+    if (link) c.link = *link;
     c.name = StemUtf8(dst);
     if (!WriteAll(dst, ClipToJson(c))) { err = "cannot write"; return false; }
     return true;

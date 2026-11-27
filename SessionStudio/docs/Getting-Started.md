@@ -101,7 +101,9 @@ by itself, the trick and its landing together. Your clips are not changed.
   pose, so the clip joins the game without a jump. A trick's end is free when the trick has a landing clip (the
   landing takes over); a landing opened on its own has a free start. Padlocks on the timeline show the
   locked instants: pose between them. Untick it to pose them yourself.
-- **Landing of this trick** (Clip settings): the landing after a trick, shown on the same timeline. With your own
+- **The landing after a trick** is shown on the same timeline, after the violet line. Each trick clip has its own
+  landing clip: three kickflip clips can have three different landings, and the game plays the landing of the kickflip
+  that was just played (mod v0.29). Deleting, duplicating or renaming a trick clip takes its landing with it. With your own
   landing (unlocked), its start **follows the end of the trick**: pose the end of the trick and the landing starts from
   that exact pose. The padlock at the start of the landing shows it.
 - **Copy / paste** (Ctrl+C / Ctrl+V): copies the selected keys, or your pose of the selected part, and pastes it at

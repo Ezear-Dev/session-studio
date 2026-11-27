@@ -83,6 +83,12 @@ private:
     void DuplicateClip(const std::string& file);
     void RenameClip(const std::string& file, const std::string& newName);
     void DeleteClip(const std::string& file);
+    // 2026-11-27: each trick clip has its own landing clip (model/library.h)
+    std::vector<const Clip*> ClipPtrs() const;                       // clips_ as the model reads it (nullptr: unreadable)
+    std::vector<std::string> LandingFilesOf(const std::string& trickFile) const;   // those that go with this trick clip only
+    std::string LandingNote(const std::string& file) const;          // "landing of ..." for a landing clip, else ""
+    std::string LandingName(const std::string& trickFile) const;     // free file name for the new landing of a trick clip
+    void LinkLandingFiles();                                         // Save: the trick and its landing get the same link
     std::vector<std::string> captures_;   // "captures\x.sanim", refreshed with the clips
     bool clipsAll_ = false;               // Clips tab: every clip, not only the variant's (saved)
     int libTab_ = 0;                      // 0 Tricks, 1 Clips, 2 Captures (saved)
@@ -166,8 +172,7 @@ private:
     void LinkLandingSeam();                                // your landing starts where the trick ends (every frame)
     // 2026-11-25 landing sync: the landing of one trick is edited over that trick's recording (its ground tail)
     static FigureVariant FigureSource(const FigureVariant& v);   // Landing + trick -> the trick; else v
-    const Clip* TrickClipFor(const FigureVariant& landing) const; // first enabled saved clip of the trick of that landing
-    void GoToLanding();                                           // from a trick clip: its landing clip (opened or new)
+    const Clip* TrickClipFor(const FigureVariant& landing) const; // the saved trick clip of the open landing, else one that is on
     void OpenFile(const std::string& name);
     bool SaveAs(const std::string& name, bool overwriteOk);
     void SaveCurrent();                   // Save: under its name, or under an automatic name for a new clip

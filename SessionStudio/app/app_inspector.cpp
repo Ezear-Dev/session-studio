@@ -260,17 +260,11 @@ void App::InspectorClip() {
     }
     if (doc_.IsTrickClip()) {   // 2026-11-25 landing sync: the trick clip follows the jump, the landing is its own clip
         ImGui::TextWrapped("%s", "Synced to the jump: in game, the hang time (yellow area) stretches with the jump height, and the end of the clip falls on the ground contact.");
-        if (doc_.HasOldLandingPart()) ImGui::TextColored(kWarn, "%s", "This clip holds an old built-in landing: it no longer follows the ground. Redo it in “Landing of this trick”.");
+        if (doc_.HasOldLandingPart()) ImGui::TextColored(kWarn, "%s", "This clip holds an old built-in landing: it no longer follows the ground. Pose the landing after the violet line instead.");
         bool legs = doc_.clip().legsAfterCatch;   // v0.28
         if (ui::Switch("##legscatch", &legs, "Move the legs after the catch")) doc_.SetLegsAfterCatch(legs);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", "Off: from the catch on (the landing part of the ribbon), the game takes the legs back.\nOn: your keys keep moving the legs until the end of the trick. In game the feet may then\nleave the board: check it there. On by default for new late flip clips. Needs the mod v0.28.");
         const bool can = doc_.GroundAt() > 0.f;
-        if (!hasComp_) {   // 2026-11-27: on one timeline the landing is already there
-            if (!can) ImGui::BeginDisabled();
-            if (ImGui::Button("Landing of this trick")) GoToLanding();
-            if (!can) ImGui::EndDisabled();
-            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", "Opens the landing clip of this trick (or makes one): it starts at the real\nground contact and takes over the pose of the end of the trick.");
-        }
         if (!can) {   // on its own line: it was cut at the panel edge
             ImGui::TextDisabled("%s", "(landing not recorded)");
             ImGui::SameLine();

@@ -3,11 +3,11 @@
 Animation tools for **Session: Skate Sim**. Adjust your skater's pose in an editor, save, and the game plays it right
 away, without restarting. The game's files are not changed.
 
-This is an unofficial fan project, work in progress (version **v0.28**).
+This is an unofficial fan project, work in progress (version **v0.29**).
 
 ## How to install
 
-1. Download `SessionStudio-v0.28.zip` from this repository's **Releases** page.
+1. Download `SessionStudio-v0.29.zip` from this repository's **Releases** page.
 2. Extract the whole zip, close the game, and double-click **INSTALLER.cmd**.
 3. Start the game, then open Session Studio.
 

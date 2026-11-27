@@ -264,6 +264,7 @@ void EditorDoc::RetargetVariant(const FigureVariant& v) {
     Clip c = clip_;
     const bool before = AuthorMirrored(c);
     SetClipVariant(c, v);
+    c.link.clear();   // a new clip: its landing is its own
     const bool after = AuthorMirrored(c);
     if (before != after && HasSkeleton()) {
         std::vector<Track> out;

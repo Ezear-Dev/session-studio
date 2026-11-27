@@ -37,6 +37,7 @@ Important steps, technical decisions, problems and their solutions. Current stat
 | 11-26 | editor | **UX/UI redesign started** on branch `redesign-ui`: design v1 (restyle of the 4-panel layout) rejected, v2 approved (Browse / Animate workspaces); step 0 splits `app.cpp` into panel files without behaviour change |
 | 11-27 | editor | `redesign-ui` (steps 0-8c) merged into `main` by fast-forward and pushed to GitHub at the owner's request; `test.cmd` ALL PASS (18667) just before. Steps 7-8c were still "user check pending" |
 - **2026-11-27, official first release (v0.28):** the owner declared the prepared package the official release and asked for commit and push. Before the commit: no personal data found by pattern scan in the changes, and the source zip identical to the working tree for every file it ships. The GitHub release page, the tag and the repository visibility were not touched.
+- **2026-11-27, v0.28 published:** the owner created the GitHub release on the public repository (tag `v0.28` on `c45108b`, which adds a README heading change made after the source zip was built). Public API check: the three attached files match `release\out` by size and SHA-256.
 
 ## Key technical decisions
 
@@ -245,6 +246,21 @@ Important steps, technical decisions, problems and their solutions. Current stat
 | Live preview in game (probe C0) | camera locked on the board, game pauses without focus, board did not move | abandoned; mannequin drawn by the editor instead |
 | Editor board did not flip | skeleton board bones ≠ visible physics board | approximate board kept as an option, off by default |
 | Agent's screenshot sent a key to the user's window | automation while the user used the PC | rule: no keystrokes or captures while the user may be at the PC |
+
+## 2026-11-27 — one landing per trick clip (mod v0.29)
+
+- User: a deleted clip left its landing behind; each trick clip must have its own landing. Cause: files matched by trick
+  name only (editor and player). Chosen by the user over an editor-only change: the link also holds in game.
+- Optional root field `link` (same random id in both files), rather than a file naming rule: it survives renames, and
+  older versions keep unknown fields. Written only by Save / Duplicate, so untouched files are unchanged.
+- Player: remembers the link of the trick clip that played since the last pop, as a hash in one word (read from the Lua
+  side too). Clips for "every trick" never change it. Network format unchanged.
+- Older shared landing: given to one trick clip (the one that is on), never deleted with another one.
+- The "Landing of this trick" button is gone: it could open another clip's landing.
+- Offline tests and build only; installed for the user's game test (see `PROJECT_STATUS.md` §0).
+
+- Same day, user's test: two kickflip clips each played their own landing; deleting one removed its landing, with the
+  confirmation naming it. The user then asked for commit, push and the v0.29 release.
 
 ## Gaps in this history
 

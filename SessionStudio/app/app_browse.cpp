@@ -500,6 +500,7 @@ void App::BrowseClipsTable(const std::string& q) {
             ImGui::TableSetColumnIndex(5);
             if (!ci.err.empty()) ImGui::TextColored(theme::Bad, "unreadable: %s", ci.err.c_str());
             else if (ClipHasNoEffect(ci.clip)) ImGui::TextColored(theme::Warn, "%s", "changes nothing in game");
+            else if (const std::string note = LandingNote(ci.file); !note.empty()) ImGui::TextColored(theme::Text3, "%s", note.c_str());
             else if (ci.clip.feet == Feet::Regular && !ci.clip.mirror) ImGui::TextColored(theme::Text3, "%s", "regular only");
             ImGui::PopID();
         }

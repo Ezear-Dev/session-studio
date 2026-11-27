@@ -131,6 +131,7 @@ void App::Dialogs() {
     }
     if (BeginDialog("Delete the clip", "Delete the clip?")) {
         ImGui::TextWrapped("%s", libFile_.c_str());
+        for (const std::string& l : LandingFilesOf(libFile_)) ImGui::TextWrapped("and its landing: %s", l.c_str());
         QuietWrapped("It is removed from the game and moved to the backups (... menu at the top right, \"Open the backups\"): you can get it back.");
         if (libFile_ == fileName_) ImGui::TextColored(kAlert, "%s", "It is the open clip: it stays shown, as a clip not saved yet.");
         const int b = DialogButtons({"Delete", "Cancel"}, -1, 0);

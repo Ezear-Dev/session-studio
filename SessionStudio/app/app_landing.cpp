@@ -68,16 +68,14 @@ void App::BuildLandingPart() {
     inLanding_ = false;
     landLocked_ = true;
     comp_ = Companion{};
-    if (!doc_.IsTrickClip() || var_.trick.empty() || clipsDir_.empty() || !skeletonOk_) return;
+    if (!doc_.IsTrickClip() || !doc_.clip().trickHash || var_.trick.empty() || clipsDir_.empty() || !skeletonOk_) return;
     FigureVariant lv = var_;
     lv.state = ST_Landing;
-    // the landing clip of this trick, if there is one: an enabled one first
-    const ClipInfo* found = nullptr;
-    for (auto& ci : clips_) {
-        if (!ci.err.empty() || !(ci.clip.states & ST_Landing) || (ci.clip.states & ST_Trick) || !ClipTargets(ci.clip, lv)) continue;
-        if (!found || (ci.clip.enabled && !found->clip.enabled)) found = &ci;
-    }
-    const std::string foundFile = found ? found->file : std::string();
+    // the landing clip of THIS trick clip, if there is one (a trick clip not saved yet has none)
+    int self = -1;
+    for (int i = 0; i < (int)clips_.size(); i++) if (!fileName_.empty() && clips_[i].file == fileName_) self = i;
+    const int found = LandingForTrick(ClipPtrs(), self, lv);
+    const std::string foundFile = found >= 0 ? clips_[found].file : std::string();
     const Clip trick = doc_.clip();
     // build the landing part in the landing slot (status messages of a missing landing recording stay quiet)
     const std::string keepStatus = status_;
@@ -106,6 +104,7 @@ void App::BuildLandingPart() {
         if (doc_.HasFigure()) doc_.SetDuration(TrickLandingLength(trick.duration, doc_.FigureDuration()));   // 2 s with the trick
         doc_.SeedKeys();
         doc_.SeedLandingFromTrick(trick);   // it starts where the trick ends
+        doc_.clip().link = trick.link;
         fileName_.clear();
         savedText_ = ClipToJson(doc_.clip());
         landLocked_ = true;
@@ -139,6 +138,60 @@ void App::ReloadOtherPart() {
         BuildLandingPart();   // leaves the landing part first, so it starts from the trick
         SetShared(hasComp_ ? std::min(at, Parts().Total()) : at);
     }
+}
+
+std::vector<const Clip*> App::ClipPtrs() const {
+    std::vector<const Clip*> v;
+    for (auto& ci : clips_) v.push_back(ci.err.empty() ? &ci.clip : nullptr);
+    return v;
+}
+
+std::vector<std::string> App::LandingFilesOf(const std::string& trickFile) const {
+    std::vector<std::string> out;
+    for (int i = 0; i < (int)clips_.size(); i++)
+        if (clips_[i].file == trickFile)
+            for (int l : LandingsOfTrick(ClipPtrs(), i)) out.push_back(clips_[l].file);
+    return out;
+}
+
+std::string App::LandingNote(const std::string& file) const {
+    for (int i = 0; i < (int)clips_.size(); i++) {
+        const ClipInfo& ci = clips_[i];
+        if (ci.file != file || !ci.err.empty() || !(ci.clip.states & ST_Landing) || (ci.clip.states & ST_Trick) || !ci.clip.trickHash) continue;
+        const int t = TrickOfLanding(ClipPtrs(), i);
+        if (t >= 0) return "landing of " + clips_[t].file.substr(0, clips_[t].file.size() - 6);
+        return ci.clip.link.empty() ? "landing without a trick clip" : "its trick clip is gone: never plays";
+    }
+    return "";
+}
+
+std::string App::LandingName(const std::string& trickFile) const {
+    if (trickFile.size() <= 6) return AutoName();
+    const std::string base = "Landing-" + trickFile.substr(0, trickFile.size() - 6);
+    for (int i = 1; i < 1000; i++) {
+        const std::string n = base + (i == 1 ? std::string() : "_" + std::to_string(i)) + ".sanim";
+        if (!FileExists(clipsDir_ + L"\\" + Widen(n))) return n;
+    }
+    return AutoName();
+}
+
+void App::LinkLandingFiles() {
+    if (!hasComp_) return;
+    EditorDoc& trick = inLanding_ ? comp_.doc : doc_;
+    EditorDoc& land = inLanding_ ? doc_ : comp_.doc;
+    if (trick.clip().link.empty()) {
+        std::string err;
+        if (trick.SaveText(err).empty()) return;   // the trick cannot be saved: change nothing
+        const std::string id = NewLinkId();
+        const std::string& trickFile = inLanding_ ? comp_.fileName : fileName_;
+        const std::string& landFile = inLanding_ ? fileName_ : comp_.fileName;
+        // an older trick clip may own more than the landing shown (another foot, another stance): they follow it, else
+        // the game would stop playing them
+        for (const std::string& f : LandingFilesOf(trickFile))
+            if (f != landFile && !SetClipLinkFile(clipsDir_ + L"\\" + Widen(f), id, backupRoot_, err)) Status(f + ": " + err);
+        trick.clip().link = id;
+    }
+    land.clip().link = trick.clip().link;
 }
 
 void App::LinkLandingSeam() {

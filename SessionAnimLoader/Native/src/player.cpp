@@ -183,6 +183,7 @@ int Player::Apply(FTr* cs, int n, const ClipSet* set, const GameState& gs, float
     else newPop = gs.popSerial != pop_;
     pop_ = gs.popSerial;
     if (newPop) {
+        trickLink_ = 0;
         legW_ = 1.f;
         trickDone_ = false;
         for (int i = 0; i < nLayers_; i++) {   // live trick layers leave frozen: the new one starts from 0
@@ -212,6 +213,8 @@ int Player::Apply(FTr* cs, int n, const ClipSet* set, const GameState& gs, float
 
     // winning clip; during a trick, a clip of that trick comes before the others (e.g. pop from a manual)
     const Clip* win = Choose(set, gs, gs.kickflip);
+    // (a clip for "every trick" has no landing of its own: it never changes which landing plays)
+    if (gs.kickflip && win && (win->states & ST_Trick) && win->trickHash) trickLink_ = LinkHash(win->link);
     // 2026-11-25: dismount part of the riding clip, played once from the moment the feet leave the board
     bool wantDis = false;
     {
@@ -563,6 +566,13 @@ float Player::LandingClipLength(const ClipSet* set, const GameState& gs) const {
     return c && (c->states & ST_Landing) ? c->duration : 0.f;   // the riding fallback is not a landing clip
 }
 
+uint64_t Player::LinkHash(const std::string& link) {   // FNV-1a 64; 0 = no link
+    if (link.empty()) return 0;
+    uint64_t h = 14695981039346656037ull;
+    for (unsigned char ch : link) { h ^= ch; h *= 1099511628211ull; }
+    return h ? h : 1;
+}
+
 // P6: clip selection. During a trick, clips of that trick (or of "any trick") win over state clips.
 // Ties: priority, then specificity (named trick, feet, fewer stances), then file order.
 const Clip* Player::Choose(const ClipSet* set, const GameState& gs, bool trickOn) const {
@@ -596,6 +606,7 @@ const Clip* Player::Choose(const ClipSet* set, const GameState& gs, bool trickOn
             // 2026-11-25: the landing clip of one trick: only after that trick, in the trick's stance
             const bool namedLand = (c.states & ST_Landing) && (want & ST_Landing) && c.trickHash;
             if (namedLand && c.trickHash != gs.landTrickHash) continue;
+            if (namedLand && LinkHash(c.link) != trickLink_) continue;   // v0.29: the landing of the trick clip that just played
             if (!c.enabled || c.foreign || !(c.states & want) || !feetOk(c) || !(c.stances & (namedLand ? landStance : stances))) continue;
             // 2026-11-25: a clip of one grind plays only on that grind (a clip with no grind name: every grind)
             if ((c.states & ST_Grind) && (want & ST_Grind) && c.trickHash && c.trickHash != gs.grindHash) continue;

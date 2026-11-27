@@ -97,16 +97,10 @@ FigureVariant App::FigureSource(const FigureVariant& v) {
 const Clip* App::TrickClipFor(const FigureVariant& landing) const {
     const FigureVariant tv = FigureSource(landing);
     if (tv.state != ST_Trick) return nullptr;
+    if (!doc_.clip().link.empty())   // the open landing's own trick clip, even turned off
+        for (auto& ci : clips_) if (ci.err.empty() && ci.clip.link == doc_.clip().link && ClipTargets(ci.clip, tv)) return &ci.clip;
     for (auto& ci : clips_) if (ci.err.empty() && ci.clip.enabled && ClipTargets(ci.clip, tv)) return &ci.clip;
     return nullptr;
-}
-
-void App::GoToLanding() {
-    if (!doc_.IsTrickClip()) return;
-    FigureVariant lv = var_;
-    lv.state = ST_Landing;
-    askVar_ = lv;
-    Request(Ask::ChangeFigure);   // asks to save the trick clip first if it changed
 }
 
 std::wstring App::FigurePath(const FigureVariant& v0) const {
@@ -267,7 +261,12 @@ void App::RefreshClips() {
     std::vector<E> es;
     const Clip& me = doc_.clip();
     if (me.enabled && ClipTargets(me, var_)) es.push_back({fileName_.empty() ? std::string("(this clip, not saved yet)") : fileName_, &me, true});
-    for (auto& ci : clips_) if (ci.file != fileName_ && ci.clip.enabled && ClipTargets(ci.clip, var_)) es.push_back({ci.file, &ci.clip, false});
+    for (auto& ci : clips_) {
+        if (ci.file == fileName_ || !ci.clip.enabled || !ClipTargets(ci.clip, var_)) continue;
+        // the landings of other trick clips never compete with this one: each plays after its own
+        if (var_.state == ST_Landing && !var_.trick.empty() && ci.clip.trickHash && ci.clip.link != me.link) continue;
+        es.push_back({ci.file, &ci.clip, false});
+    }
     if (es.size() < 2) return;
     std::stable_sort(es.begin(), es.end(), [](const E& a, const E& b) {
         if (a.c->priority != b.c->priority) return a.c->priority > b.c->priority;
@@ -298,7 +297,7 @@ void App::OpenFile(const std::string& name) {
     playing_ = false;
     scanAge_ = 99.f;
     Status("opened: " + name + (doc_.HasLockedTracks() ? " (has locked bones: kept as they are)" : "") +
-           (doc_.HasOldLandingPart() ? " (old built-in landing: redo it in “Landing of this trick”)" : ""));
+           (doc_.HasOldLandingPart() ? " (old built-in landing: pose the landing after the violet line)" : ""));
     BuildLandingPart();   // 2026-11-27: a trick shows its landing on the same timeline
 }
 
@@ -321,6 +320,16 @@ bool App::SaveAs(const std::string& raw, bool overwriteOk) {
         return false;
     }
     if (doc_.HasPending()) CommitKeyNow(true);
+    // a trick clip saved as a second file ("Save as") is a new trick clip: a link of its own, and a landing of its own
+    bool forked = false;
+    if (doc_.IsTrickClip() && !doc_.clip().link.empty()) {
+        for (auto& ci : clips_)
+            if (ci.err.empty() && ci.file != name && (ci.clip.states & ST_Trick) && ci.clip.link == doc_.clip().link) forked = true;
+        if (forked) {
+            doc_.clip().link = NewLinkId();
+            if (hasComp_ && !inLanding_) { comp_.doc.clip().link = doc_.clip().link; comp_.fileName.clear(); comp_.savedText.clear(); }
+        }
+    }
     std::string err;
     const std::string text = doc_.SaveText(err);
     if (text.empty()) { Status("not saved: " + err); return false; }
@@ -341,31 +350,41 @@ bool App::SaveAs(const std::string& raw, bool overwriteOk) {
     fileName_ = name;
     doc_.clip().file = name;
     savedText_ = ClipToJson(doc_.clip());
+    RefreshClips();   // at once: which landing goes with which trick clip is read from this list
     scanAge_ = 99.f;
     gameAge_ = 99.f;
     if (!ls.backupErr.empty()) Status("saved: " + name + " -- WARNING, the previous version could not be backed up (" + ls.backupErr + ")");
     else if (ClipHasNoEffect(doc_.clip())) Status("saved: " + name + " -- WARNING, this clip changes nothing in game (no rotation, no offset): move a body part first");
     else Status("saved: " + name + " -- do \"" + VariantTitleUi(var_) + "\" in game to see it");
+    if (forked && hasComp_ && !inLanding_ && !landLocked_) {   // the copy's own landing is written with it
+        SwapParts();
+        SaveAs(LandingName(comp_.fileName), true);
+        SwapParts();
+    }
     return true;
 }
 
 void App::SaveCurrent() {
     if (NeedDir()) return;
-    // 2026-11-27 (one timeline, two files): the part under the playhead, then the other part if it needs it
+    // 2026-11-27 (one timeline, two files): the trick, then its landing if it needs it (named after the trick, and never
+    // written without it)
     if (doc_.HasPending()) CommitKeyNow(true);
     LinkLandingSeam();   // the files written hold the same pose on both sides of the seam
+    LinkLandingFiles();
+    const bool fromLanding = hasComp_ && inLanding_;
+    if (fromLanding) SwapParts();
     auto saveOpen = [&]() {
-        if (hasComp_ && !PartNeedsSave(inLanding_, doc_, fileName_, savedText_) && inLanding_ && fileName_.empty()) return true;   // a locked new landing: nothing to write
-        const std::string name = fileName_.empty() ? AutoName() : fileName_;
+        const std::string name = !fileName_.empty() ? fileName_ : hasComp_ && inLanding_ ? LandingName(comp_.fileName) : AutoName();
         if (doc_.clip().name.empty() || doc_.clip().name == "nouveau_clip") doc_.clip().name = name.substr(0, name.size() - 6);
         return SaveAs(name, true);
     };
     bool ok = saveOpen();
-    if (ok && hasComp_ && PartNeedsSave(!inLanding_, comp_.doc, comp_.fileName, comp_.savedText)) {
+    if (ok && hasComp_ && (PartNeedsSave(true, comp_.doc, comp_.fileName, comp_.savedText) || (fromLanding && !comp_.fileName.empty()))) {
         SwapParts();
         ok = saveOpen();
         SwapParts();
     }
+    if (fromLanding && hasComp_) SwapParts();   // back under the playhead
     if (ok && afterSave_) { afterSave_ = false; Proceed(); }
 }
 

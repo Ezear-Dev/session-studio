@@ -1,7 +1,7 @@
 # Session Studio: reference for creators
 
 This is the detailed reference. For a first clip, read `Getting-Started.md`.
-Version: mod (SessionAnimLoaderNative) v0.28, clip format `sanim` version 1, Session: Skate Sim Steam build of November 2026.
+Version: mod (SessionAnimLoaderNative) v0.29, clip format `sanim` version 1, Session: Skate Sim Steam build of November 2026.
 
 ---
 
@@ -34,7 +34,7 @@ A clip targets one or more **states** and, for each, **stances** and **feet**.
 | `Riding` | Riding (standing) | on the board, on the ground, nothing else going on |
 | `Pushing` | Pushing | a push; falls back to the Riding clip when it has none |
 | `Crouch` | Crouch | on the board, crouched; the only ground state with Fakie / Nollie |
-| `Landing` | Landing | From the moment a trick returns to the ground (or a landing without trick): 0.8 s, or as long as the landing clip, up to 2 s. Past 0.8 s, pushing, crouching, a new trick or any other move ends it. A landing clip may name its trick (`trigger.trick`): it then plays only after that trick, in that trick's stance, and wins over the generic Landing clip |
+| `Landing` | Landing | From the moment a trick returns to the ground (or a landing without trick): 0.8 s, or as long as the landing clip, up to 2 s. Past 0.8 s, pushing, crouching, a new trick or any other move ends it. A landing clip may name its trick (`trigger.trick`): it then plays only after that trick, in that trick's stance, and wins over the generic Landing clip. With a `link` (mod v0.29), it plays only after the trick clip with the same `link` |
 | `Dismount` | — | used through the Riding clip's dismount part (below) |
 | `Powerslide` | Powerslide | **not checked yet** |
 | `Grind`, `Grab` | hidden | **not detected reliably**: grinds share one recording, grabs are untested |
@@ -75,7 +75,7 @@ clip's legs are given back to the game after the catch; a landing clip writes th
 of the game's own events in its recording (`play.markers`: takeoff, catch, landing preparation, ground). In game,
 the pop, the flip and the catch play at real speed; the hang time (catch -> landing preparation, yellow on the
 timeline) and the last part stretch or shrink so that the clip ends exactly at the ground contact, predicted from
-the skater's vertical speed. The landing is a clip of its own (button **Landing of this trick**), edited over the
+the skater's vertical speed. The landing is a clip of its own, one per trick clip (same timeline, after the violet line), edited over the
 trick's recorded ground tail and started at the real contact.
 
 ---
@@ -123,6 +123,7 @@ in each bone's local space, the pelvis offset is in cm in component space (Z up)
 | `play.dismount` | s | riding clips: the part played once when the feet leave the board |
 | `keys[].interp` | `smooth` / `linear` / `step` | curve to the next key |
 | `weights` | 0..1 per bone | how much of the track applies |
+| `link` | text, optional | mod v0.29: the same id in a trick clip and in its landing clip, written by Save. A landing with a `link` plays only after the trick clip with that `link`; a trick clip with a `link` never plays an older named landing without one. Clips without a `link` behave as before. In the editor, an older landing goes with one trick clip without a link (the one that is on, else the first) until Save links them |
 | `lockEnds` | bool | editor only (the game ignores it): trick and landing clips keep their start / end at the game's pose |
 
 `_studio.json` in the clips folder holds two expert settings: `mirrorConv` (per-bone mirror convention overrides) and

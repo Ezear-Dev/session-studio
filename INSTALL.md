@@ -1,6 +1,6 @@
 # Installing Session Studio and Session Anim Loader
 
-This guide covers installing, updating, removing and fixing problems. It is written for version **v0.28**.
+This guide covers installing, updating, removing and fixing problems. It is written for version **v0.29**.
 
 You get two things:
 
@@ -31,7 +31,7 @@ If you installed **SessionOpenMP**, you most likely have UE4SS 3.0.1 already, be
 
 ## Install
 
-1. Download `SessionStudio-v0.28.zip`.
+1. Download `SessionStudio-v0.29.zip`.
 2. **Extract the whole zip** into a normal folder (right-click the zip, **Extract All**). Do not run anything from
    inside the zip.
 3. Close the game and Session Studio.
@@ -49,7 +49,7 @@ the first time you start the editor. Only continue if the zip comes
 from this project's own release page. You can compare the zip with `SHA256SUMS.txt`:
 
 ```
-Get-FileHash .\SessionStudio-v0.28.zip
+Get-FileHash .\SessionStudio-v0.29.zip
 ```
 
 The installer is a plain text script (`files\install.ps1`): you can read it first. It downloads nothing.

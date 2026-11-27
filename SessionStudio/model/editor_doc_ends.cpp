@@ -64,6 +64,7 @@ bool LandingCoversAllVariants(const Clip& trick, const std::vector<const Clip*>&
             for (const Clip* c : clips) {
                 if (!c || !c->enabled || c->foreign || !(c->states & ST_Landing) || (c->states & ST_Trick)) continue;
                 if (!c->trickHash || c->trickHash != trick.trickHash) continue;   // a generic landing does not count
+                if (c->link != trick.link) continue;                              // nor the landing of another trick clip
                 if (!(c->stances & (1u << s))) continue;
                 if (c->feet != Feet::Any && (c->feet == Feet::Goofy) != goofy) continue;
                 covered = true;
