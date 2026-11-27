@@ -16,7 +16,7 @@ Pal PalOf(Kind k) {
         case Kind::Primary: return {Accent, AccentHi, AccentLo, OnAccent};
         case Kind::Danger: return {ImVec4(0.62f, 0.22f, 0.20f, 1.f), Bad, ImVec4(0.50f, 0.17f, 0.16f, 1.f), Text};
         case Kind::Ghost: return {ImVec4(0, 0, 0, 0), Raised, Line, Text};
-        default: return {Surface, Raised, Line, Text};
+        default: return {ImGui::GetStyleColorVec4(ImGuiCol_Button), ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered), ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive), Text};   // the current button colours
     }
 }
 

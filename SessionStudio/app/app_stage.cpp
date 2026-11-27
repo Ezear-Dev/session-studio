@@ -128,6 +128,17 @@ void App::StageOverlays(const ImVec2& p0, const ImVec2& sz) {
             ImGui::EndPopup();
         }
         ImGui::SameLine();
+        // redesign step 4 (user 2026-11-27: "Clip settings" next to "Inspector"; "Options" was tried, then the user went back to "Inspector")
+        if (ui::Toggle("Inspector##card", !clipPanel_ && cardOpen_)) {
+            if (clipPanel_) { clipPanel_ = false; cardOpen_ = true; }
+            else cardOpen_ = !cardOpen_;
+            SaveSetting(settings_, "ui.card", cardOpen_ ? "1" : "0");
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip(!clipPanel_ && cardOpen_ ? "Hide the Inspector card: the 3D view takes the whole width." : "Show the Inspector card: what is selected and its options.");
+        ImGui::SameLine();
+        if (ui::Toggle("Clip settings##clipset", clipPanel_)) clipPanel_ = !clipPanel_;
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("The settings of the clip, in the card on the right: name, mode (add / replace), on in game,\nwho sees it, length, lock start and end, landing of this trick, copy to another variant.\nStudio mode: the advanced settings too.");
+        ImGui::SameLine();
         ui::IconButton("stagehelp", theme::Icon::Help, "?", false, ui::Kind::Ghost);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("In the view:\n  click: pick a body part or a bone\n  right-click + drag: orbit the view\n  middle-click + drag: pan the view\n  wheel: zoom\n\nKeyboard:\n  1-7: body parts   I: rotate / pull (IK)   F: center\n  Space: play   left / right arrows: previous / next frame   Home / End: start / end of the clip\n  K: set key   Del: delete the selected keys   Esc: deselect the keys\n  Ctrl+S: save   Ctrl+Z / Ctrl+Y: undo / redo   Ctrl+N: new clip   Ctrl+O: open\n  Tab: Browse / Animate   B: Library drawer\n\nTimeline:\n  Ctrl + wheel (or wheel on the ruler): zoom   Shift + wheel or middle-click: scroll");
@@ -228,19 +239,26 @@ void App::ViewPanel() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     BeginPanel("3D view", kPanel | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::PopStyleVar();
-    const ImVec2 p0 = ImGui::GetCursorScreenPos();
-    ImVec2 sz = ImGui::GetContentRegionAvail();
-    if (sz.x < 50) sz.x = 50;
-    if (sz.y < 50) sz.y = 50;
+    const ImVec2 pp0 = ImGui::GetCursorScreenPos();   // the whole panel
+    ImVec2 psz = ImGui::GetContentRegionAvail();
+    if (psz.x < 50) psz.x = 50;
+    if (psz.y < 50) psz.y = 50;
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const float fsz = ImGui::GetFontSize();
     const float round = ImGui::GetStyle().WindowRounding;
+    // redesign step 4: the 3D view (camera, picking, rings) uses the panel minus the inspector card on the right, so the
+    // skater is centred in the free part and no ring ever sits under the card
+    const float cardM = std::round(fsz * 0.6f);
+    const float cardW = std::min(L.right, psz.x * 0.45f);
+    const bool cardShown = skeletonOk_ && (cardOpen_ || clipPanel_);
+    const ImVec2 p0 = pp0;
+    ImVec2 sz(std::max(50.f, psz.x - (cardShown ? cardW + cardM : 0.f)), psz.y);
     {   // background: a vertical gradient (lighter at the top), rounded like the panel
         const ImU32 top = theme::U32(ImVec4(0.078f, 0.090f, 0.114f, 1.f)), bot = theme::U32(ImVec4(0.039f, 0.043f, 0.059f, 1.f));   // darker (user 2026-11-27)
-        const ImVec2 p1(p0.x + sz.x, p0.y + sz.y);
-        dl->AddRectFilled(p0, ImVec2(p1.x, p0.y + 2.f * round), top, round, ImDrawFlags_RoundCornersTop);
-        dl->AddRectFilled(ImVec2(p0.x, p1.y - 2.f * round), p1, bot, round, ImDrawFlags_RoundCornersBottom);
-        dl->AddRectFilledMultiColor(ImVec2(p0.x, p0.y + round), ImVec2(p1.x, p1.y - round), top, top, bot, bot);
+        const ImVec2 p1(pp0.x + psz.x, pp0.y + psz.y);
+        dl->AddRectFilled(pp0, ImVec2(p1.x, pp0.y + 2.f * round), top, round, ImDrawFlags_RoundCornersTop);
+        dl->AddRectFilled(ImVec2(pp0.x, p1.y - 2.f * round), p1, bot, round, ImDrawFlags_RoundCornersBottom);
+        dl->AddRectFilledMultiColor(ImVec2(pp0.x, pp0.y + round), ImVec2(p1.x, p1.y - round), top, top, bot, bot);
     }
 
     if (!skeletonOk_) {   // empty state: a card in the middle of the view
@@ -429,7 +447,7 @@ void App::ViewPanel() {
                 uint32_t c = rgba(200, 196, 189);                                   // body: warm clay (redesign step 3)
                 if (!doc_.IsEditable(b) && b != doc_.PelvisBone()) c = rgba(128, 131, 140);   // locked part: a darker grey
                 const int sd = doc_.ArmSide(b);
-                if (sd >= 0 && warnSide[sd] && s.names[b].find("Finger") == std::string::npos && s.names[b].find("Clavicle") == std::string::npos) c = rgba(229, 83, 75);   // shoulder at risk (theme::Bad)
+                if (sd >= 0 && warnSide[sd] && s.names[b].find("UpperArm") != std::string::npos) c = rgba(214, 160, 150);   // shoulder at risk: a light red tint on the upper arm only (user 2026-11-27: the red arm was too intrusive)
                 if (b == sel_) c = rgba(255, 107, 26);                              // selected part (theme::Accent)
                 cols[b] = c;
             }
@@ -445,7 +463,7 @@ void App::ViewPanel() {
             const float dl2 = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
             if (dl2 > 1e-6f) for (float& x : dir) x /= dl2;
             if (ID3D11ShaderResourceView* srv = stage_->Render((int)std::lround(sz.x), (int)std::lround(sz.y), vp, dir, meshes)) {
-                dl->AddImageRounded((ImTextureID)(intptr_t)srv, p0, ImVec2(p0.x + sz.x, p0.y + sz.y), ImVec2(0, 0), ImVec2(1, 1), IM_COL32_WHITE, round);
+                dl->AddImageRounded((ImTextureID)(intptr_t)srv, p0, ImVec2(p0.x + sz.x, p0.y + sz.y), ImVec2(0, 0), ImVec2(1, 1), IM_COL32_WHITE, round, cardShown ? ImDrawFlags_RoundCornersLeft : ImDrawFlags_RoundCornersAll);
                 body = bodyBuilt;
             }
         }
@@ -575,7 +593,7 @@ void App::ViewPanel() {
     int ikR, ikU, ikF, ikH;
     const IkJoint ikKind = (ikMode_ && sel_ >= 0 && sel_ < n && !poseBlocked) ? doc_.IkHandle(sel_, ikR, ikU, ikF, ikH) : IkJoint::None;
     if (poseBlocked) {   // no handle: the game takes the legs back from the catch, or a locked instant
-        banners.push_back({lockedHere ? "Start and end are locked to the game's pose: pose between them (Clip tab to unlock)."
+        banners.push_back({lockedHere ? "Start and end are locked to the game's pose: pose between them (Clip settings to unlock)."
                                       : "After the catch, the game takes the legs back: pose them before the catch, or in the landing clip.", theme::Warn});
     } else if (ikKind != IkJoint::None) {
         const int joint = ikKind == IkJoint::Mid ? ikF : ikKind == IkJoint::Root ? ikU : ikH;
@@ -683,5 +701,6 @@ void App::ViewPanel() {
         dl->PopClipRect();
     }
     StageOverlays(p0, sz);   // redesign step 3: the floating tools, last (above the view)
+    if (cardShown) InspectorCard(ImVec2(p0.x + sz.x, pp0.y + cardM), cardW, psz.y - 2.f * cardM);   // redesign step 4
     ImGui::End();
 }

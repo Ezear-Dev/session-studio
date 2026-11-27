@@ -158,7 +158,7 @@ void App::TimelineTransport() {
     const float fs = ImGui::GetFontSize();
     static const char* kInterpName[3] = {"smooth", "linear", "constant"};
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Clip    ");
+    ImGui::TextUnformatted("Clip    ");   // "Clip settings" moved next to "Options" on the 3D view (user 2026-11-27)
     ImGui::SameLine();
     if (doc_.EffectiveDrive() != Drive::ManualRatio) {
         const float nowF = std::round(t_ / kFrame);
@@ -560,7 +560,7 @@ void App::TimelinePanel() {
             openKeyMenu_ = true;
         }
         if (ImGui::IsItemHovered() && hit < 0.f && lockHover)
-            ImGui::SetTooltip("%s", "Locked: the game's pose, so the clip joins the game smoothly.\nPose between the start and the end (Clip tab: Lock start and end).");
+            ImGui::SetTooltip("%s", "Locked: the game's pose, so the clip joins the game smoothly.\nPose between the start and the end (Clip settings: Lock start and end).");
         if (ImGui::IsItemHovered() && hit >= 0.f) {
             const int ip = doc_.KeyInterp(hit, r.bones.empty() ? -1 : r.bones.front());
             ImGui::SetTooltip("%.2f s · %s · %s\nclick: select, drag: move\nShift+click: add to the selection, right-click: menu", hit, r.label.c_str(), ip >= 0 ? kInterpName[ip] : "?");

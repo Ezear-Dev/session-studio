@@ -1,42 +1,71 @@
-// Session Studio -- Inspector panel: Selection, Clip and Advanced tabs.
+// Session Studio -- Inspector card (redesign step 4): the selection, or the clip settings (+ advanced in Studio).
 #include "app_internal.h"
 
 using namespace app_detail;
 
-void App::PropsPanel() {
-    const Layout L = Lay();
-    Place(L.insp.x, L.insp.y, L.insp.w, L.insp.h);
-    BeginPanel("Inspector", kPanel);
-    // Creator / Studio: what is shown, never what the clip contains (UI Phase 3)
-    {
-        static const char* kModes[2] = {"Creator", "Studio"};
-        int m = studio_ ? 1 : 0;
-        if (ui::Segmented("##mode", kModes, 2, &m)) { studio_ = m == 1; SaveSetting(settings_, "ui.studio", studio_ ? "1" : "0"); }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Creator: the essentials (pick, pose, pull, save).\nStudio: everything (precise values, track weights, bone list,\nAdvanced tab: stances, feet, priority, blends, loop, drive).\nThe clip does not change when you switch modes.");
-    }
-    if (sel_ != inspSelPrev_) { if (sel_ >= 0) inspForce_ = 0; inspSelPrev_ = sel_; }   // a new selection: its tab
-    if (ImGui::BeginTabBar("##inspecteur")) {
-        auto Flags = [&](int k) { return inspForce_ == k ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None; };
-        if (ImGui::BeginTabItem("Selection", nullptr, Flags(0))) { InspectorSelection(); ImGui::EndTabItem(); }
-        if (ImGui::BeginTabItem("Clip", nullptr, Flags(1))) { InspectorClip(); ImGui::EndTabItem(); }
-        if (studio_ && ImGui::BeginTabItem("Advanced", nullptr, Flags(2))) { InspectorAdvanced(); ImGui::EndTabItem(); }
-        ImGui::EndTabBar();
-    }
-    inspForce_ = -1;
-    ImGui::End();
+// redesign step 4 (2026-11-27): a card at the right of the 3D view, a child window of the stage (nothing under it can be
+// grabbed). It shows what is selected, or the clip settings when they are open (timeline: "Clip settings").
+void App::InspectorCard(const ImVec2& pos, float w, float maxH) {
+    const float fs = ImGui::GetFontSize();
+    ImGui::SetCursorScreenPos(pos);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::Alpha(theme::Surface, 0.97f));
+    ImGui::PushStyleColor(ImGuiCol_Border, theme::Line);
+    // on the card's surface colour, the panel buttons and fields would not show: lighter buttons, darker fields
+    ImGui::PushStyleColor(ImGuiCol_Button, theme::Raised);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.212f, 0.239f, 0.294f, 1.f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.270f, 0.302f, 0.365f, 1.f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, theme::Bg1);
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.098f, 0.110f, 0.141f, 1.f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.125f, 0.141f, 0.176f, 1.f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, std::round(fs * 0.75f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(std::round(fs * 0.7f), std::round(fs * 0.6f)));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(w, 0.f), ImVec2(w, std::max(fs * 6.f, maxH)));
+    if (ImGui::BeginChild("##card", ImVec2(w, 0.f), ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_AutoResizeY)) {
+        ImGui::PopStyleVar();   // the content keeps the normal spacing
+        // header: what the card shows, and its close button on the right
+        std::string title, sub;
+        ImVec4 subCol = theme::Text2;
+        if (clipPanel_) { title = "Clip settings"; sub = fileName_.empty() ? std::string("new clip (not saved yet)") : fileName_; }
+        else if (sel_ >= 0 && sel_ < doc_.BoneCount()) {
+            std::string what, tool;
+            ToolInfo(what, tool, subCol);
+            title = what;
+            sub = tool;
+        } else { title = "Nothing selected"; sub = "pick a body part"; }
+        if (theme::Strong()) ImGui::PushFont(theme::Strong(), 0.f);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(title.c_str());
+        if (theme::Strong()) ImGui::PopFont();
+        const float bw = theme::HasIcons() ? ImGui::GetFrameHeight() : ImGui::CalcTextSize("x").x + ImGui::GetStyle().FramePadding.x * 2.f;
+        ImGui::SameLine(std::max(ImGui::GetCursorPosX(), ImGui::GetWindowContentRegionMax().x - bw));
+        if (ui::IconButton("cardclose", theme::Icon::Close, "x", false, ui::Kind::Ghost)) {
+            if (clipPanel_) clipPanel_ = false;
+            else { cardOpen_ = false; SaveSetting(settings_, "ui.card", "0"); }
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip(clipPanel_ ? "Close the clip settings (back to the selection)." : "Hide the card: the 3D view takes the whole width.\nThe \"Inspector\" button (top right of the view) brings it back.");
+        ImGui::TextColored(subCol, "%s", sub.c_str());
+        ImGui::Separator();
+        ImGui::PushTextWrapPos(0.f);   // long lines wrap inside the card
+        if (clipPanel_) {
+            InspectorClip();
+            if (studio_) {
+                ImGui::Spacing();
+                ImGui::SeparatorText("Advanced");
+                InspectorAdvanced();
+            }
+        } else InspectorSelection();
+        ImGui::PopTextWrapPos();
+    } else ImGui::PopStyleVar();
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(8);
 }
 
 void App::InspectorSelection() {
     const int n = doc_.BoneCount();
     Clip& c = doc_.clip();
-    if (sel_ >= 0 && sel_ < n) {   // the tool a drag in the Stage uses, in words
-        std::string what, tool;
-        ImVec4 col;
-        ToolInfo(what, tool, col);
-        ImGui::TextColored(col, "Tool: %s", tool.c_str());
-    }
     const bool lockedHere = sel_ >= 0 && doc_.LockedAt(doc_.KeyTime(t_));   // 2026-11-26: locked start / end (task 3)
-    if (lockedHere) ImGui::TextColored(theme::Warn, "%s", "Start and end are locked to the game's pose:\npose between them (Clip tab to unlock).");
+    if (lockedHere) ImGui::TextColored(theme::Warn, "%s", "Start and end are locked to the game's pose:\npose between them (Clip settings to unlock).");
     if (sel_ >= 0 && sel_ == doc_.PelvisBone()) {
         ImGui::BeginDisabled(lockedHere);
         PelvisProps();
@@ -320,7 +349,7 @@ void App::InspectorClip() {
         ImGui::SeparatorText("Several clips on this variant");
         for (auto& l : conflicts_) ImGui::TextWrapped("%s", l.c_str());
     }
-    if (!studio_) ImGui::TextDisabled("Stances, priority, blends, loop, drive:\nStudio mode (at the top), Advanced tab.");
+    if (!studio_) ImGui::TextDisabled("Stances, priority, blends, loop, drive:\nStudio mode (... menu at the top right).");
 }
 
 void App::InspectorAdvanced() {

@@ -23,6 +23,7 @@ App::App(std::wstring exeDir) : exeDir_(std::move(exeDir)) {
         showWelcome_ = st.Get("ui.welcomed") != "1";   // UI Phase 5: first launch
         ws_ = st.Get("ui.workspace") == "browse" ? 0 : 1;   // redesign step 2: Animate unless Browse was left open
         bodyView_ = st.Get("ui.view") != "skeleton";   // 2026-11-26 (mannequin): Body by default
+        cardOpen_ = st.Get("ui.card") != "0";         // redesign step 4: the inspector card, shown unless closed
         showFloor_ = st.Get("ui.floor") == "1";       // redesign step 3: the floor, OFF by default (tricks dip below it)
         showBoard_ = st.Get("ui.board") == "1";        // 2026-11-26 (mannequin stage 2): the board, OFF by default (approximate, see board_mesh.h)
         const std::string bd = st.Get("backupDir");
@@ -495,7 +496,6 @@ void App::Frame(float dt) {
     if (ws_ == 0) TricksPanel();
     else {
         ViewPanel();
-        PropsPanel();
         TimelinePanel();
         if (drawer_) TricksPanel();   // drawn after the stage: on top of it
     }

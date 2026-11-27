@@ -24,11 +24,9 @@ App::Layout App::Lay() const {
     const float wantB = bottomDefault_ ? ch * 0.38f : bottomU_ * fs;
     L.bottom = std::clamp(wantB, fs * 7.f, maxB);
     const float midH = std::max(1.f, ch - L.bottom - L.gap);
-    // Inspector on the right; the stage keeps at least 24 font sizes
-    L.right = std::clamp(rightU_ * fs, fs * 14.f, std::max(fs * 14.f, cw * 0.32f));
-    if (cw - L.right - L.gap < fs * 24.f) L.right = std::max(fs * 10.f, cw - L.gap - fs * 24.f);
-    L.stage = {x0, y0, std::max(1.f, cw - L.right - L.gap), midH};
-    L.insp = {x1 - L.right, y0, L.right, midH};
+    // redesign step 4: the stage takes the whole width; the inspector card (L.right wide) lives inside it, at its right
+    L.right = std::clamp(rightU_ * fs, fs * 14.f, std::max(fs * 14.f, cw * 0.4f));
+    L.stage = {x0, y0, cw, midH};
     L.time = {x0, y1 - L.bottom, cw, L.bottom};
     // the Library drawer, over the left part of the stage
     L.left = std::clamp(leftU_ * fs, fs * 14.f, std::max(fs * 14.f, L.stage.w * 0.6f));
@@ -51,8 +49,7 @@ void App::Splitters() {
     const Layout L = Lay();
     const float fs = ImGui::GetFontSize();
     struct S { const char* id; float x, y, w, h; int kind; };   // kind 0 drawer edge, 1 inspector edge, 2 timeline edge
-    const S ss[3] = {{"##split_gauche", L.lib.x + L.lib.w, L.lib.y, L.gap, L.lib.h, 0},
-                     {"##split_droite", L.insp.x - L.gap, L.insp.y, L.gap, L.insp.h, 1},
+    const S ss[2] = {{"##split_gauche", L.lib.x + L.lib.w, L.lib.y, L.gap, L.lib.h, 0},
                      {"##split_bas", L.time.x, L.time.y - L.gap, L.time.w, L.gap, 2}};
     for (const S& s : ss) {
         if (s.kind == 0 && !drawer_) continue;

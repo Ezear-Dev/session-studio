@@ -38,7 +38,7 @@ private:
     // redesign step 2 (2026-11-27): two workspaces. Animate = stage + inspector over a full-width timeline, the Library
     // as a drawer over the stage; Browse = the Library on the whole window. No status strip (game pill in the top bar).
     struct Rect { float x, y, w, h; };
-    struct Layout { float top, gap, left, right, bottom, w, h; Rect stage, insp, time, lib; };
+    struct Layout { float top, gap, left, right, bottom, w, h; Rect stage, time, lib; };   // right: width of the inspector card
     Layout Lay() const;                   // panel rectangles (pixels) from the saved proportions, clamped to the window
     void Splitters();                     // drag handles between the panels (double-click: default size)
     void SaveLayout();
@@ -111,8 +111,11 @@ private:
     // the selection and the tool that a drag in the Stage will use (badge in the Stage, Selection tab)
     void ToolInfo(std::string& what, std::string& tool, ImVec4& col) const;
     bool studio_ = false;                 // Studio: Advanced tab, precise values, bone list (saved "ui.studio")
-    int inspForce_ = -1;                  // tab to bring to front this frame
-    int inspSelPrev_ = -2;                // a new selection brings the Selection tab to front
+    // redesign step 4 (2026-11-27): the Inspector is a card at the right of the 3D view (what is selected); the clip's
+    // settings open in the same place from the timeline ("Clip settings")
+    void InspectorCard(const ImVec2& pos, float w, float maxH);
+    bool cardOpen_ = true;                // the card is shown (saved "ui.card"); closed: the view is wider
+    bool clipPanel_ = false;              // the card shows the clip settings instead of the selection
     // ---------------------------------------------------------------- UI Phase 4 (2026-11-25): Timeline
     void TimelineTransport();             // jump / frame / play, time and frame readout, keys, interpolation
     void TimelineViewBar();               // zoom - / + / fit, row density, enlarge, selection line
@@ -160,7 +163,6 @@ private:
     // panels
     void TricksPanel();
     void ViewPanel();
-    void PropsPanel();
     void TimelinePanel();
     void Dialogs();
     void Shortcuts();

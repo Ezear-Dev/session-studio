@@ -94,6 +94,10 @@ Important steps, technical decisions, problems and their solutions. Current stat
   board at 0, feet ~11 cm up on the board): only a few frames of the pop dip to -40 cm. Decision (user): the floor is an
   option (View > Floor, off by default, always at 0); orientation axes in a corner show camera turns. Reset frames the
   posed skater (`FrameBox`); the body picker was removed at the user's request.
+- **Step 4: the Inspector becomes a card (11-27)**: no panel column; the card is a child window of the stage placed
+  in a strip that the 3D canvas leaves free on its right (camera, picking and ImGuizmo use the narrower canvas), so
+  the skater stays centred in the visible part without an off-centre projection. The clip settings (and, in Studio,
+  the advanced ones) open in the same card from the timeline; the Inspector tabs and their tab-forcing code are gone.
 
 ## Problems met and solutions
 
