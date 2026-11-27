@@ -26,6 +26,7 @@ App::App(std::wstring exeDir) : exeDir_(std::move(exeDir)) {
         cardOpen_ = st.Get("ui.card") != "0";         // redesign step 4: the inspector card, shown unless closed
         showFloor_ = st.Get("ui.floor") == "1";       // redesign step 3: the floor, OFF by default (tricks dip below it)
         showBoard_ = st.Get("ui.board") == "1";        // 2026-11-26 (mannequin stage 2): the board, OFF by default (approximate, see board_mesh.h)
+        browseCat_ = st.Get("browse.view");   // redesign step 6
         const std::string bd = st.Get("backupDir");
         backupRoot_ = bd.empty() ? DefaultBackupRoot() : Widen(bd);
     }
@@ -266,11 +267,7 @@ void App::RefreshClips() {
 }
 
 bool App::ClipTargets(const Clip& c, const FigureVariant& v) const {
-    if (!(c.states & v.state)) return false;
-    if (StateNamed(v.state) && c.trickHash && c.trickHash != TrickHash(v.trick)) return false;
-    if (v.state == ST_Landing && !v.trick.empty() && c.trickHash != TrickHash(v.trick)) return false;   // a trick landing: its own clips only
-    if (!(c.stances & (1u << v.stance))) return false;
-    return c.feet == Feet::Any || (c.feet == Feet::Goofy) == v.goofy;
+    return ClipPlaysOn(c, v);   // redesign step 6: the rule lives in model/library (tested)
 }
 
 void App::OpenFile(const std::string& name) {
@@ -425,6 +422,8 @@ void App::Request(Ask a) {
 void App::Proceed() {
     const Ask a = ask_;
     ask_ = Ask::None;
+    const bool thenNew = a == Ask::ChangeFigure && newAfterPick_;   // redesign step 6: "New clip for this variant"
+    newAfterPick_ = false;
     switch (a) {
         case Ask::ChangeTime:
             if (askGlobal_ >= 0.f) { SetShared(askGlobal_); askGlobal_ = -1.f; }   // 2026-11-27: may move to the other part
@@ -488,6 +487,7 @@ void App::Proceed() {
         case Ask::SaveAs: saveDialog_ = true; strncpy_s(nameBuf_, (fileName_.empty() ? AutoName() : fileName_).c_str(), _TRUNCATE); break;
         default: break;
     }
+    if (thenNew) { ask_ = Ask::New; Proceed(); }
 }
 
 void App::AfterUndoRedo() {
@@ -531,7 +531,7 @@ void App::Frame(float dt) {
 
     // redesign step 2: two workspaces (Browse: the Library; Animate: stage, inspector, timeline, Library drawer)
     HeaderBar();
-    if (ws_ == 0) TricksPanel();
+    if (ws_ == 0) BrowseView();   // redesign step 6: the real Browse page (the old Library stays as the Animate drawer)
     else {
         ViewPanel();
         TimelinePanel();

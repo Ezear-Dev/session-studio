@@ -58,12 +58,12 @@ void App::Dialogs() {
         if (ImGui::Button("Set the key")) {
             ImGui::CloseCurrentPopup();
             CommitKeyNow();
-            if (!doc_.HasPending()) Request(ask_); else ask_ = Ask::None;
+            if (!doc_.HasPending()) Request(ask_); else { ask_ = Ask::None; newAfterPick_ = false; }
         }
         ImGui::SameLine();
         if (ImGui::Button("Discard")) { ImGui::CloseCurrentPopup(); doc_.Checkpoint("discard"); doc_.DiscardPending(); Request(ask_); }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel")) { ask_ = Ask::None; ImGui::CloseCurrentPopup(); }
+        if (ImGui::Button("Cancel")) { ask_ = Ask::None; newAfterPick_ = false; ImGui::CloseCurrentPopup(); }
         ImGui::EndPopup();
     }
     if (ImGui::BeginPopupModal("Unsaved clip", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -73,7 +73,7 @@ void App::Dialogs() {
         ImGui::SameLine();
         if (ImGui::Button("Don't save")) { ImGui::CloseCurrentPopup(); Proceed(); }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel")) { ImGui::CloseCurrentPopup(); ask_ = Ask::None; }
+        if (ImGui::Button("Cancel")) { ImGui::CloseCurrentPopup(); ask_ = Ask::None; newAfterPick_ = false; }
         ImGui::EndPopup();
     }
     if (ImGui::BeginPopupModal("Change mode", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -94,7 +94,7 @@ void App::Dialogs() {
             if (SaveAs(overwriteName_, true) && afterSave_) { afterSave_ = false; Proceed(); }
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel")) { ImGui::CloseCurrentPopup(); afterSave_ = false; ask_ = Ask::None; }
+        if (ImGui::Button("Cancel")) { ImGui::CloseCurrentPopup(); afterSave_ = false; ask_ = Ask::None; newAfterPick_ = false; }
         ImGui::EndPopup();
     }
     if (ImGui::BeginPopupModal("Copy to another variant", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -133,7 +133,7 @@ void App::Dialogs() {
             else if (popOverwrite_) ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel")) { ImGui::CloseCurrentPopup(); afterSave_ = false; ask_ = Ask::None; }
+        if (ImGui::Button("Cancel")) { ImGui::CloseCurrentPopup(); afterSave_ = false; ask_ = Ask::None; newAfterPick_ = false; }
         ImGui::EndPopup();
     }
     if (ImGui::BeginPopupModal("Clips folder", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -204,6 +204,7 @@ void App::Shortcuts() {
     // redesign step 2 (2026-11-27): new shortcuts
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_N, false)) Request(Ask::New);
     if (ctrl && ImGui::IsKeyPressed(ImGuiKey_O, false)) openDialog_ = true;
+    if (ctrl && ImGui::IsKeyPressed(ImGuiKey_K, false)) { SetWorkspace(0); focusSearch_ = true; }   // redesign step 6: search
     if (!ctrl && !io.KeyAlt && ImGui::IsKeyPressed(ImGuiKey_Tab, false)) SetWorkspace(ws_ == 0 ? 1 : 0);
     if (!ctrl && ws_ == 1 && ImGui::IsKeyPressed(ImGuiKey_B, false)) drawer_ = !drawer_;
     if (ws_ != 1) return;   // Browse: the editing keys below act on the 3D view and the timeline, not shown there

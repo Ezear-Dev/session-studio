@@ -15,6 +15,7 @@
 #include "stage_renderer.h"
 #include "ui_theme.h"
 #include "ui_widgets.h"
+#include "library.h"
 #include <ctime>
 #include <shellapi.h>
 #include <shobjidl.h>

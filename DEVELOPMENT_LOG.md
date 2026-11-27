@@ -109,6 +109,11 @@ Important steps, technical decisions, problems and their solutions. Current stat
   part is `doc_`, the other waits in `comp_` and they are exchanged when the playhead crosses the ground contact
   (`app_landing.cpp`); shared-time arithmetic in `model/two_part_time` (tested). The landing is locked by default
   (the game's); unlocked, it is the landing clip of that trick, written by Save with the trick.
+- **Redesign step 6, the Browse page (11-27)**: Browse is now its own page (`app_browse.cpp`) instead of the old
+  Library panel, which stays as the drawer of Animate. The card data (variants, recorded, clip counts) and the rule
+  "which clip plays on this variant" moved from `App::ClipTargets` to `model/library` with offline tests; the playing
+  clip follows the player order (enabled, higher priority, then more specific, then the first). "New clip for this
+  variant" goes through the usual confirmations (`Ask::ChangeFigure`, then `Ask::New` via `newAfterPick_`).
 
 ## Problems met and solutions
 

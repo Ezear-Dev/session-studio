@@ -19,6 +19,7 @@
 struct ID3D11Device;
 struct ID3D11DeviceContext;
 class StageRenderer;
+struct LibCard;
 
 class App {
 public:
@@ -51,6 +52,19 @@ private:
     int ws_ = 1;                          // workspace: 0 Browse, 1 Animate (saved "ui.workspace")
     bool drawer_ = false;                 // Animate: the Library drawer is open (B)
     void SetWorkspace(int w);
+    // ---------------------------------------------------------------- redesign step 6 (2026-11-27): the Browse page (app_browse.cpp)
+    void BrowseView();
+    void BrowseDetail(const LibCard& card, const FigureVariant& cur, const std::vector<const Clip*>& clipPtrs);
+    void BrowseClipsTable(const std::string& q);
+    void BrowseCaptures(const std::string& q);
+    void AnimateVariant(const FigureVariant& v, bool newClip);   // pick v (through the confirmations) and go to Animate
+    std::string browseCat_;               // "" every card, a category, "#clips", "#captures" (saved "browse.view")
+    char browseSearch_[64] = {};
+    bool browseRecOnly_ = false, browseClipsOnly_ = false, focusSearch_ = false;
+    std::string browseCard_;              // FigureKey of the card shown in the detail panel
+    FigureVariant detailVar_;             // the variant chosen in the detail panel
+    int clipsFilter_ = 0;                 // My clips: 0 all, 1 on, 2 off, 3 problems, 4 the variant being edited
+    bool newAfterPick_ = false;           // Ask::ChangeFigure then a new clip (Browse: "New clip for this variant")
     struct Msg { std::string clock, text; };
     std::vector<Msg> msgs_;               // the last messages (game pill), newest last
     void PollGame(float dt);              // game process, mod files, log (install state, reload of the last save)

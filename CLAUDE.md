@@ -36,11 +36,11 @@ DLL ──writes──► SessionAnimLoader.native.log ──parsed by──► 
 - `SessionAnimLoader/Native/main.cpp` = the only file that touches the game: vtable hook, chaining behind
   ExpandedTricks, `ASN_*` Lua functions, `kVersion`.
 - `SessionStudio/model/` = **editor logic without interface** (static lib `asn_editor`, links `asn_core`): `EditorDoc`
-  (split over `editor_doc_*.cpp` by feature), IK, mannequin and board meshes, time view, view math, workspace
+  (split over `editor_doc_*.cpp` by feature), IK, mannequin and board meshes, time view, view math, Browse cards and the "which clip plays" rule (`library`), workspace
   (settings, backups, library file operations, game log parsing), paths.
 - `SessionStudio/app/` = interface only: one `App` class (`app.h`) split by panel since 2026-11-26 —
   `app.cpp` (core: files, clips, confirmations, frame), `app_shell.cpp` (workspaces layout, top bar, game pill, toasts, welcome),
-  `app_library.cpp`, `app_stage.cpp` (3D view, floating tools), `app_inspector.cpp` (Inspector card in the stage), `app_landing.cpp` (a trick and its landing clip on one timeline), `app_timeline.cpp`, `app_dialogs.cpp` (dialogs,
+  `app_browse.cpp` (Browse page), `app_library.cpp` (the Animate drawer), `app_stage.cpp` (3D view, floating tools), `app_inspector.cpp` (Inspector card in the stage), `app_landing.cpp` (a trick and its landing clip on one timeline), `app_timeline.cpp`, `app_dialogs.cpp` (dialogs,
   shortcuts); shared helpers in `app_internal.h` (namespace `app_detail`); `ui_theme.*` (palette, style, fonts, icons:
   **every colour comes from here**) and `ui_widgets.*` (themed buttons, toggles, switch, chips); `stage_renderer.cpp` (D3D11 mannequin render), `main.cpp` (window, loop, `--selftest`).
 - The editor reuses the mod's core library: **any change in `src/` affects both the DLL and the editor**.
