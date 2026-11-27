@@ -238,6 +238,8 @@ void App::MoreMenuItems() {
     if (ImGui::MenuItem("Studio mode", nullptr, &st)) { studio_ = st; SaveSetting(settings_, "ui.studio", studio_ ? "1" : "0"); }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Studio: precise values, track weights, bone list, Advanced tab.\nOff (Creator): the essentials. The clip does not change.");
     ImGui::Separator();
+    if (ImGui::MenuItem("Preferences...", "Ctrl+,")) popPrefs_ = true;   // redesign step 7
+    if (ImGui::MenuItem("Keyboard shortcuts", "F1")) popKeys_ = true;
     if (ImGui::MenuItem("Welcome and setup check")) showWelcome_ = true;
     if (ImGui::MenuItem("Open the guide")) OpenGuide();
     ImGui::Separator();
@@ -264,62 +266,141 @@ void App::OpenGuide() {
     ShellExecuteW(nullptr, L"open", L"notepad.exe", (L"\"" + md + L"\"").c_str(), nullptr, SW_SHOWNORMAL);
 }
 
-void App::WelcomeWindow() {
+void App::WelcomeWindow() {   // redesign step 7: a card like the dialogs (a plain window: the dialogs it opens come on top)
     if (!showWelcome_) return;
     const ImVec2 d = ImGui::GetIO().DisplaySize;
     const float fs = ImGui::GetFontSize();
+    const float w = std::min(d.x - fs * 2.f, fs * 44.f);
+    const float pad = fs * 1.6f;
     ImGui::SetNextWindowPos(ImVec2(d.x * 0.5f, d.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(std::min(d.x - fs * 2.f, fs * 40.f), 0.f), ImGuiCond_Appearing);
-    bool open = true;
-    if (!ImGui::Begin("Welcome to Session Studio###bienvenue", &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::End();
-        if (!open) showWelcome_ = false;
-        return;
+    ImGui::SetNextWindowSize(ImVec2(w, 0.f), ImGuiCond_Appearing);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, theme::Surface);
+    ImGui::PushStyleColor(ImGuiCol_Border, theme::Line);
+    ImGui::PushStyleColor(ImGuiCol_Button, theme::Raised);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.212f, 0.239f, 0.294f, 1.f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.270f, 0.302f, 0.365f, 1.f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, theme::Bg1);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, fs * 1.4f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, fs * 0.75f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.f);
+    const bool visible = ImGui::Begin("Welcome to Session Studio###bienvenue", nullptr,
+                                      ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::PopStyleVar(3);
+    bool close = false;
+    if (visible) {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(fs * 0.5f, fs * 0.45f));
+        // ---- header: the logo mark, the title, a close button
+        {
+            const float lh = std::round(fs * 2.8f);
+            const ImVec2 p = ImGui::GetCursorScreenPos();
+            dl->AddRectFilled(p, ImVec2(p.x + lh, p.y + lh), theme::U32(theme::Accent), lh * 0.28f);
+            if (theme::Strong()) {
+                const float ls = ImGui::GetStyle().FontSizeBase * 1.6f;
+                ImGui::PushFont(theme::Strong(), ls);
+                const ImVec2 ss = ImGui::CalcTextSize("S");
+                dl->AddText(ImVec2(p.x + (lh - ss.x) * 0.5f, p.y + (lh - ss.y) * 0.5f), theme::U32(theme::OnAccent), "S");
+                ImGui::PopFont();
+            }
+            ImGui::Dummy(ImVec2(lh, lh));
+            ImGui::SameLine(0, fs * 0.9f);
+            ImGui::BeginGroup();
+            if (theme::Strong()) ImGui::PushFont(theme::Strong(), ImGui::GetStyle().FontSizeBase * 1.45f);
+            ImGui::TextUnformatted("Welcome to Session Studio");
+            if (theme::Strong()) ImGui::PopFont();
+            ImGui::TextColored(theme::Text2, "%s", "Animate your skater here, then see it in Session.");
+            ImGui::EndGroup();
+            ImGui::SameLine(w - pad - ImGui::GetFrameHeight());
+            if (ui::IconButton("welcomeclose", theme::Icon::Close, "x", false, ui::Kind::Ghost)) close = true;
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Close (the ... menu at the top right brings it back)");
+        }
+        ImGui::PushTextWrapPos(w - pad);
+        ImGui::Dummy(ImVec2(0.f, fs * 0.2f));
+        ImGui::TextWrapped("%s", "You adjust a pose here, you save, and the game plays it right away, without restarting. The game itself is never modified: everything goes through clip files (.sanim) that you can share.");
+
+        // ---- the setup checker: one line per condition, with what to do when it is not met
+        struct Check { bool ok; const char* what; const char* fix; };
+        const Check checks[] = {
+            {!clipsDir_.empty() && DirExists(clipsDir_), "Game clips folder found",
+             "Choose the folder ...\\Win64\\Mods\\SessionAnimLoader\\clips (button below)."},
+            {modUe4ss_, "UE4SS (the mod loader) is installed", "Install UE4SS in the game's Win64 folder: without it, no mod loads."},
+            {modNative_ && modLua_, "The Session Anim Loader mod is installed (DLL + Lua)",
+             "Copy Mods\\SessionAnimLoader and Mods\\SessionAnimLoaderNative into the game's Mods folder, each with its enabled.txt."},
+            {skeletonOk_, "The game wrote the skater's skeleton",
+             "Start the game once with the mod and put the skater on the board: the _skeleton.json file is written by itself."},
+            {logFound_ && logHooked_, "The mod hooked into the game (last session)",
+             "Start the game and wait about 10 s with the skater: the mod hooks in by itself. Ctrl+F3 in game turns it on or off."},
+        };
+        int missing = 0;
+        for (const Check& c : checks) missing += !c.ok;
+        ImGui::Dummy(ImVec2(0.f, fs * 0.3f));
+        ImGui::TextColored(theme::Text3, "%s", "YOUR SETUP");
+        ImGui::SameLine();
+        if (missing) { char t[32]; snprintf(t, sizeof(t), "%d to fix", missing); ui::Chip(t, theme::Warn); }
+        else ui::Chip("all good", theme::Good);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(fs * 0.9f, fs * 0.7f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, fs * 0.5f);
+        ImGui::BeginChild("##setup", ImVec2(0.f, 0.f), ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding);
+        ImGui::PopStyleVar(2);
+        ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX());
+        for (const Check& c : checks) {
+            Dot(c.ok ? kGood : kBad);
+            ImGui::TextUnformatted(c.what);
+            if (!c.ok) { ImGui::Indent(fs * 1.2f); ImGui::TextColored(kAlert, "%s", c.fix); ImGui::Unindent(fs * 1.2f); }
+        }
+        ImGui::PopTextWrapPos();
+        ImGui::Dummy(ImVec2(0.f, fs * 0.1f));
+        if (ui::Button(clipsDir_.empty() ? "Choose the clips folder" : "Change the clips folder", clipsDir_.empty() ? ui::Kind::Primary : ui::Kind::Normal)) dirDialog_ = true;
+        if (!clipsDir_.empty()) {
+            ImGui::SameLine();
+            if (ui::Button("Open the clips folder")) OpenInExplorer(clipsDir_);
+        }
+        ImGui::EndChild();
+
+        // ---- how it works: five numbered steps
+        ImGui::Dummy(ImVec2(0.f, fs * 0.3f));
+        ImGui::TextColored(theme::Text3, "%s", "HOW IT WORKS");
+        const char* steps[] = {
+            "Do the move once in game: its original movement is recorded by itself (its dots turn green in Browse).",
+            "In Browse, pick the move, then the stance and the foot, and click \"Animate this variant\".",
+            "Pick a body part (click it in the view, or keys 1 to 7) and pull or rotate it: a key is set by itself.",
+            "Save (Ctrl+S): the clip is written into the game, which reloads it within a second. The game pill at the top confirms it.",
+            "Do the move again in game to see the result. Only your skater changes, on your screen.",
+        };
+        for (int i = 0; i < 5; i++) {
+            const ImVec2 p = ImGui::GetCursorScreenPos();
+            const float r = std::round(fs * 0.62f);
+            dl->AddCircleFilled(ImVec2(p.x + r, p.y + r), r, theme::U32(theme::Accent, 0.18f));
+            char n[4];
+            snprintf(n, sizeof(n), "%d", i + 1);
+            const ImVec2 ns = ImGui::CalcTextSize(n);
+            dl->AddText(ImVec2(p.x + r - ns.x * 0.5f, p.y + r - ns.y * 0.5f), theme::U32(theme::AccentHi), n);
+            ImGui::Dummy(ImVec2(r * 2.f, r * 2.f));
+            ImGui::SameLine(0, fs * 0.6f);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + r - fs * 0.5f);
+            ImGui::TextWrapped("%s", steps[i]);
+        }
+        ImGui::Dummy(ImVec2(0.f, fs * 0.1f));
+        ImGui::TextColored(theme::Text3, "%s", "Not supported yet: grinds, grabs, walking and running (in progress). Powerslide not checked yet.");
+        ImGui::PopTextWrapPos();
+
+        // ---- footer: a hint on the left, the buttons on the right
+        ImGui::Dummy(ImVec2(0.f, fs * 0.4f));
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextColored(theme::Text3, "%s", "F1: every shortcut");
+        const ImGuiStyle& s = ImGui::GetStyle();
+        const float bw = ImGui::CalcTextSize("Open the guide").x + ImGui::CalcTextSize("Start").x + s.FramePadding.x * 4.f + s.ItemSpacing.x + fs * 4.f;
+        ImGui::SameLine(w - pad - bw);
+        if (ui::Button("Open the guide")) OpenGuide();
+        ImGui::SameLine();
+        if (ui::Button("Start", ui::Kind::Primary, ImVec2(ImGui::CalcTextSize("Start").x + s.FramePadding.x * 2.f + fs * 4.f, 0.f))) close = true;
+        if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId) &&
+            (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || ImGui::IsKeyPressed(ImGuiKey_Enter, false))) close = true;
+        ImGui::PopStyleVar();
     }
-    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + fs * 38.f);
-    ImGui::TextWrapped("%s", "Session Studio changes how your skater moves in Session. You adjust a pose here, you save, and the game plays it right away, without restarting. The game itself is never modified: everything goes through clip files (.sanim) that you can share.");
-    ImGui::Spacing();
-    ImGui::SeparatorText("Installation");
-    // the setup checker: one line per condition, with what to do when it is not met
-    auto Row = [&](bool ok, const char* what, const char* fix) {
-        Dot(ok ? kGood : kBad);
-        ImGui::TextUnformatted(what);
-        if (!ok && fix) { ImGui::Indent(fs * 1.2f); ImGui::TextColored(kAlert, "%s", fix); ImGui::Unindent(fs * 1.2f); }
-    };
-    Row(!clipsDir_.empty() && DirExists(clipsDir_), "Game clips folder found",
-        "Choose the folder ...\\Win64\\Mods\\SessionAnimLoader\\clips (button below).");
-    Row(modUe4ss_, "UE4SS (the mod loader) is installed",
-        "Install UE4SS in the game's Win64 folder: without it, no mod loads.");
-    Row(modNative_ && modLua_, "The Session Anim Loader mod is installed (DLL + Lua)",
-        "Copy Mods\\SessionAnimLoader and Mods\\SessionAnimLoaderNative into the game's Mods folder, each with its enabled.txt.");
-    Row(skeletonOk_, "The game wrote the skater's skeleton",
-        "Start the game once with the mod and put the skater on the board: the _skeleton.json file is written by itself.");
-    Row(logFound_ && logHooked_, "The mod hooked into the game (last session)",
-        "Start the game and wait about 10 s with the skater: the mod hooks in by itself. Ctrl+F3 in game turns it on or off.");
-    if (ImGui::Button("Choose the clips folder")) dirDialog_ = true;
-    ImGui::SameLine();
-    if (ImGui::Button("Open the clips folder")) OpenInExplorer(clipsDir_);
-    ImGui::Spacing();
-    ImGui::SeparatorText("How it works");
-    const char* steps[] = {
-        "1. Do the move once in game: its original movement is recorded by itself (it turns green in the Library).",
-        "2. In the Library, pick the move, the stance and the foot.",
-        "3. Pick a body part (buttons above the view, keys 1 to 7) and pull or rotate it: a key is set by itself.",
-        "4. Save (Ctrl+S): the clip is written into the game, which reloads it within a second. The game pill at the top confirms it.",
-        "5. Do the move again in game to see the result. Only your skater changes, on your screen.",
-    };
-    for (const char* st : steps) ImGui::TextWrapped("%s", st);
-    ImGui::Spacing();
-    ImGui::TextDisabled("%s", "Not supported yet: grinds, grabs, walking and running (in progress). Powerslide not checked yet.");
-    ImGui::PopTextWrapPos();
-    ImGui::Spacing();
-    const bool start = ui::Button("Start", ui::Kind::Primary, ImVec2(fs * 8.f, 0));
-    ImGui::SameLine();
-    if (ImGui::Button("Open the guide")) OpenGuide();
-    ImGui::SameLine();
-    ImGui::TextDisabled("%s", "(the ... menu at the top right, \"Welcome and setup check\", brings it back)");
     ImGui::End();
-    if (start || !open) {
+    ImGui::PopStyleColor(6);
+    if (close) {
         showWelcome_ = false;
         SaveSetting(settings_, "ui.welcomed", "1");
     }

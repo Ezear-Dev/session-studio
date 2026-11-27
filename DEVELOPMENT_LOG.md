@@ -114,6 +114,10 @@ Important steps, technical decisions, problems and their solutions. Current stat
   "which clip plays on this variant" moved from `App::ClipTargets` to `model/library` with offline tests; the playing
   clip follows the player order (enabled, higher priority, then more specific, then the first). "New clip for this
   variant" goes through the usual confirmations (`Ask::ChangeFigure`, then `Ask::New` via `newAfterPick_`).
+- **Redesign step 7, dialogs (11-27)**: `BeginDialog` / `DialogButtons` / `EndDialog` (`app_dialogs.cpp`) give every
+  modal the same look and keys (Enter = main button unless it is a Danger one, Esc = the last button). The welcome
+  stays a plain window, not a modal: the "Clips folder" dialog it opens must come on top of it. New Preferences
+  (text size = `style.FontScaleMain`, saved "ui.textsize") and a full keyboard and mouse list (F1).
 
 ## Problems met and solutions
 

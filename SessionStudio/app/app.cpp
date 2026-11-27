@@ -27,6 +27,8 @@ App::App(std::wstring exeDir) : exeDir_(std::move(exeDir)) {
         showFloor_ = st.Get("ui.floor") == "1";       // redesign step 3: the floor, OFF by default (tricks dip below it)
         showBoard_ = st.Get("ui.board") == "1";        // 2026-11-26 (mannequin stage 2): the board, OFF by default (approximate, see board_mesh.h)
         browseCat_ = st.Get("browse.view");   // redesign step 6
+        textSize_ = std::clamp((int)st.GetFloat("ui.textsize", 1.f), 0, 3);   // redesign step 7
+        if (ImGui::GetCurrentContext()) ImGui::GetStyle().FontScaleMain = kTextScales[textSize_];   // --selftest has no context
         const std::string bd = st.Get("backupDir");
         backupRoot_ = bd.empty() ? DefaultBackupRoot() : Widen(bd);
     }

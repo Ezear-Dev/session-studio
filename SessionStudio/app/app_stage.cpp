@@ -141,7 +141,7 @@ void App::StageOverlays(const ImVec2& p0, const ImVec2& sz) {
         ImGui::SameLine();
         ui::IconButton("stagehelp", theme::Icon::Help, "?", false, ui::Kind::Ghost);
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("In the view:\n  click: pick a body part or a bone\n  right-click + drag: orbit the view\n  middle-click + drag: pan the view\n  wheel: zoom\n\nKeyboard:\n  1-7: body parts   I: rotate / pull (IK)   F: center\n  Space: play   left / right arrows: previous / next frame   Home / End: start / end of the clip\n  K: set key   Del: delete the selected keys   Esc: deselect the keys\n  Ctrl+S: save   Ctrl+Z / Ctrl+Y: undo / redo   Ctrl+N: new clip   Ctrl+O: open\n  Tab: Browse / Animate   B: Library drawer\n\nTimeline:\n  Ctrl + wheel (or wheel on the ruler): zoom   Shift + wheel or middle-click: scroll");
+            ImGui::SetTooltip("In the view:\n  click: pick a body part or a bone\n  right-click + drag: orbit the view\n  middle-click + drag: pan the view\n  wheel: zoom\n\nKeyboard:\n  1-7: body parts   I: rotate / pull (IK)   F: center\n  Space: play   left / right arrows: previous / next frame   Home / End: start / end of the clip\n  K: set key   Del: delete the selected keys   Esc: deselect the keys\n  Ctrl+S: save   Ctrl+Z / Ctrl+Y: undo / redo   Ctrl+N: new clip   Ctrl+O: open\n  Tab: Browse / Animate   B: Library drawer\n\nTimeline:\n  Ctrl + wheel (or wheel on the ruler): zoom   Shift + wheel or middle-click: scroll\n\nF1: every shortcut");
     }
     EndOverlay("##view");
 

@@ -181,6 +181,11 @@ private:
     void ViewPanel();
     void TimelinePanel();
     void Dialogs();
+    void PreferencesDialog();             // redesign step 7: Ctrl+, (... menu)
+    void ShortcutsDialog();               // redesign step 7: F1 (... menu), every key and mouse action
+    bool popPrefs_ = false, popKeys_ = false;
+    char openFilter_[64] = {};            // "Open a clip": part of the file name
+    int textSize_ = 1;                    // index in kTextScales (saved "ui.textsize")
     void Shortcuts();
     void Status(const std::string& s);
     bool CommitKeyNow(bool quiet = false);

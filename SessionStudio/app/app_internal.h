@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <initializer_list>
 #include <map>
 #include "imgui.h"
 #include "ImGuizmo.h"
@@ -145,5 +146,14 @@ inline const char* kLimbLabel[7] = {"L Hand", "R Hand", "L Foot", "R Foot", "Pel
 inline const char* kLimbLong[7] = {"Left hand", "Right hand", "Left foot", "Right foot", "Pelvis", "Head", "Chest"};
 inline const ImU32 kLimbCol[7] = {IM_COL32(54, 197, 240, 220), IM_COL32(54, 197, 240, 220), IM_COL32(95, 211, 138, 220), IM_COL32(95, 211, 138, 220),
                                     IM_COL32(255, 148, 66, 230), IM_COL32(180, 140, 255, 220), IM_COL32(240, 210, 74, 220)};   // limb colours of the spec
+
+// redesign step 7 (2026-11-27): one look for every dialog (app_dialogs.cpp). BeginDialog opens the modal popup `id`
+// (no title bar: `title` is drawn in the title font); EndDialog only when it returned true.
+bool BeginDialog(const char* id, const char* title, float widthEm = 26.f, float heightEm = 0.f);
+void EndDialog();
+// a row of buttons on the right; returns the index clicked, or -1. Enter presses `primary` (never a Danger one),
+// Esc the last button (Cancel / Close).
+int DialogButtons(std::initializer_list<const char*> labels, int primary, int danger = -1);
+inline constexpr float kTextScales[4] = {0.9f, 1.f, 1.15f, 1.3f};   // Preferences, "Text size"
 
 } // namespace app_detail
