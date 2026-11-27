@@ -261,6 +261,8 @@ Important steps, technical decisions, problems and their solutions. Current stat
 
 - Same day, user's test: two kickflip clips each played their own landing; deleting one removed its landing, with the
   confirmation naming it. The user then asked for commit, push and the v0.29 release.
+- GitHub release `v0.29` published by the owner (first published without its files, added right after); v0.28 left
+  as it is. Attached files checked against the local ones (SHA-256).
 
 ## Gaps in this history
 

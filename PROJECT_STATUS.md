@@ -25,7 +25,7 @@ field `link`. The owner states that nobody has installed the v0.28 release yet.
 | Editor: save links the pair; open / delete / duplicate / rename keep it together; Save as makes a new pair; notes in the clip lists | Save and delete **✔** (user, 2026-11-27: two kickflips with their own landing; deleting one removed its landing, and the dialog said so). Duplicate, rename, Save as, and linking an older shared landing: **not verified** | interface code, no test; `--selftest` exit 0; user report |
 | Tests and build | 2 FAIL out of 19227 (the same two board / shoe checks as in §4) | `test.cmd`, `build.cmd` |
 | Installed | **v0.29** DLL + Lua (hashes equal to `dist`), editor in `SessionStudio\dist`; rollback: `_archive\installed-before-v0.29` (mod, clips) and `_archive\dist-before-v0.29`. The 7 clips of that day load with `--check-clips` | 2026-11-27 |
-| Release | After the user's test: commit, push and package asked for. Until the `v0.29` GitHub release is published, the public release is v0.28. Multiplayer not tried on v0.29 | — |
+| Release | Commit `a1673eb`; **GitHub release `v0.29` published by the owner** (latest). The three attached files have the same SHA-256 as the local `release\out` ones. The package binaries were rebuilt from the same source after the game test, not installed again. Multiplayer not tried on v0.29 | GitHub API, 2026-11-27 |
 
 Older files: an unlinked landing goes with the unlinked trick clip that is on (else the first); Save then writes the
 link into both (backup first). The user's two KickFlip landings have no trick clip left: they stay, labelled "landing
