@@ -7,7 +7,9 @@
 // file clips\_figures\<key>.json, key = "<Base>_<STANCE>_<regular|goofy>" (e.g. KickFlip_RGS_regular, Manual_SWS_goofy).
 #pragma once
 #include <cstdint>
+#include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 enum Stance { STANCE_Normal = 0, STANCE_Switch = 1, STANCE_Fakie = 2, STANCE_Nollie = 3, STANCE_Count = 4 };
@@ -60,11 +62,38 @@ struct FigureVariant {
 std::string FigureKey(const FigureVariant& v);          // "Manual_RGS_regular", "KickFlip_SWS_goofy", "Grind-Crooked_RGS_regular"
 bool StateNamed(uint32_t bit);                          // 2026-11-25: the state carries a name (trick, grind)
 bool ParseFigureKey(const std::string& key, FigureVariant& out);
-std::string VariantTitle(const FigureVariant& v);        // "Kickflip · Switch · regular" (for the interface)
+// v0.27: the names the game shows (FlipTrickDefinition.DisplayName), read at the pop. One per full name, because the
+// game names each stance on its own. Written by the mod to clips\_trick_names.json, read by the editor.
+class TrickNames {
+public:
+    static constexpr size_t kMaxBytes = 80;
+    // cleans the name (no control characters, trimmed, kMaxBytes); false if nothing usable or nothing changed
+    bool Set(const std::string& full, const std::string& shown);
+    const std::string* Find(const std::string& full) const;   // any case; nullptr if unknown
+    size_t Size() const { return byLower_.size(); }
+    std::string ToJson() const;
+    // adds the file's names without replacing those already here; false (nothing changed) if the file is unreadable
+    bool Merge(const std::string& text);
+private:
+    std::map<std::string, std::pair<std::string, std::string>> byLower_;   // lower full -> (full as written, shown)
+};
+// a late flip ("Late_Front_KickFlip", "Late_BackFoot_Heelflip"...; not the late ollies)
+bool IsLateFlip(const std::string& base);
+// 2026-11-27: the same move in another stance, as the game shows it. In switch and fakie the game shows a late flip
+// with the other foot than its internal name ("SWS_Late_BackFoot_KickFlip" = "Switch Late Front Foot Flip"), so going
+// between {normal, nollie} and {switch, fakie} takes the other foot's trick. Every other move keeps its name.
+FigureVariant WithStance(const FigureVariant& v, int stance);
+// "Kickflip · Switch · regular" (for the interface). Trick name: read in game (read may be null), else derived from
+// the internal name.
+std::string VariantTitle(const FigureVariant& v, const TrickNames* read = nullptr);
 // readable name of a trick: "BS_ShoveIt_360" -> "BS ShoveIt 360"
 std::string TrickDisplay(const std::string& base);
+// title of a trick's card: the name read for the normal stance, else TrickDisplay (the names of the other stances hold
+// the stance word, they would mislabel the card)
+std::string TrickCardTitle(const std::string& base, const TrickNames* read);
 
 // Catalogue of the known flip tricks of the game (seen in the logs of Session, ExpandedTricks and the P5b probe):
-// one name per trick and per stance, as the game writes it. The editor adds the moves found in _figures.
+// one name per trick and per stance, as the game writes it. This is the editor's whole trick list (2026-11-27): a trick
+// that is not here has no card, so add it here (recordings and clips of it are kept on disk).
 struct CatalogTrick { const char* full; const char* category; };
 const std::vector<CatalogTrick>& TrickCatalog();

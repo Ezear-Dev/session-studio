@@ -103,7 +103,7 @@ void App::BuildLandingPart() {
         doc_.NewClip(lv);
         SelectFigure(lv);
         DefaultMode();
-        if (doc_.HasFigure()) doc_.SetDuration(std::min(2.f, std::max(0.1f, doc_.FigureDuration())));   // the game keeps the landing up to 2 s
+        if (doc_.HasFigure()) doc_.SetDuration(TrickLandingLength(trick.duration, doc_.FigureDuration()));   // 2 s with the trick
         doc_.SeedKeys();
         doc_.SeedLandingFromTrick(trick);   // it starts where the trick ends
         fileName_.clear();

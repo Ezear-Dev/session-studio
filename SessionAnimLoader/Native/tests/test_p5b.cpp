@@ -152,9 +152,90 @@ TEST(p5b_recorder_new_pop_mid_recording) {
     tick(2, 2);             // new pop: the first one is dropped (< 16), the new trick starts at once (P6)
     CHECK(!r.TakeFinished(out, id));
     tick(2, 38);            // ~20 frames of pop 2
-    tick(3, 1);             // new pop: finished (>= 16)
-    CHECK(r.TakeFinished(out, id));
-    CHECK(out.times.size() >= 19 && out.times.size() <= 21);
+    // 2026-11-27 (late flips): a pop while the recorded trick is still in the air cuts it: it never landed, so it is
+    // not saved (before, it was saved cut short under its own name)
+    tick(3, 1);
+    CHECK(!r.TakeFinished(out, id));
+}
+
+// ------------------------------------------------------------------ late flips (2026-11-27): a second pop in mid-air
+namespace {
+// one trick state for `seconds`; kick = in the air with pop number `pop`, move number `fig`
+void Hold(FigureRecorder& r, bool kick, uint32_t pop, int fig, float seconds) {
+    std::vector<Quat> q(kRecBones, QIdent);
+    const int n = (int)(seconds * 60.f + 0.5f);
+    for (int i = 0; i < n; i++) {
+        GameState g{false, false, false, false, 0.f};
+        g.kickflip = kick; g.popSerial = pop; g.trickPhase = kick ? 1 : 0;
+        g.figId = kick ? fig : 0; g.figWanted = g.figId != 0;
+        r.Tick(g, q.data(), nullptr, kRecBones, 1.f / 60.f);
+    }
+}
+int AirFrames(const FigureRec& f) {
+    int n = 0;
+    for (int p : f.phases) if (p != FigureRecorder::kGroundPhase) n++;
+    return n;
+}
+}
+
+TEST(late_flip_does_not_save_the_cut_ollie_and_is_recorded) {
+    FigureRecorder r; r.Reset(kRecBones);
+    Hold(r, false, 0, 0, 0.1f);
+    Hold(r, true, 1, 5, 0.7f);     // ollie, long enough to be saved by the old rule
+    Hold(r, true, 2, 6, 0.5f);     // late flip in the air
+    Hold(r, false, 2, 0, 2.5f);    // ground: its tail
+    FigureRec out; int id = 0;
+    CHECK(r.TakeFinished(out, id) && id == 6);
+    CHECK(AirFrames(out) >= 14 && AirFrames(out) <= 17);
+    CHECK((int)out.times.size() - AirFrames(out) == FigureRecorder::kGroundTail);
+    CHECK(!r.TakeFinished(out, id));
+}
+
+TEST(late_flip_short_air_part_is_kept_but_not_for_a_ground_pop) {
+    FigureRecorder r; r.Reset(kRecBones);
+    Hold(r, false, 0, 0, 0.1f);
+    Hold(r, true, 1, 0, 0.4f);     // an ollie that needs no recording
+    Hold(r, true, 2, 6, 0.23f);    // the shortest late trick seen in the logs
+    Hold(r, false, 2, 0, 2.5f);
+    FigureRec out; int id = 0;
+    CHECK(r.TakeFinished(out, id) && id == 6);
+    Hold(r, true, 3, 7, 0.23f);    // the same length popped from the ground: still dropped
+    Hold(r, false, 3, 0, 2.5f);
+    CHECK(!r.TakeFinished(out, id));
+    int fig = 0; const char* why = "";
+    CHECK(r.TakeDropped(fig, why) && fig == 7 && std::string(why).find("short") != std::string::npos);
+    CHECK(!r.TakeDropped(fig, why));
+}
+
+TEST(late_flip_rule_does_not_apply_to_a_pop_out_of_a_grind) {   // the game may keep the ollie "on" while grinding
+    FigureRecorder r; r.Reset(kRecBones);
+    std::vector<Quat> q(kRecBones, QIdent);
+    Hold(r, false, 0, 0, 0.1f);
+    Hold(r, true, 1, 0, 0.3f);
+    for (int i = 0; i < 20; i++) {   // on the rail, the ollie still on
+        GameState g{false, false, false, false, 0.f};
+        g.kickflip = true; g.popSerial = 1; g.grind = true;
+        r.Tick(g, q.data(), nullptr, kRecBones, 1.f / 60.f);
+    }
+    Hold(r, true, 2, 6, 0.23f);    // popped from the rail: a normal pop, 0.5 s needed
+    Hold(r, false, 2, 0, 2.5f);
+    FigureRec out; int id = 0;
+    CHECK(!r.TakeFinished(out, id));
+}
+
+TEST(late_flip_is_not_blocked_by_a_recording_waiting_to_be_written) {
+    FigureRecorder r; r.Reset(kRecBones);
+    std::vector<Quat> q(kRecBones, QIdent);
+    GameState crouch{false, false, false, false, 0.f};
+    crouch.crouch = true; crouch.figId = 3; crouch.figWanted = true; crouch.figShort = true;
+    for (int i = 0; i < 40; i++) r.Tick(crouch, q.data(), nullptr, kRecBones, 1.f / 30.f);
+    Hold(r, true, 1, 0, 0.4f);     // the ollie's pop ends the crouch: it now waits to be written
+    Hold(r, true, 2, 6, 0.5f);     // the late flip, before the game thread has taken the crouch
+    Hold(r, false, 2, 0, 0.3f);
+    FigureRec out; int id = 0;
+    CHECK(r.TakeFinished(out, id) && id == 3 && out.phases.empty() && out.times.size() >= 16);
+    Hold(r, false, 2, 0, 2.5f);
+    CHECK(r.TakeFinished(out, id) && id == 6 && !out.phases.empty() && AirFrames(out) >= 14);
 }
 
 TEST(p6_recorder_trick_from_manual) {   // a pop during a manual ends the manual recording and records the trick

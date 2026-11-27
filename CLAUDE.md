@@ -94,7 +94,8 @@ the scripts call `D:\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\v
 
 **Code constraints**
 - Lua: everything runs in the per-frame hook `SkaterCharacterBase:GetSkateboardingAnimParams` (game thread).
-  No `LoopAsync`, no `FindAllOf` while playing; key handlers only raise a flag. No Lua interpreter is available
+  No `LoopAsync`, no `FindAllOf` while playing (one exception, the board search after the bone table, §5); key
+  handlers only raise a flag. No Lua interpreter is available
   offline: read Lua changes twice.
 - DLL: touch only the mesh given by the Lua, check the bone count every frame, keep `__try` around game memory,
   refuse cleanly (log, no crash) when offsets do not match the game build.
@@ -130,7 +131,23 @@ creator gains.
   lengths, and a post pass after the other mods restores them (`legPostPass` in `_studio.json`).
 - Skeleton: 70 bones, parents before children; board bones `SKXX_SkateSkel_*` from index 58. The skeleton's board
   bones are **not** the visible physics board (they do not flip).
+- The **visible board** (probe of 2026-11-27, regular stance): actor `Skateboard` (class `PBP_SkateboardEx_C`), deck =
+  its component named `Flipper` (rotation read with `K2_GetComponentToWorld().Rotation`, which Lua can read directly).
+  No skater property leads to it and it has no owner, so it needs `FindAllOf`: allowed **only after the bone table is
+  sent** (owner's decision, 2026-11-27), never during play. In the mesh's component space it rides at (0, 0, 7.0),
+  unrotated; a kickflip turns it 360° about its X, and after a shove-it it stays turned round. It is recorded into
+  the move recordings (`src/board.h`, figure field `board`), never written in game.
 - `FootPositionType`: 1 normal, 2 fakie, 3 nollie, 4 switch; fakie / nollie exist only crouched (and for tricks).
+- **Trick names** (mod v0.27): at each pop the Lua sends the FlipTrick's `DisplayName`; the DLL keeps them per full
+  name in `clips\_trick_names.json`, which the editor reads. Never type a name by hand into the catalogue. The editor's
+  trick list is the catalogue (`trick.cpp`) alone, with the names the game really sends (`Late_BackFoot_...`,
+  `Late_Front_...`), not asset names (`Late_LF_...`).
+- **Late tricks** are a second pop in mid-air (about 0.5 s to the ground; the catch / IsLanding comes almost at once).
+  In **switch and fakie** the game names a late flip with the other foot than its internal name (normal and nollie do
+  not; goofy never checked): cards follow `WithStance`. A trick clip gives its legs back at the catch unless
+  `play.legsAfterCatch` (v0.28).
+- The 3D mannequin's shoe soles come from the skeleton's reference toe offset (sole up = foot bone X), never from a
+  recorded pose.
 - Replay = `CustomMovementMode == 6`: the mod stands by (the replay already records our layer).
 - Mirroring is per bone; the right hand's local frame is turned 180° from the left. The editor mirrors its 3D view on
   Y (Unreal is left-handed). The game mesh has no twist bones (raised arm without clavicle crushes the shoulder).

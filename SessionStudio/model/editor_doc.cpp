@@ -120,6 +120,7 @@ bool EditorDoc::LoadFigure(const std::string& json, const FigureVariant& v, std:
     if (!ParseFigure(json, r, err)) return false;
     if (HasSkeleton() && r.bones != BoneCount())
         return Fail(err, "recording made with another skeleton (" + std::to_string(r.bones) + " bones instead of " + std::to_string(BoneCount()) + "): record it again in game");
+    FaceBoardForward(r);
     fig_ = std::move(r);
     if (!(variant_ == v)) ClearClipboard();   // another variant (the same one reloaded keeps the clipboard)
     variant_ = v;
@@ -171,6 +172,8 @@ void EditorDoc::ApplyFigureDefaults(Clip& c, const FigureVariant& v) const {
     c.mode = Mode::Additive;   // P6: edits are added on top of the game's animation by default
     // base poses: a held pose by default (a 3 s loop never stays in phase with the game's own walk / push cycle)
     c.hold = false;   // user 2026-11-25: a held pose has no life; animated loops by default, hold is an option
+    // 2026-11-27: late flips raise the catch almost at once, so their clips keep the legs after it by default
+    c.legsAfterCatch = v.state == ST_Trick && IsLateFlip(v.trick);
     if (!StateLoops(v.state)) {   // trick clip: a single pass, from the pop to the landing
         c.loop = false;
         c.hold = false;
@@ -356,6 +359,7 @@ float EditorDoc::PhaseStart(int phase) const {
 }
 
 float EditorDoc::LegWeightAt(float t) const {
+    if (clip_.legsAfterCatch) return 1.f;   // as in the player
     float tc = PhaseStart(3);
     if (tc < 0.f) tc = PhaseStart(4);
     if (tc < 0.f || !std::isfinite(t)) return 1.f;

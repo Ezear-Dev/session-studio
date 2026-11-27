@@ -116,7 +116,7 @@ void Player::StartLayer(const Clip* c, bool mirrored, uint64_t mirrorStamp, bool
     L.tc = L.trick && keepPhase ? tc : TrickClock{};
     L.grounded = L.trick && keepPhase && grounded;
     L.hold = L.trick && !keepPhase;   // clock 0 at the pop; a resumed phase is not held
-    L.legW = legW_;
+    L.legW = c->legsAfterCatch ? 1.f : legW_;
     L.nKeys = 0;
     L.hasPel = false;
     L.pel[0] = L.pel[1] = L.pel[2] = 0.f;
@@ -142,7 +142,7 @@ void Player::EvalLayer(Layer& L, const GameState& gs) {
     if (L.tFixed >= 0.f) t = L.tFixed;   // 2026-11-26: remote layer, time given by the peer
     L.tEval = t;
     L.mode = c->mode;
-    if (L.trick) L.legW = legW_;
+    if (L.trick) L.legW = c->legsAfterCatch ? 1.f : legW_;   // v0.28: a clip may keep its legs after the catch
     L.nKeys = 0;
     for (auto& tr : c->tracks) {
         if (tr.index < 0 || tr.index >= n_ || L.nKeys >= kMaxBones) continue;

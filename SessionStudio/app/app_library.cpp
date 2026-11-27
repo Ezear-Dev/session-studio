@@ -19,10 +19,6 @@ void LibTitle(const char* text, float scale) {
     ImGui::TextUnformatted(text);
     if (theme::Strong()) ImGui::PopFont();
 }
-
-bool SameMove(const FigureVariant& a, const FigureVariant& b) {
-    return a.state == b.state && (!StateNamed(a.state) || Lower(a.trick) == Lower(b.trick));
-}
 } // namespace
 
 void App::TricksPanel() {
@@ -54,8 +50,9 @@ void App::TricksPanel() {
         ImGui::End();
         return;
     }
+    const FigureVariant shown = ShownVar();
     auto pick = [&](const FigureVariant& v) {
-        if (v == var_) return;
+        if (v == shown) return;
         askVar_ = v;
         Request(Ask::ChangeFigure);
     };
@@ -64,32 +61,32 @@ void App::TricksPanel() {
 
     // ---- the move being edited: its variant grid (click = that variant), recorded or not
     const LibCard* card = nullptr;
-    for (auto& c : cards) if (SameMove(c.base, var_)) card = &c;
+    for (auto& c : cards) if (CardHolds(c, shown)) card = &c;
     ImGui::Spacing();
-    LibTitle(card ? card->title.c_str() : VariantTitleUi(var_).c_str(), 1.1f);
+    LibTitle(card ? card->title.c_str() : VariantTitleUi(shown).c_str(), 1.1f);
     if (card) {
         ImGui::TextColored(theme::Text3, "%s  ·  recorded in %d of %d variants", card->category.c_str(), card->recorded, card->variants);
         ImGui::Spacing();
         bool click = false;
         FigureVariant cv;
-        VariantGrid(*card, var_, nullptr, "Click: edit this variant", &click, &cv, nullptr, nullptr);
+        VariantGrid(*card, shown, nullptr, "Click: edit this variant", &click, &cv, nullptr, nullptr);
         if (click) pick(cv);
     }
-    if (FigureReady(var_)) {
+    if (FigureReady(shown)) {
         ImGui::TextColored(theme::Good, "%s", "Game movement recorded");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("The game's movement for this variant is recorded: you can edit it.");
         ImGui::SameLine();
-        if (ImGui::SmallButton(FigureRedo(var_) ? "redo in game" : "record again")) RequestRerecord(var_);
+        if (ImGui::SmallButton(FigureRedo(shown) ? "redo in game" : "record again")) RequestRerecord(shown);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("The next time you do this move in game, its movement is recorded again.");
     } else {
         ImGui::PushTextWrapPos(0.f);
-        ImGui::TextColored(theme::Warn, "Do \"%s\" once in game: the mod records it by itself.", VariantTitleUi(var_).c_str());
+        ImGui::TextColored(theme::Warn, "Do \"%s\" once in game: the mod records it by itself.", VariantTitleUi(shown).c_str());
         ImGui::PopTextWrapPos();
     }
 
     // ---- Tricks / Clips / Captures
     int nClips = 0;
-    for (auto& ci : clips_) if (ClipTargets(ci.clip, var_)) nClips++;
+    for (auto& ci : clips_) if (ClipTargets(ci.clip, shown)) nClips++;
     const std::string clipsLab = "Clips " + std::to_string(clipsAll_ ? (int)clips_.size() : nClips);
     const std::string capsLab = "Captures " + std::to_string(captures_.size());
     const char* tabs[3] = {"Tricks", clipsLab.c_str(), capsLab.c_str()};
@@ -159,12 +156,11 @@ void App::LibraryTricks(const std::vector<LibCard>& cards, const std::function<v
         if (col) ImGui::SameLine(0, gap);
         ImGui::PushID((int)i);
         FigureVariant dv;
-        const int r = LibCardUi(c, ImVec2(cw, ch), var_, SameMove(c.base, var_), "Click: animate it (same stance and foot) · a dot: that variant", &dv);
+        const int r = LibCardUi(c, ImVec2(cw, ch), ShownVar(), CardHolds(c, ShownVar()), "Click: animate it (same stance and foot) · a dot: that variant", &dv);
         if (r == 1) {
-            FigureVariant v = c.base;   // keep the stance and the foot being edited
-            v.stance = var_.stance;
-            v.goofy = var_.goofy;
-            if (!StateAllStances(v.state) && v.stance > STANCE_Switch) v.stance = STANCE_Normal;
+            int stance = ShownVar().stance;   // keep the stance and the foot being edited
+            if (!StateAllStances(c.base.state) && stance > STANCE_Switch) stance = STANCE_Normal;
+            FigureVariant v = c.cell[stance][ShownVar().goofy ? 1 : 0].v;
             pick(v);
         } else if (r == 3) pick(dv);
         ImGui::PopID();
@@ -189,10 +185,10 @@ void App::LibraryClips() {
     ImGui::BeginChild("##clips", ImVec2(0, 0), ImGuiChildFlags_None);
     int shown = 0;
     for (auto& ci : clips_) {
-        if (!clipsAll_ && ci.err.empty() && !ClipTargets(ci.clip, var_)) continue;   // broken files: always shown
+        if (!clipsAll_ && ci.err.empty() && !ClipTargets(ci.clip, ShownVar())) continue;   // broken files: always shown
         shown++;
         const Clip& c = ci.clip;
-        const bool open = ci.file == fileName_;
+        const bool open = ci.file == fileName_ || (hasComp_ && ci.file == comp_.fileName);
         ImGui::PushID(ci.file.c_str());
         const std::string stem = ci.file.size() > 6 ? ci.file.substr(0, ci.file.size() - 6) : ci.file;
         if (!ci.err.empty()) {   // a file the game refuses too: say so, offer the menu (delete), nothing else

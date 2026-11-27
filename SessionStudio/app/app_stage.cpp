@@ -119,8 +119,13 @@ void App::StageOverlays(const ImVec2& p0, const ImVec2& sz) {
             }
             if (ui::Switch("##floor", &showFloor_, "Floor")) SaveSetting(settings_, "ui.floor", showFloor_ ? "1" : "0");
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("A floor at the game's ground reference (height 0), with the skater's front in red.\nIn tricks, the game's own animation dips below it for a few frames (the pop):\nthe feet then go through it. That is the recording, not your clip.");
-            if (ui::Switch("##board", &showBoard_, "Board")) SaveSetting(settings_, "ui.board", showBoard_ ? "1" : "0");
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("An APPROXIMATE board (light arrow = nose), from the animation's board bones.\nIt is not the board you see in game (driven by physics): it does not flip in tricks,\nand the feet may not sit exactly on it. Use it as a rough guide only.");
+            if (ui::Switch("##realboard", &showRealBoard_, "Board")) SaveSetting(settings_, "ui.realboard", showRealBoard_ ? "1" : "0");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("The game's board as it moved when this movement was recorded (light arrow = nose).\nIn game, physics moves it a little differently every time. Trucks and wheels are drawn rigid.\nYour clip does not change the board.");
+            if (doc_.HasFigure() && !doc_.HasRealBoard()) {
+                ImGui::TextDisabled("This recording has no board:\nuse \"record again\", then do the move in game.");
+                if (ui::Switch("##board", &showBoard_, "Approximate board")) SaveSetting(settings_, "ui.board", showBoard_ ? "1" : "0");
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("An APPROXIMATE board from the animation's board bones, for recordings without the real one.\nIt does not flip in tricks, and the feet may not sit exactly on it. Use it as a rough guide only.");
+            }
             if (!bodyView_) {
                 ui::Switch("##volumes", &showVolumes_, "Volumes");
                 if (ImGui::IsItemHovered()) ImGui::SetTooltip("Limb volumes: the yellow line shows the bone's front face.\nA bone twisted on itself shows this way.");
@@ -141,7 +146,7 @@ void App::StageOverlays(const ImVec2& p0, const ImVec2& sz) {
         ImGui::SameLine();
         ui::IconButton("stagehelp", theme::Icon::Help, "?", false, ui::Kind::Ghost);
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("In the view:\n  click: pick a body part or a bone\n  right-click + drag: orbit the view\n  middle-click + drag: pan the view\n  wheel: zoom\n\nKeyboard:\n  1-7: body parts   I: rotate / pull (IK)   F: center\n  Space: play   left / right arrows: previous / next frame   Home / End: start / end of the clip\n  K: set key   Del: delete the selected keys   Esc: deselect the keys\n  Ctrl+S: save   Ctrl+Z / Ctrl+Y: undo / redo   Ctrl+N: new clip   Ctrl+O: open\n  Tab: Browse / Animate   B: Library drawer\n\nTimeline:\n  Ctrl + wheel (or wheel on the ruler): zoom   Shift + wheel or middle-click: scroll\n\nF1: every shortcut");
+            ImGui::SetTooltip("In the view:\n  click: pick a body part or a bone; click in the void: deselect\n  right-click + drag: orbit the view\n  middle-click + drag: pan the view\n  wheel: zoom\n\nKeyboard:\n  1-7: body parts   I: rotate / pull (IK)   F: center\n  Space: play   left / right arrows: previous / next frame   Home / End: start / end of the clip\n  K: set key   Del: delete the selected keys   Esc: deselect the keys\n  Ctrl+S: save   Ctrl+Z / Ctrl+Y: undo / redo   Ctrl+N: new clip   Ctrl+O: open\n  Tab: Browse / Animate   B: Library drawer\n\nTimeline:\n  Ctrl + wheel (or wheel on the ruler): zoom   Shift + wheel or middle-click: scroll\n\nF1: every shortcut");
     }
     EndOverlay("##view");
 
@@ -430,15 +435,22 @@ void App::ViewPanel() {
     auto refBone = [&](int b) { return b >= 0 && (s.names[b] == "AMXX_Master" || s.names[b] == "AMXX_Root"); };
     // 2026-11-26 (mannequin): the solid body, drawn with depth into a picture, under the ghost, dots, handles and rings
     bool body = false;
-    if ((bodyView_ || showBoard_) && stage_ && stage_->Ready()) {
+    if ((bodyView_ || showBoard_ || showRealBoard_) && stage_ && stage_->Ready()) {
         if (!mrigBuilt_) BuildBodyRig(csV);
         std::vector<const Mesh*> meshes;
         bool bodyBuilt = false;
-        // 2026-11-26 (mannequin stage 2): the board from the recorded board bones (also in the skeleton view)
-        if (showBoard_ && doc_.HasFigure() && brig_.ok) {
-            float tmp[3];
-            const bool recorded = doc_.OriginPos(brig_.deck, t_, tmp);   // old figures: rotations only (set on its wheels)
-            if (BuildBoardMesh(brig_, csV, recorded, board_)) meshes.push_back(&board_);
+        // 2026-11-27: the game's recorded board, at the same instant as the pose shown (also in the skeleton view); a
+        // recording without it can show the approximate board from the skeleton's board bones
+        if (doc_.HasFigure() && brig_.ok) {
+            if (doc_.HasRealBoard()) {
+                BoardPose bp;
+                if (showRealBoard_ && (landLockedHere ? doc_.OriginBoard(t_, bp) : doc_.BoardAt(t_, bp)) && BuildRealBoardMesh(bp, brig_.deck, board_))
+                    meshes.push_back(&board_);
+            } else if (showBoard_) {
+                float tmp[3];
+                const bool recorded = doc_.OriginPos(brig_.deck, t_, tmp);   // old figures: rotations only (set on its wheels)
+                if (BuildBoardMesh(brig_, csV, recorded, board_)) meshes.push_back(&board_);
+            }
         }
         if (bodyView_ && mrig_.ok) {
             const bool warnSide[2] = {doc_.Shoulder(0, t_).warn, doc_.Shoulder(1, t_).warn};
@@ -594,11 +606,11 @@ void App::ViewPanel() {
     bool usingGizmo = false;
     int ikR, ikU, ikF, ikH;
     const IkJoint ikKind = (ikMode_ && sel_ >= 0 && sel_ < n && !poseBlocked) ? doc_.IkHandle(sel_, ikR, ikU, ikF, ikH) : IkJoint::None;
-    if (landLockedHere) {   // 2026-11-27: the landing part of a trick, locked
-        banners.push_back({"The landing is locked: the game plays its own landing here. Unlock it in Clip settings to pose it.", theme::Warn});
+    if (landLockedHere) {   // 2026-11-27: the landing part of a trick, locked (no banner popping up during playback)
+        if (!playing_) banners.push_back({"The landing is locked: the game plays its own landing here. Unlock it in Clip settings to pose it.", theme::Warn});
     } else if (poseBlocked) {   // no handle: the game takes the legs back from the catch, or a locked instant
         banners.push_back({lockedHere ? "Start and end are locked to the game's pose: pose between them (Clip settings to unlock)."
-                                      : "After the catch, the game takes the legs back: pose them before the catch, or in the landing clip.", theme::Warn});
+                                      : "After the catch, the game takes the legs back: turn on \"Move the legs after the catch\" in Clip settings to pose them.", theme::Warn});
     } else if (ikKind != IkJoint::None) {
         const int joint = ikKind == IkJoint::Mid ? ikF : ikKind == IkJoint::Root ? ikU : ikH;
         const bool leg = IsLegBone(s.names[sel_]);
@@ -670,7 +682,10 @@ void App::ViewPanel() {
     }
     if (!usingGizmo) dragCheckpointed_ = false;
 
-    if (hovered && camDrag_ < 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGuizmo::IsOver() && !usingGizmo) {
+    // ImGuizmo remembers where its last handle was: it only counts when a handle was drawn this frame (else, once nothing
+    // is selected, clicks there would be ignored)
+    const bool handleShown = !landLockedHere && !poseBlocked && (ikKind != IkJoint::None || (sel_ >= 0 && sel_ == doc_.PelvisBone()) || (sel_ >= 0 && sel_ < n && doc_.IsEditable(sel_)));
+    if (hovered && camDrag_ < 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !(handleShown && ImGuizmo::IsOver()) && !usingGizmo) {
         int limbHit = -1;
         float best = 11.f;
         for (int k = 0; k < kLimbs; k++) {
@@ -686,6 +701,21 @@ void App::ViewPanel() {
         else if (sel_ >= 0) {
             const int any = PickBone(cam_, aspect, dcsV, std::vector<bool>(n, true), sz.x, sz.y, io.MousePos.x - p0.x, io.MousePos.y - p0.y);
             if (any >= 0 && IsLegBone(s.names[any]) && !doc_.IsTrickClip()) Status("legs can only be edited in a trick clip (the feet stay on the board)");
+            // 2026-11-27: a click in the void deselects. On the body (or, in the skeleton view, near a bone) it does not:
+            // that is a click that missed a joint, not the void
+            const float cx = io.MousePos.x - p0.x, cy = io.MousePos.y - p0.y;
+            bool onBody = any >= 0 && !skip(any) && !refBone(any);   // the hidden board and floor bones do not count
+            if (!onBody && body) onBody = PointOnMesh(cam_, aspect, body_, sz.x, sz.y, cx, cy);
+            else if (!onBody) for (int b = 0; b < n && !onBody; b++) {
+                const int p = s.parents[b];
+                if (p < 0 || skip(b) || refBone(b) || refBone(p)) continue;
+                ImVec2 a, e;
+                if (!P(dcsV[p], a) || !P(dcsV[b], e)) continue;
+                const float dx = e.x - a.x, dy = e.y - a.y, len = dx * dx + dy * dy;
+                const float k = len > 1e-6f ? std::clamp(((io.MousePos.x - a.x) * dx + (io.MousePos.y - a.y) * dy) / len, 0.f, 1.f) : 0.f;
+                onBody = std::hypot(io.MousePos.x - a.x - dx * k, io.MousePos.y - a.y - dy * k) < 10.f;
+            }
+            if (!onBody) sel_ = -1;
         }
     }
     // banners, bottom left, stacked upwards (left of the camera card)

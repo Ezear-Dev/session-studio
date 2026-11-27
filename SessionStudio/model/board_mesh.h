@@ -8,6 +8,7 @@
 // rebuilt rigidly from the deck's rotation and set on its lowest wheels.
 #pragma once
 #include "mannequin.h"
+#include "../../SessionAnimLoader/Native/src/board.h"
 
 struct BoardRig {
     int root = -1, deck = -1;
@@ -28,3 +29,9 @@ constexpr float kWheelRadius = 2.7f;
 // the board for pose cs. positionsRecorded: the figure holds the board bone positions (EditorDoc::OriginPos of the
 // deck bone). false (nothing drawn) when the deck bone is absent or not finite.
 bool BuildBoardMesh(const BoardRig& r, const std::vector<FTr>& cs, bool positionsRecorded, Mesh& out);
+
+// 2026-11-27: the game's visible board as recorded (BoardPose = its "Flipper" component). Trucks and wheels are rigid:
+// they were not measured. While riding, the Flipper sits at 7.0 cm and the skeleton's deck bone at 5.3 (probe of
+// 2026-11-27), so the dimensions above are lowered by 1.7 cm: derived from those two numbers, wheels at -0.1 cm.
+constexpr float kFlipperAboveDeckBone = 1.7f;
+bool BuildRealBoardMesh(const BoardPose& board, int deckBone, Mesh& out);

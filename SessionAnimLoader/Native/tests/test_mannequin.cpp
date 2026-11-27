@@ -220,6 +220,32 @@ TEST(mannequin_broken_poses_do_not_break) {
     CHECK(m.verts.empty() && m.idx.empty());
 }
 
+// 2026-11-27 (user: feet not flat on the board): a new "on foot" recording started with the torso leaning 46 degrees,
+// and every shoe was drawn leaning with it. The sole is a constant of the foot bone, read from the skeleton: the toe's
+// reference offset is (-10.05, 13.94, 0) on the left (sole up = +X, forward = +Y), the opposite on the right.
+TEST(mannequin_sole_comes_from_the_skeleton_not_from_a_pose) {
+    const SkeletonFile s = SkelM();
+    std::vector<FTr> lean = Stand(s);
+    for (const char* b : {"AMXX_Neck", "AMXX_Head"}) { const int i = Idx(s, b); lean[i].px += 50.f; lean[i].pz -= 15.f; }
+    for (const std::vector<FTr>& cal : {Stand(s), lean}) {
+        const MannequinRig r = BuildMannequinRig(s, cal);
+        for (int k = 0; k < 2; k++) {
+            const float side = k ? -1.f : 1.f;
+            CHECK(r.shoeOk[k]);
+            CHECK(std::fabs(r.shoeUp[k][0] - side) < 1e-3f && std::fabs(r.shoeUp[k][1]) < 1e-3f && std::fabs(r.shoeUp[k][2]) < 1e-3f);
+            CHECK(std::fabs(r.shoeFwd[k][1] - side) < 1e-3f && std::fabs(r.shoeFwd[k][0]) < 1e-3f);
+            CHECK(std::fabs(r.ankleH[k] - 10.05f) < 0.05f && std::fabs(r.footLen[k] - 13.94f) < 0.05f);
+        }
+    }
+    // another skeleton (no such toe offset): calibrated on the pose, the sole level with the GROUND even if the torso leans
+    SkeletonFile other = s;
+    for (const char* b : {"AMXX_L_Toe0", "AMXX_R_Toe0"})
+        for (int c = 0; c < 3; c++) other.refPos[(size_t)Idx(s, b) * 3 + c] = 0.f;
+    const MannequinRig r = BuildMannequinRig(other, lean);
+    for (int k = 0; k < 2; k++)
+        CHECK(r.shoeOk[k] && r.shoeUp[k][2] > 0.999f && std::fabs(r.ankleH[k] - 6.f) < 0.05f);   // Stand: ankle z 8, toe z 2
+}
+
 // the real files of the game folder (skipped when absent): the front from the standing pose is the way the knees bend
 // while riding, and the face looks the way of the chest when standing
 TEST(mannequin_on_the_real_figures) {

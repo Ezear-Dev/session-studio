@@ -202,6 +202,7 @@ private:
     std::set<std::string> figHave_, figRedo_;   // lower-case keys of _figures\*.json / *.refaire
     std::string figErr_;
     uint64_t figStamp_ = 0;
+    uint64_t namesStamp_ = 0;                   // v0.27: _trick_names.json as last read
     std::vector<ClipInfo> clips_;
     std::vector<TrickEntry> tricks_;
     std::string fileName_;                // .sanim opened or saved ("" = new)
@@ -214,7 +215,8 @@ private:
     bool showFloor_ = false;           // redesign step 3 (user 2026-11-27): the floor at the game's height 0, View > Floor (ui.floor)
     float stageAspect_ = 16.f / 9.f;   // of the last frame (Reset frames the skater for it)
     bool camFramed_ = false;           // the first view frames the skater
-    bool ghost_ = true, worldMode_ = false, showBoard_ = false   /* 2026-11-26 (mannequin stage 2): solid board, ui.board, off by default */, showVolumes_ = true;
+    bool ghost_ = true, worldMode_ = false, showBoard_ = false   /* approximate board, for recordings without the real one: ui.board, off by default */, showVolumes_ = true;
+    bool showRealBoard_ = true;           // 2026-11-27: the game's board as recorded with the move (ui.realboard)
     // 2026-11-26 (mannequin): "View: Body / Skeleton" (ui.view); the body rig is calibrated once per skeleton
     bool bodyView_ = true;
     std::unique_ptr<StageRenderer> stage_;
@@ -240,7 +242,7 @@ private:
     int LimbBone(int k) const;
     void SelectLimb(int k);
     void PelvisProps();
-    bool bodyFollow_ = true;
+    bool bodyFollow_ = false;
     bool shoulderAuto_ = true;            // 2026-11-25: natural shoulder at every key on a raised arm
     float pelStart_[3] = {}, pelGrab_[3] = {};
     float elbowDeg_ = 0.f;
@@ -283,6 +285,10 @@ private:
     TwoPartTime Parts() const;            // lengths of the two parts
     float SharedT() const;                // the playhead on the shared timeline
     const EditorDoc& TrickDoc() const { return inLanding_ ? comp_.doc : doc_; }
+    // 2026-11-27: what the title bar and the Library show: the trick, also while the playhead is in its landing (the
+    // interface must not change at the violet line)
+    const FigureVariant& ShownVar() const { return hasComp_ && inLanding_ ? comp_.var : var_; }
+    const std::string& ShownFile() const { return hasComp_ && inLanding_ ? comp_.fileName : fileName_; }
     bool LandingLockedHere() const;       // the playhead is in a locked landing: nothing can be posed
     const Clip* TrickForLanding() const;  // the trick of the landing being edited (in memory when on one timeline)
     void SwapParts();                     // exchanges the open part with comp_ (no pending change)

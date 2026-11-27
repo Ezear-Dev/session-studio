@@ -137,7 +137,7 @@ void App::HeaderBar() {
     std::string saveTxt;
     ImVec4 saveCol;
     if (doc_.HasPending() && !autoKey_) { saveTxt = "Change without key"; saveCol = theme::Warn; }
-    else if (fileName_.empty()) { saveTxt = Dirty() ? "Never saved · changed" : "Never saved"; saveCol = Dirty() ? theme::Warn : theme::Text2; }
+    else if (ShownFile().empty()) { saveTxt = Dirty() ? "Never saved · changed" : "Never saved"; saveCol = Dirty() ? theme::Warn : theme::Text2; }
     else if (Dirty()) { saveTxt = "Not saved"; saveCol = theme::Warn; }
     else { saveTxt = "Saved"; saveCol = theme::Good; }
     std::string gameTxt;
@@ -155,8 +155,8 @@ void App::HeaderBar() {
 
     // ---- centre: the variant (click: the Library) and the clip
     {
-        const std::string var = VariantTitleUi(var_) + (icons ? "  " + theme::Glyph(theme::Icon::Down) : std::string("  v"));
-        const std::string clip = fileName_.empty() ? std::string("new clip") : fileName_;
+        const std::string var = VariantTitleUi(ShownVar()) + (icons ? "  " + theme::Glyph(theme::Icon::Down) : std::string("  v"));
+        const std::string clip = ShownFile().empty() ? std::string("new clip") : ShownFile();
         const float wv = ImGui::CalcTextSize(var.c_str()).x + st.FramePadding.x * 2.f, wc = ImGui::CalcTextSize(clip.c_str()).x;
         const float total = wv + gapS + wc;
         float cx = (L.w - total) * 0.5f;                       // centred in the window when it fits
@@ -170,7 +170,7 @@ void App::HeaderBar() {
         ImGui::SameLine(0, gapS * 0.5f);
         ImGui::AlignTextToFramePadding();
         ImGui::TextColored(theme::Text2, "%s", clip.c_str());
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", fileName_.empty() ? "This clip is not a file yet: Save (Ctrl+S) gives it an automatic name." : "The clip file open, in the game's clips folder.");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", ShownFile().empty() ? "This clip is not a file yet: Save (Ctrl+S) gives it an automatic name." : "The clip file open, in the game's clips folder.");
     }
 
     // ---- right
@@ -180,7 +180,7 @@ void App::HeaderBar() {
     ImGui::AlignTextToFramePadding();
     ImGui::TextColored(saveCol, "%s", saveTxt.c_str());
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", doc_.HasPending() && !autoKey_ ? "A bone was changed without setting a key: K sets it at the time shown."
-        : fileName_.empty() ? "This clip is not on disk yet. Save (Ctrl+S) creates it in the game's clips folder."
+        : ShownFile().empty() ? "This clip is not on disk yet. Save (Ctrl+S) creates it in the game's clips folder."
         : Dirty() ? "Some changes are not in the file yet. Save (Ctrl+S) to keep them."
                   : "The file on disk holds everything you see.");
     ImGui::SameLine(0, gapL);

@@ -1,5 +1,7 @@
 #include "trick.h"
+#include "json.h"
 #include <cctype>
+#include <utility>
 
 namespace {
 const char* kPrefix[STANCE_Count] = {"RGS", "SWS", "FKS", "NLS"};
@@ -106,11 +108,113 @@ bool ParseFigureKey(const std::string& key, FigureVariant& out) {
 
 std::string TrickDisplay(const std::string& base) {
     std::string r = base;
+    // 2026-11-27: late tricks as the user reads them on screen ("Late_BackFoot_Heelflip" -> "Late Back Foot HeelFlip")
+    const std::string low = Lower(base);
+    for (const auto& foot : {std::make_pair("late_backfoot_", "Late Back Foot "), std::make_pair("late_front_", "Late Front Foot ")}) {
+        const std::string prefix = foot.first;
+        if (low.compare(0, prefix.size(), prefix) != 0) continue;
+        const std::string rest = low.substr(prefix.size());
+        r = foot.second + (rest == "kickflip" ? std::string("KickFlip") : rest == "heelflip" ? std::string("HeelFlip") : base.substr(prefix.size()));
+        break;
+    }
     for (char& c : r) if (c == '_') c = ' ';
     return r;
 }
 
-std::string VariantTitle(const FigureVariant& v) {
+namespace {
+bool FootMirrored(int stance) { return stance == STANCE_Switch || stance == STANCE_Fakie; }
+// the late flip of the other foot, in the catalogue's spelling; the trick itself when there is none
+std::string OtherFoot(const std::string& trick) {
+    const std::string low = Lower(trick);
+    const std::string back = "late_backfoot_", front = "late_front_";
+    std::string want;
+    if (low.compare(0, back.size(), back) == 0) want = front + low.substr(back.size());
+    else if (low.compare(0, front.size(), front) == 0) want = back + low.substr(front.size());
+    else return trick;
+    for (const CatalogTrick& t : TrickCatalog()) {
+        std::string b;
+        int st = 0;
+        if (SplitTrickName(t.full, b, st) && Lower(b) == want) return b;
+    }
+    return trick;
+}
+} // namespace
+
+bool IsLateFlip(const std::string& base) {
+    const std::string low = Lower(base);
+    auto ends = [&](const char* e) { const std::string t = e; return low.size() > t.size() && low.compare(low.size() - t.size(), t.size(), t) == 0; };
+    return low.compare(0, 5, "late_") == 0 && (ends("kickflip") || ends("heelflip"));
+}
+
+FigureVariant WithStance(const FigureVariant& v, int stance) {
+    FigureVariant r = v;
+    r.stance = stance;
+    if ((v.state == ST_Trick || v.state == ST_Landing) && FootMirrored(v.stance) != FootMirrored(stance)) r.trick = OtherFoot(v.trick);
+    return r;
+}
+
+std::string TrickCardTitle(const std::string& base, const TrickNames* read) {
+    const std::string* s = read ? read->Find("RGS_" + base) : nullptr;
+    return s ? *s : TrickDisplay(base);
+}
+
+bool TrickNames::Set(const std::string& full, const std::string& shown) {
+    std::string base;
+    int stance = 0;
+    if (full.size() > kMaxBytes || !SplitTrickName(full, base, stance)) return false;
+    std::string s;
+    for (unsigned char c : shown) if (c >= 0x20 && c != 0x7f) s += (char)c;
+    const size_t a = s.find_first_not_of(' ');
+    if (a == std::string::npos) return false;
+    s = s.substr(a, s.find_last_not_of(' ') - a + 1);
+    if (s.size() > kMaxBytes) {
+        size_t n = kMaxBytes;
+        while (n > 0 && ((unsigned char)s[n] & 0xC0) == 0x80) n--;   // never in the middle of a UTF-8 character
+        s.resize(n);
+    }
+    auto& e = byLower_[Lower(full)];
+    if (e.second == s) return false;
+    e = {full, s};
+    return true;
+}
+
+const std::string* TrickNames::Find(const std::string& full) const {
+    const auto it = byLower_.find(Lower(full));
+    return it == byLower_.end() ? nullptr : &it->second.second;
+}
+
+std::string TrickNames::ToJson() const {
+    auto str = [](const std::string& s) { JValue j; j.t = JValue::Str; j.s = s; return j; };
+    JValue root, names, version;
+    root.t = names.t = JValue::Obj;
+    version.t = JValue::Num; version.n = 1;
+    for (const auto& kv : byLower_) names.o.emplace_back(kv.second.first, str(kv.second.second));
+    root.o.emplace_back("format", str("sessionanimloader-tricknames"));
+    root.o.emplace_back("version", version);
+    root.o.emplace_back("names", std::move(names));
+    return JWrite(root) + "\n";
+}
+
+bool TrickNames::Merge(const std::string& text) {
+    JValue v;
+    std::string err;
+    if (!JParse(text, v, err)) return false;
+    const JValue* names = v.get("names");
+    if (!names || names->t != JValue::Obj) return false;
+    for (const auto& kv : names->o)
+        if (kv.second.t == JValue::Str && !Find(kv.first)) Set(kv.first, kv.second.s);
+    return true;
+}
+
+std::string VariantTitle(const FigureVariant& v, const TrickNames* read) {
+    // the trick's name for this stance: read in game, else derived
+    auto named = [&](const std::string& trick) {
+        const std::string* s = read ? read->Find(std::string(StancePrefix(v.stance)) + "_" + trick) : nullptr;
+        // derived: the foot word as the game shows it in this stance
+        FigureVariant here = v;
+        here.trick = trick;
+        return s ? *s : TrickDisplay(WithStance(here, STANCE_Normal).trick);
+    };
     std::string name;
     switch (v.state) {
         case ST_Manual: name = "Manual"; break;
@@ -121,12 +225,12 @@ std::string VariantTitle(const FigureVariant& v) {
         case ST_OnFoot: name = "On foot (standing)"; break;
         case ST_Riding: name = "Riding"; break;
         case ST_Crouch: name = "Crouch"; break;
-        case ST_Landing: name = v.trick.empty() ? std::string("Landing") : "Landing " + TrickDisplay(v.trick); break;
+        case ST_Landing: name = v.trick.empty() ? std::string("Landing") : "Landing " + named(v.trick); break;
         case ST_Walking: name = "Walking"; break;
         case ST_Pushing: name = "Pushing"; break;
         case ST_Running: name = "Running"; break;
         case ST_Dismount: name = "Dismount"; break;
-        default: name = TrickDisplay(v.trick); break;
+        default: name = named(v.trick); break;
     }
     return name + "  ·  " + StanceLabel(v.stance) + "  ·  " + (v.goofy ? "goofy" : "regular");
 }
@@ -134,8 +238,8 @@ std::string VariantTitle(const FigureVariant& v) {
 const std::vector<CatalogTrick>& TrickCatalog() {
     static const std::vector<CatalogTrick> k = {
         // ollies
-        {"RGS_Ollie", "Ollies"}, {"SWS_Ollie", "Ollies"}, {"FKS_Ollie", "Ollies"}, {"NLS_Nollie", "Ollies"},
-        {"RGS_ShittyOllie", "Ollies"}, {"SWS_ShittySwitchOllie", "Ollies"}, {"FKS_ShittyOllie", "Ollies"}, {"NLS_ShittyNollie", "Ollies"},
+        {"RGS_Ollie", "Ollies"}, {"SWS_Ollie", "Ollies"}, {"FKS_Ollie", "Ollies"}, {"NLS_Ollie", "Ollies"},
+        {"RGS_ShittyOllie", "Ollies"}, {"SWS_ShittyOllie", "Ollies"}, {"FKS_ShittyOllie", "Ollies"}, {"NLS_ShittyOllie", "Ollies"},
         {"RGS_NoComply", "Ollies"},
         // flips
         {"RGS_KickFlip", "Flips"}, {"SWS_KickFlip", "Flips"}, {"FKS_Kickflip", "Flips"}, {"NLS_Kickflip", "Flips"},
@@ -147,14 +251,22 @@ const std::vector<CatalogTrick>& TrickCatalog() {
         {"SWS_Hardflip360", "Flips"}, {"FKS_HardFlip360", "Flips"},
         {"RGS_InwardHeel", "Flips"}, {"SWS_InwardHeel", "Flips"}, {"SWS_Inward360", "Flips"},
         {"RGS_LaserFlip", "Flips"}, {"SWS_Laserflip", "Flips"},
+        {"RGS_Impossible", "Flips"}, {"SWS_Impossible", "Flips"}, {"FKS_Impossible", "Flips"},
+        {"RGS_Pressure_HardFlip", "Flips"}, {"SWS_Pressure_HardFlip", "Flips"}, {"RGS_Pressure_HeelFlip", "Flips"},
         {"RGS_Pressure_KickFlip", "Flips"}, {"SWS_Pressure_KickFlip", "Flips"},
         // shove-its
         {"RGS_BS_ShoveIt", "Shove-its"}, {"FKS_BS_ShoveIt", "Shove-its"}, {"RGS_BS_PopShuvIt", "Shove-its"}, {"RGS_BS_ShoveIt_360", "Shove-its"},
-        // late tricks
-        {"RGS_Late_LF_OllieNorth", "Late tricks"}, {"RGS_Late_RF_OllieSouth", "Late tricks"},
-        {"SWS_Late_LF_OllieSouth", "Late tricks"}, {"SWS_Late_RF_OllieNorth", "Late tricks"},
-        {"FKS_Late_LF_OllieNorth", "Late tricks"}, {"FKS_Late_RF_OllieSouth", "Late tricks"},
-        {"NLS_Late_LF_NollieNorth", "Late tricks"}, {"NLS_Late_RF_NollieSouth", "Late tricks"},
+        {"RGS_FS_ShoveIt", "Shove-its"}, {"NLS_FS_ShoveIt", "Shove-its"}, {"RGS_FS_ShoveIt_360", "Shove-its"},
+        {"RGS_BS_PopShuvIt360", "Shove-its"}, {"NLS_FS_PopShuvIt", "Shove-its"},
+        {"RGS_FS_PopShuvIt360", "Shove-its"}, {"SWS_FS_PopShuvIt360", "Shove-its"},
+        // late tricks: only names the game has really sent to the mod (logs up to 2026-11-27). The former LF / RF
+        // entries came from another mod's list of asset names and were never sent.
+        {"RGS_Late_Front_KickFlip", "Late tricks"}, {"RGS_Late_Front_HeelFlip", "Late tricks"},
+        {"RGS_Late_BackFoot_KickFlip", "Late tricks"}, {"RGS_Late_BackFoot_Heelflip", "Late tricks"},
+        {"RGS_Late_BackFoot_Ollie", "Late tricks"}, {"SWS_Late_Front_OllieNorth", "Late tricks"},
+        // the other stances the game has sent (their names are read in game, see TrickNames)
+        {"SWS_Late_BackFoot_KickFlip", "Late tricks"}, {"SWS_Late_Front_KickFlip", "Late tricks"},
+        {"FKS_Late_Front_KickFlip", "Late tricks"}, {"SWS_Late_BackFoot_Heelflip", "Late tricks"},
     };
     return k;
 }

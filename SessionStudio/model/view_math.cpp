@@ -90,6 +90,27 @@ int PickBone(const OrbitCamera& c, float aspect, const std::vector<FTr>& cs, con
     return best;
 }
 
+bool PointOnMesh(const OrbitCamera& c, float aspect, const Mesh& m, float vpW, float vpH, float mx, float my) {
+    const size_t n = m.verts.size();
+    std::vector<float> xy(n * 2);
+    std::vector<char> ok(n, 0);
+    for (size_t i = 0; i < n; i++) {
+        const float p[3] = {m.verts[i].pos[0], -m.verts[i].pos[1], m.verts[i].pos[2]};
+        ok[i] = Project(c, aspect, p, vpW, vpH, xy[i * 2], xy[i * 2 + 1]) ? 1 : 0;
+    }
+    for (size_t t = 0; t + 2 < m.idx.size(); t += 3) {
+        const uint32_t a = m.idx[t], b = m.idx[t + 1], d = m.idx[t + 2];
+        if (a >= n || b >= n || d >= n || !ok[a] || !ok[b] || !ok[d]) continue;
+        auto side = [&](uint32_t u, uint32_t v) {
+            return (xy[v * 2] - xy[u * 2]) * (my - xy[u * 2 + 1]) - (xy[v * 2 + 1] - xy[u * 2 + 1]) * (mx - xy[u * 2]);
+        };
+        const float s0 = side(a, b), s1 = side(b, d), s2 = side(d, a);
+        const bool neg = s0 < 0.f || s1 < 0.f || s2 < 0.f, pos = s0 > 0.f || s1 > 0.f || s2 > 0.f;
+        if (!(neg && pos) && (neg || pos)) return true;   // same side of the three edges (a flat triangle: no)
+    }
+    return false;
+}
+
 void BoneMatrix(const FTr& t, float m[16]) {
     const Quat q = QNorm(TrQ(t));
     const float x = q.x, y = q.y, z = q.z, w = q.w;

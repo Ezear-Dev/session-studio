@@ -190,6 +190,20 @@ MannequinRig BuildMannequinRig(const SkeletonFile& s, const std::vector<FTr>& ca
     }
     r.ok = r.pelvis >= 0 && r.head >= 0 && (r.neck >= 0 || r.spine3 >= 0 || r.spine2 >= 0);
     if (!r.ok) return r;
+    // the sole is a constant of the foot bone, written in the skeleton: in the reference the toe bone sits ankle height
+    // along the foot's X axis (below the sole's up) and foot length along its Y axis (forward). Game: left
+    // (-10.05, 13.94, 0), right the opposite. No pose is needed, so a recording cannot tilt the shoes.
+    for (int k = 0; k < 2; k++) {
+        const int fo = r.foot[k], to = r.toe[k];
+        if (fo < 0 || to < 0 || (size_t)to >= s.parents.size() || s.parents[to] != fo || (size_t)to * 3 + 2 >= s.refPos.size()) continue;
+        const float x = s.refPos[to * 3], y = s.refPos[to * 3 + 1], z = s.refPos[to * 3 + 2];
+        if (std::fabs(z) > 1.f || std::fabs(x) < 5.f || std::fabs(x) > 16.f || std::fabs(y) < 8.f || std::fabs(y) > 22.f) continue;
+        r.shoeUp[k][0] = x < 0.f ? 1.f : -1.f;
+        r.shoeFwd[k][1] = y > 0.f ? 1.f : -1.f;
+        r.ankleH[k] = std::fabs(x);
+        r.footLen[k] = std::fabs(y);
+        r.shoeOk[k] = true;
+    }
     V side, up, front;
     if (!Axes(r, cal, 1.f, side, up, front)) return r;
     // toes point to the front: the sign of up x side is fixed on the calibration pose
@@ -199,17 +213,19 @@ MannequinRig BuildMannequinRig(const SkeletonFile& s, const std::vector<FTr>& ca
     toes = toes - up * Dot(toes, up);
     if (Len(toes) > 1e-3f) r.frontSign = Dot(toes, front) >= 0.f ? 1.f : -1.f;
     front = front * r.frontSign;
-    // the sole: on the calibration pose the feet stand on the ground, so the sole is horizontal there
+    // other skeletons: on the calibration pose the feet stand on the ground, so the sole is level with the GROUND there
+    // (vertical = component +Z; the torso's own up leans with the skater)
+    const V ground{0, 0, 1};
     for (int k = 0; k < 2; k++) {
-        if (!Ok(cal, r.foot[k]) || !Ok(cal, r.toe[k])) continue;
+        if (r.shoeOk[k] || !Ok(cal, r.foot[k]) || !Ok(cal, r.toe[k])) continue;
         const V d = P(cal, r.toe[k]) - P(cal, r.foot[k]);
         V fw;
-        if (!Unit(d - up * Dot(d, up), fw)) continue;
+        if (!Unit(d - ground * Dot(d, ground), fw)) continue;
         const Quat inv = QInv(Q(cal, r.foot[k]));
-        const V lf = Rot(inv, fw), lu = Rot(inv, up);
+        const V lf = Rot(inv, fw), lu = Rot(inv, ground);
         r.shoeFwd[k][0] = lf.x; r.shoeFwd[k][1] = lf.y; r.shoeFwd[k][2] = lf.z;
         r.shoeUp[k][0] = lu.x; r.shoeUp[k][1] = lu.y; r.shoeUp[k][2] = lu.z;
-        r.ankleH[k] = std::clamp(-Dot(d, up), 5.f, 16.f);
+        r.ankleH[k] = std::clamp(-Dot(d, ground), 5.f, 16.f);
         r.footLen[k] = std::clamp(Dot(d, fw), 8.f, 22.f);
         r.shoeOk[k] = true;
     }
@@ -367,8 +383,7 @@ void BuildMannequinMesh(const MannequinRig& r, const std::vector<FTr>& cs, const
         if (ok(ca) && ok(fo)) B.Limb(P(cs, ca), P(cs, fo), 5.0f, 3.6f, BoneY(cs, ca), ca, colOf(ca), 0.18f, 0.28f, 0.9f);
         if (!ok(fo)) continue;
         B.Sphere(P(cs, fo), 3.6f, fo, colOf(fo));
-        // shoe (2026-11-26, user: feet not flat): it follows the foot bone with the sole calibrated on the standing
-        // pose: heel under the ankle, flat sole ankleH below it, toe cap past the toe bone
+        // shoe (2026-11-26, user: feet not flat): it follows the foot bone with the sole of BuildMannequinRig: heel under the ankle, flat sole ankleH below it, toe cap past the toe bone
         V f;
         if (r.shoeOk[k]) {
             const Quat qf = Q(cs, fo);

@@ -7,7 +7,7 @@
 -- Results: [SessionAnimLoader] lines in UE4SS.log + SessionAnimLoader.native.log next to the exe.
 -- Rules: everything runs in the per-frame hook (game thread), the keys only raise a flag.
 
-local VERSION = "v0.24"
+local VERSION = "v0.28"
 local TAG = "[SessionAnimLoader] "
 local HOOK_FN = "/Script/SessionGame.SkaterCharacterBase:GetSkateboardingAnimParams"
 
@@ -42,6 +42,7 @@ local P = {
     grind = false, powerslide = false, grab = false,
     replay = false,
     popZ = nil,   -- 2026-11-25 landing sync: actor Z at the pop (height above the takeoff during the trick)
+    deck = nil, boardTries = 0, boardT = 0,   -- 2026-11-27: the visible board's deck component (searched at adoption)
 }
 
 local function stats(why)
@@ -76,6 +77,84 @@ local function scanClips()
     end
 end
 
+-- ------------------------------------------------------------------ 2026-11-27 the visible board
+-- The board seen in game is its own actor; its "Flipper" component is the deck (the skeleton's board bones do not
+-- flip). No property of the skater leads to it (probe of 2026-11-27), so it is searched with FindAllOf ONLY after the
+-- bone table is sent (map load, new skater, new mesh): a few tries at most, then the result is kept. Never during
+-- play: if the board is lost, there is no board in the recordings until the next time.
+local BOARD = { CLASS = "PBP_SkateboardEx_C", NAME = "Skateboard", NEAR = 200, TRIES = 5, EVERY = 2.0 }
+
+local function componentNamed(actor, want)
+    local cls = q(function() return StaticFindObject("/Script/Engine.SceneComponent") end, nil)
+    local list = cls and q(function() return actor:K2_GetComponentsByClass(cls) end, nil)
+    if not list then return nil end
+    local n = q(function() return #list end, nil) or q(function() return list:GetArrayNum() end, 0)
+    for i = 1, tonumber(n) or 0 do
+        local c = q(function() return list[i]:get() end, nil) or q(function() return list[i] end, nil)
+        if valid(c) and q(function() return c:GetFName():ToString() end, "") == want then return c end
+    end
+    return nil
+end
+
+-- the deck of OUR board: an actor named "Skateboard" (another player's board may carry the name too: the nearest one)
+local function findDeck(sk)
+    local all = q(function() return FindAllOf(BOARD.CLASS) end, nil)
+    if type(all) ~= "table" then return nil end
+    local here = q(function() local v = sk:K2_GetActorLocation() return { v.X, v.Y, v.Z } end, nil)
+    if not here then return nil end
+    local best, bestD = nil, BOARD.NEAR * BOARD.NEAR
+    for _, b in ipairs(all) do
+        if valid(b) and q(function() return b:GetFName():ToString() end, "") == BOARD.NAME then
+            local c = componentNamed(b, "Flipper")
+            local d = c and q(function()
+                local v = c:K2_GetComponentLocation()
+                return (v.X - here[1]) ^ 2 + (v.Y - here[2]) ^ 2 + (v.Z - here[3]) ^ 2
+            end, nil)
+            if d and d <= bestD then best, bestD = c, d end
+        end
+    end
+    return best
+end
+
+local function boardSearch(sk, now)
+    if P.deck or P.boardTries <= 0 or now - P.boardT < BOARD.EVERY then return end
+    P.boardT, P.boardTries = now, P.boardTries - 1
+    P.deck = findDeck(sk)
+    if P.deck then
+        P.boardTries = 0
+        log("board: found, it will be recorded with the moves")
+    elseif P.boardTries == 0 then
+        log("board: not found near the skater: the moves are recorded without it (until the next map or skater)")
+    end
+end
+
+-- mesh and deck in world space -> C++ (every frame once the board is known: the frame a recording starts needs it)
+local function sendBoard()
+    if not P.deck or type(ASN_SetBoard) ~= "function" then return end
+    if not valid(P.deck) then
+        P.deck = nil
+        log("board: lost: the moves are recorded without it (until the next map or skater)")
+        return
+    end
+    local read, why = pcall(function()
+        local m = P.mesh
+        local ml = m:K2_GetComponentLocation()
+        local mx, my, mz = ml.X, ml.Y, ml.Z
+        local mq = m:K2_GetComponentToWorld().Rotation
+        local qx, qy, qz, qw = mq.X, mq.Y, mq.Z, mq.W
+        local ms = m:K2_GetComponentScale()
+        local sx, sy, sz = ms.X, ms.Y, ms.Z
+        local dl = P.deck:K2_GetComponentLocation()
+        local dx, dy, dz = dl.X, dl.Y, dl.Z
+        local dq = P.deck:K2_GetComponentToWorld().Rotation
+        ASN_SetBoard(mx, my, mz, qx, qy, qz, qw, sx, sy, sz, dx, dy, dz, dq.X, dq.Y, dq.Z, dq.W)
+    end)
+    if not read and not P.boardErrTold then
+        P.boardErrTold = true
+        log("board: cannot be read: " .. tostring(why))
+    end
+end
+
 -- name of the current FlipTrick (Name property, else the end of the object's full name); nil if unreadable
 local function trickName(ai)
     local ft = q(function() return ai.FlipTrick end, nil)
@@ -86,6 +165,11 @@ local function trickName(ai)
         n = full and string.match(full, "TRICK_([%w_]+)$") or nil
     end
     return n
+end
+
+-- v0.27: the name the game shows for the current FlipTrick (DisplayName, per stance); "" if unreadable
+local function trickShownName(ai)
+    return tostring(q(function() return ai.FlipTrick.DisplayName:ToString() end, "") or "")
 end
 
 -- trick: pop on the rising edge of IsTrickPending, phase = max(phase, observed step), ends on the ground or after 2 s
@@ -100,7 +184,8 @@ local function trickStep(ai, now)
             P.kickflip, P.phase, P.popT = true, 0, now
             P.groundT = nil
             P.popZ = nil   -- read by jumpState on this frame
-            pcall(function() ASN_SetTrick(name) end)
+            local shown = trickShownName(ai)
+            pcall(function() ASN_SetTrick(name, shown) end)
             log("trick recognised: " .. name)
         else
             if P.kickflip then P.kickflip, P.phase = false, 0 end
@@ -326,6 +411,7 @@ local function frame(ctx)
         if q(function() return sk:IsPlayerControlled() end, false) ~= true then return end   -- not the co-op proxies
         P.sk, P.skAddr, P.adoptT = sk, a, os.clock()
         P.mesh, P.meshAddr, P.rigFor, P.inst = nil, nil, nil, nil
+        P.deck, P.boardTries = nil, 0
         log("player skater adopted: " .. q(function() return sk:GetFName():ToString() end, "?"))
     end
     if not native() then
@@ -353,8 +439,10 @@ local function frame(ctx)
         P.state = st
         scanClips()
         P.scanT = now
+        P.deck, P.boardTries, P.boardT = nil, BOARD.TRIES, now - BOARD.EVERY   -- 2026-11-27: search the board again
     end
     if P.meshAddr == nil then return end
+    boardSearch(sk, now)
 
     -- installation waiting (ExpandedTricks not there yet): retry every 0.5 s
     if P.state == 0 and now - P.pollT >= 0.5 then
@@ -392,6 +480,7 @@ local function frame(ctx)
             end
         end
         local vz, dz, jok, popH = jumpState(sk)
+        sendBoard()   -- 2026-11-27: just before ASN_SetState, which takes it
         ASN_SetState(b01(manual), b01(nose), b01(goofy), b01(sw), ratio, b01(kf), serial, phase, b01(grind), b01(pslide), b01(grab),
                      b01(onBoard), b01(grounded), b01(crank), b01(landing), footPos, speed, b01(pushing), b01(replay),
                      vz, dz, jok, popH)

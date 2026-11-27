@@ -113,6 +113,22 @@ BoardRig BuildBoardRig(const SkeletonFile& s) {
     return r;
 }
 
+bool BuildRealBoardMesh(const BoardPose& board, int deckBone, Mesh& out) {
+    const int deck = deckBone > 0 ? deckBone : 0;
+    std::vector<FTr> cs((size_t)deck + 1, FTr{0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 0});
+    const Quat q = QNorm(board.q);
+    const V up = Rot(q, V{0, 0, 1});
+    FTr& d = cs[(size_t)deck];
+    d.qx = q.x; d.qy = q.y; d.qz = q.z; d.qw = q.w;
+    d.px = board.p[0] - up.x * kFlipperAboveDeckBone;
+    d.py = board.p[1] - up.y * kFlipperAboveDeckBone;
+    d.pz = board.p[2] - up.z * kFlipperAboveDeckBone;
+    BoardRig rigid;   // no truck or wheel bones: the rigid layout, whatever the skeleton's board does
+    rigid.deck = deck;
+    rigid.ok = true;
+    return BuildBoardMesh(rigid, cs, true, out);   // true: placed where it was, never moved down onto its wheels
+}
+
 bool BuildBoardMesh(const BoardRig& r, const std::vector<FTr>& cs, bool positionsRecorded, Mesh& out) {
     out.Clear();
     const int n = (int)cs.size();

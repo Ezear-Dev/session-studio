@@ -49,7 +49,7 @@ using Lua = RC::LuaMadeSimple::Lua;
 
 namespace {
 
-constexpr int kVersion = 24;
+constexpr int kVersion = 28;
 constexpr int SKM_CST = 0x4b0;    // USkinnedMeshComponent::ComponentSpaceTransformsArray[2] (0x10 apart)
 constexpr int SKM_EDIT = 0x4f0;   // USkinnedMeshComponent::CurrentEditableComponentTransforms
 constexpr int VT_FBT = 0x938;     // FinalizeBoneTransform slot in the skater mesh vtable
@@ -127,6 +127,10 @@ std::map<std::string, int> g_figIds;          // lower-case key -> id
 std::set<std::string> g_figHave, g_figRedo;   // lower-case keys of _figures\*.json / *.refaire (refreshed every scan)
 bool g_figScanned = false;
 std::string g_trickBase;                      // last trick given by ASN_SetTrick
+// 2026-11-27: the visible board of this frame (ASN_SetBoard, taken by the next ASN_SetState; game thread only)
+BoardPose g_boardNext;
+bool g_boardNextOk = false;
+std::string g_boardWhy;                       // last reason the board was refused (logged when it changes)
 std::string g_grindName;                      // 2026-11-25: grind in progress given by ASN_SetGrind ("" = unknown)
 uint32_t g_grindHash = 0;
 int g_trickStance = 0;
@@ -582,6 +586,16 @@ std::wstring Widen(const std::string& s) {
     return w;
 }
 bool FileExists(const std::wstring& p) { return GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES; }
+bool ReadWhole(const std::wstring& p, std::string& out) {
+    FILE* f = _wfsopen(p.c_str(), L"rb", _SH_DENYNO);
+    if (!f) return false;
+    char buf[4096];
+    size_t k;
+    out.clear();
+    while ((k = fread(buf, 1, sizeof(buf), f)) > 0 && out.size() < 1000000) out.append(buf, k);
+    fclose(f);
+    return true;
+}
 // writes <path>.tmp then renames: a reader never sees a half-written file
 bool WriteFileAtomic(const std::wstring& path, const std::string& text) {
     const std::wstring tmp = path + L".tmp";
@@ -699,10 +713,19 @@ int nPoll(const Lua& lua) { lua.set_integer(TryInstall()); return 1; }
 // ASN_Why() -> text of the state
 int nWhy(const Lua& lua) { lua.set_string(g_why); return 1; }
 
-// ASN_SetTrick(name): the FlipTrick that just popped ("RGS_KickFlip"...). Called by the Lua at the pop, before ASN_SetState.
+// v0.27: the names the game shows, for the editor (game thread only). Written by nScanClips, never at the pop.
+TrickNames g_trickNames;
+bool g_trickNamesDirty = false;
+
+// ASN_SetTrick(name, shown): the FlipTrick that just popped ("RGS_KickFlip"...) and the name the game shows for it
+// (optional, "" if unreadable). Called by the Lua at the pop, before ASN_SetState.
 int nSetTrick(const Lua& lua) {
-    std::string name, base;
+    std::string name, base, shown;
     ArgStr(lua, name);
+    if (ArgStr(lua, shown) && g_trickNames.Set(name, shown)) {
+        g_trickNamesDirty = true;
+        Log("trick name: %s = \"%s\"", name.c_str(), g_trickNames.Find(name)->c_str());
+    }
     int stance = 0;
     if (!SplitTrickName(name, base, stance)) { base = name; stance = 0; }
     g_trickBase = base;
@@ -721,6 +744,22 @@ int nSetGrind(const Lua& lua) {
     g_grindName = name;
     g_grindHash = name.empty() ? 0u : TrickHash(name);
     lua.set_integer(1);
+    return 1;
+}
+
+// ASN_SetBoard(17 numbers, see board.h): the visible board and the skater mesh in world space. Called by the Lua just
+// before ASN_SetState, on the frames where it could read both.
+int nSetBoard(const Lua& lua) {
+    double v[kBoardValues] = {};
+    bool all = true;
+    for (double& x : v) all = ArgNum(lua, x) && all;
+    const char* why = "";
+    g_boardNextOk = all && BoardInMesh(v, g_boardNext, why);
+    if (!g_boardNextOk) {
+        const std::string w = all ? why : "missing numbers";
+        if (w != g_boardWhy) { g_boardWhy = w; Log("board: not usable on some frames (%s)", w.c_str()); }
+    }
+    lua.set_integer(g_boardNextOk ? 1 : 0);
     return 1;
 }
 
@@ -774,6 +813,8 @@ int nSetState(const Lua& lua) {
     v[11] = 1;    // P6 lot 4 (onBoard): an older Lua sends 11 numbers
     v[15] = -1;
     for (double& x : v) ArgNum(lua, x);
+    const bool boardOk = g_boardNextOk;   // a board is only used by the state call that follows it
+    g_boardNextOk = false;
     // the game's replay (editor or filmer camera, CustomMovementMode 6): the skater is played back and its AnimInstance
     // stays frozen (it reads "riding, Speed 0" the whole replay). The recorded pose already holds our layers, so we stand
     // by: no state (every layer fades out) and no figure recorded from a replayed pose.
@@ -792,6 +833,8 @@ int nSetState(const Lua& lua) {
     }
     GameState gs{v[0] != 0, v[1] != 0, v[2] != 0, v[3] != 0, (float)v[4],
                  v[5] != 0, (uint32_t)(v[6] < 0 ? 0 : v[6]), (int)v[7]};
+    gs.boardOk = boardOk;
+    gs.board = g_boardNext;
     gs.grind = v[8] != 0;
     gs.grindHash = gs.grind ? g_grindHash : 0u;
     gs.powerslide = v[9] != 0;
@@ -927,6 +970,18 @@ int nScanClips(const Lua& lua) {
             DeleteFileW((figDir + L"\\" + o[0] + L".refaire").c_str());
         }
     }
+    static bool s_namesRead = false;
+    const std::wstring namesPath = g_lib->Dir() + L"\\_trick_names.json";
+    if (!s_namesRead) {   // the names of earlier sessions survive
+        s_namesRead = true;
+        std::string text;
+        if (FileExists(namesPath) && !(ReadWhole(namesPath, text) && g_trickNames.Merge(text)))
+            Log("_trick_names.json: unreadable, it will be written again from the names seen from now on");
+    }
+    if (g_trickNamesDirty) {
+        CreateDirectoryW(g_lib->Dir().c_str(), nullptr);
+        if (WriteFileAtomic(namesPath, g_trickNames.ToJson())) g_trickNamesDirty = false;
+    }
     g_figHave.clear();
     g_figRedo.clear();
     {
@@ -945,6 +1000,9 @@ int nScanClips(const Lua& lua) {
     g_figScanned = true;
     FigureRec rec;
     int figId = 0;
+    const char* why = "";
+    if (g_rec.TakeDropped(figId, why) && figId > 0 && figId <= (int)g_figKeys.size())   // 2026-11-27: never silent again
+        Log("move not recorded: %s (%s), it will be tried again", g_figKeys[figId - 1].c_str(), why);
     while (g_rec.TakeFinished(rec, figId)) {
         if (figId <= 0 || figId > (int)g_figKeys.size()) continue;
         rec.figure = g_figKeys[figId - 1];
@@ -957,6 +1015,7 @@ int nScanClips(const Lua& lua) {
             g_figRedo.erase(Lower(rec.figure));
             const int nf = (int)rec.times.size();
             Log("move recorded: %s, %d frames, %.2f s", rec.figure.c_str(), nf, nf ? rec.times.back() : 0.f);
+            Log("board: %s with %s", rec.board.empty() ? "NOT recorded (not readable on every frame)" : "recorded", rec.figure.c_str());
             std::string line = "move recorded: " + rec.figure + " (" + std::to_string(nf) + " frames)";
             if (!joined.empty()) joined += '\n';
             joined += line;
@@ -1140,6 +1199,7 @@ class SessionAnimLoaderNative : public RC::CppUserModBase {
             main_lua.register_function("ASN_Why", &nWhy);
             main_lua.register_function("ASN_SetState", &nSetState);
             main_lua.register_function("ASN_SetTrick", &nSetTrick);
+            main_lua.register_function("ASN_SetBoard", &nSetBoard);       // 2026-11-27
             main_lua.register_function("ASN_SetGrind", &nSetGrind);
             main_lua.register_function("ASN_ScanClips", &nScanClips);
             main_lua.register_function("ASN_Set", &nSet);

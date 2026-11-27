@@ -71,7 +71,8 @@ inline uint64_t FileStamp(const std::wstring& p) {   // modification date + size
 }
 inline std::string Short(const std::string& n) { return n.rfind("AMXX_", 0) == 0 ? n.substr(5) : n; }
 // UI Phase 4b: labels built outside the UI, in the chosen language
-inline std::string VariantTitleUi(const FigureVariant& v) { return VariantTitle(v); }
+inline TrickNames gTrickNames;   // v0.27: the names read in game (clips\_trick_names.json), reloaded by ScanFolder
+inline std::string VariantTitleUi(const FigureVariant& v) { return VariantTitle(v, &gTrickNames); }
 inline std::string BoneLabelUi(const std::string& n) { return BoneLabel(n); }
 
 // UE component space is left-handed (X forward, Y right, Z up). The 3D view is right-handed: Y is mirrored for display

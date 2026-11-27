@@ -48,7 +48,7 @@ std::vector<LibCard> App::LibraryCards(std::vector<const Clip*>& clipPtrs) const
         LibEntry e;
         e.base.state = ST_Trick;
         e.base.trick = t.base;
-        e.title = TrickDisplay(t.base);
+        e.title = TrickCardTitle(t.base, &gTrickNames);
         e.category = t.category;
         entries.push_back(e);
     }
@@ -300,7 +300,7 @@ void App::BrowseView() {
             if (col) ImGui::SameLine(0, gap);
             ImGui::PushID(idx);
             const std::string key = FigureKey(c.base);
-            const bool isCur = c.base.state == cur.state && (!StateNamed(c.base.state) || Lower(c.base.trick) == Lower(cur.trick));
+            const bool isCur = CardHolds(c, cur);
             FigureVariant dv;
             const int r = LibCardUi(c, ImVec2(cw, ch), cur, browseCard_ == key, "Click: details · double-click: animate · a dot: that variant", &dv);
             if (r == 1) { browseCard_ = key; detailVar_ = isCur ? cur : c.base; }
@@ -326,7 +326,7 @@ void App::BrowseView() {
         const LibCard* card = nullptr;
         for (auto& c : cards) if (FigureKey(c.base) == browseCard_) card = &c;
         if (!card) {   // nothing chosen yet: the card of what is being edited
-            for (auto& c : cards) if (c.base.state == cur.state && (!StateNamed(c.base.state) || Lower(c.base.trick) == Lower(cur.trick))) card = &c;
+            for (auto& c : cards) if (CardHolds(c, cur)) card = &c;
             if (card) { browseCard_ = FigureKey(card->base); detailVar_ = cur; }
         }
         if (card) BrowseDetail(*card, cur, clipPtrs);

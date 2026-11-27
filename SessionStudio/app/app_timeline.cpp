@@ -299,7 +299,11 @@ void App::TimelineTransport() {
         }
         if (hasComp_) {   // which part is open: the trick or its landing
             ImGui::SameLine(0, fs * 0.5f);
-            ui::Chip(inLanding_ ? (landLocked_ ? "landing (locked)" : "landing") : "trick", inLanding_ ? ImVec4(0.745f, 0.588f, 1.f, 1.f) : theme::Text2);
+            const char* part = inLanding_ ? (landLocked_ ? "landing (locked)" : "landing") : "trick";
+            ui::Chip(part, inLanding_ ? ImVec4(0.745f, 0.588f, 1.f, 1.f) : theme::Text2);
+            // the same room for every label: the transport is centred and must not move at the violet line
+            const float pad = ImGui::CalcTextSize("landing (locked)").x - ImGui::CalcTextSize(part).x;
+            if (pad > 0.5f) { ImGui::SameLine(0.f, 0.f); ImGui::Dummy(ImVec2(pad, 1.f)); }
         }
     }
     if (doc_.IsHold()) { ImGui::SameLine(); ImGui::AlignTextToFramePadding(); ImGui::TextDisabled("held pose"); if (ImGui::IsItemHovered()) ImGui::SetTooltip("A single pose, applied all the time."); }
@@ -331,11 +335,16 @@ void App::TimelineTransport() {
             ImGui::SetNextWindowSizeConstraints(ImVec2(fs * 18.f, 0.f), ImVec2(fs * 34.f, fs * 30.f));
             if (ImGui::BeginPopup("##endwarnings")) { EndWarnings(true); ImGui::EndPopup(); }
             ImGui::SameLine(0, fs * 0.8f);
+        } else if (hasComp_) {   // 2026-11-27: one part has warnings, the other not: keep the room
+            const float w = ImGui::CalcTextSize("9").x + fs * 1.4f + ImGui::GetStyle().FramePadding.x * 2.f;
+            ImGui::Dummy(ImVec2(w, ImGui::GetFrameHeight()));
+            ImGui::SameLine(0, fs * 0.8f);
         }
     }
-    const float dur = c.duration;
+    const float dur = hasComp_ ? Parts().Total() : c.duration;   // the view covers the trick and its landing
+    const float head = SharedT();
     const float mid = tview_.Start(dur) + tview_.Span(dur) * 0.5f;
-    const float anchor = tview_.Visible(t_, dur) ? t_ : mid;   // zoom around the playhead when it is visible
+    const float anchor = tview_.Visible(head, dur) ? head : mid;   // zoom around the playhead when it is visible
     if (ui::IconButton("zoomout", theme::Icon::ZoomOut, "-", false, ui::Kind::Ghost)) tview_.ZoomAt(1.f / 1.5f, anchor, dur);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("See more time (Ctrl + wheel on the timeline)");
     ImGui::SameLine(0, fs * 0.15f);
@@ -417,6 +426,16 @@ void App::TimelineGameRow() {
     }
 }
 
+// interpolation of the key of a row at k (the first bone of the row that has one there)
+static int KeyShape(const EditorDoc& d, float k, const std::vector<int>& bones) {
+    if (bones.empty()) return d.KeyInterp(k, -1);
+    for (int b : bones) {
+        const int ip = d.KeyInterp(k, b);
+        if (ip >= 0) return ip;
+    }
+    return -1;
+}
+
 void App::TimelinePanel() {
     const Layout L = Lay();
     Place(L.time.x, L.time.y, L.time.w, L.time.h);
@@ -443,7 +462,10 @@ void App::TimelinePanel() {
     }
     std::vector<DRow> rows;
     rows.push_back(DRow{"All", {}, -1, 0, "", false});
-    for (auto& G : doc_.KeyGroups(allRows_)) {
+    // 2026-11-27: one timeline, two files: the same rows on both sides of the violet line
+    const std::vector<EditorDoc::KeyGroup> groups = hasComp_ ? EditorDoc::MergeKeyGroups(doc_.KeyGroups(allRows_), comp_.doc.KeyGroups(allRows_))
+                                                             : doc_.KeyGroups(allRows_);
+    for (auto& G : groups) {
         const bool open = expanded_.count(G.id) != 0;
         const int prim = !G.children.empty() ? G.children.front().primary : G.bones.front();
         rows.push_back(DRow{G.label, G.bones, prim, 0, G.id, !G.children.empty()});
@@ -669,18 +691,34 @@ void App::TimelinePanel() {
             const float xd = XS(xDiv);
             if (xd >= q0.x && xd <= q0.x + W) dl->AddLine(ImVec2(xd, q0.y), ImVec2(xd, q0.y + rowH), IM_COL32(190, 150, 255, 170), 1.5f);
             if (ri == 0 && landLocked_ && xb - xa > fs * 6.f) dl->AddText(ImVec2(xa + fs * 0.5f, q0.y + (rowH - fs) * 0.5f), theme::U32(theme::Text3), "locked: the game's landing");
-            // the other part's keys, read-only (click: go there); a locked landing has none to show
+            // the other part's keys, read-only (click: go there); a locked landing has none to show. 2026-11-27: drawn
+            // as when that part is open (colour, shape, padlocks), so nothing flashes when the playhead changes part
             const bool otherIsLockedLanding = !inLanding_ && landLocked_;
             if (!otherIsLockedLanding) {
-                const float ooff = JoinTime(tp, inLanding_ ? 0 : 1, 0.f);
-                const std::vector<float> ok2 = r.bones.empty() ? comp_.doc.KeyTimes(-1) : comp_.doc.KeyTimesBones(r.bones);
-                const float my2 = q0.y + rowH * 0.5f, rr2 = std::min(fs * 0.30f, rowH * 0.28f);
+                const EditorDoc& od = comp_.doc;
+                const float ooff = JoinTime(tp, inLanding_ ? 0 : 1, 0.f), odur = od.clip().duration;
+                const std::vector<float> ok2 = r.bones.empty() ? od.KeyTimes(-1) : od.KeyTimesBones(r.bones);
+                const float my2 = q0.y + rowH * 0.5f, rr2 = std::min(fs * 0.35f, rowH * 0.32f);
+                auto padlock = [&](float x) {
+                    const ImU32 lc = IM_COL32(150, 175, 205, 225);
+                    dl->AddRectFilled(ImVec2(x - rr2 * 0.75f, my2 - rr2 * 0.05f), ImVec2(x + rr2 * 0.75f, my2 + rr2 * 0.85f), lc, rr2 * 0.15f);
+                    dl->PathArcTo(ImVec2(x, my2 - rr2 * 0.05f), rr2 * 0.48f, 3.14159f, 6.28318f, 10);
+                    dl->PathStroke(lc, 0, std::max(1.5f, rr2 * 0.25f));
+                };
+                auto otherLocked = [&](float k) { return od.LockedAt(k) && !(od.IsTrickClip() && std::fabs(k - odur) < 1e-3f && !r.bones.empty() && std::all_of(r.bones.begin(), r.bones.end(), [&](int bn) { return bn >= 0 && bn < od.BoneCount() && IsLegBone(od.skeleton().names[bn]); })); };
                 for (float k : ok2) {
                     const float x = XS(k + ooff);
                     if (!InView(x)) continue;
+                    if (otherLocked(k)) { padlock(x); continue; }
                     const ImVec2 pts2[4] = {ImVec2(x, my2 - rr2), ImVec2(x + rr2, my2), ImVec2(x, my2 + rr2), ImVec2(x - rr2, my2)};
-                    dl->AddConvexPolyFilled(pts2, 4, ri == 0 ? IM_COL32(142, 149, 161, 110) : IM_COL32(232, 193, 80, 110));
+                    const int ip = KeyShape(od, k, r.bones);
+                    const ImU32 col = ri == 0 ? theme::U32(theme::Text2, 0.88f) : IM_COL32(232, 193, 80, 225);
+                    if (ip == EditorDoc::IP_Step) dl->AddRectFilled(ImVec2(x - rr2 * 0.8f, my2 - rr2 * 0.8f), ImVec2(x + rr2 * 0.8f, my2 + rr2 * 0.8f), col);
+                    else dl->AddConvexPolyFilled(pts2, 4, col);
+                    if (ip == EditorDoc::IP_Linear) dl->AddLine(ImVec2(x - rr2 * 0.5f, my2), ImVec2(x + rr2 * 0.5f, my2), IM_COL32(40, 40, 40, 255), 2.f);
                 }
+                if (ri == 0) for (float lt : {0.f, odur})
+                    if (od.LockedAt(lt) && InView(XS(lt + ooff)) && std::none_of(ok2.begin(), ok2.end(), [&](float k) { return std::fabs(k - lt) < 1e-3f; })) padlock(XS(lt + ooff));
             }
         }
         const std::vector<float> keys = roOpen ? std::vector<float>() : r.bones.empty() ? doc_.KeyTimes(-1) : doc_.KeyTimesBones(r.bones);
@@ -702,7 +740,7 @@ void App::TimelinePanel() {
             const bool picked = KeySelected(r.bones, k);
             const float rr = picked ? rad * 1.35f : rad;
             const ImVec2 pts[4] = {ImVec2(x, my - rr), ImVec2(x + rr, my), ImVec2(x, my + rr), ImVec2(x - rr, my)};
-            const int ip = doc_.KeyInterp(k, r.bones.empty() ? -1 : r.bones.front());
+            const int ip = KeyShape(doc_, k, r.bones);
             ImU32 col = ri == 0 ? theme::U32(theme::Text2) : IM_COL32(232, 193, 80, 255);
             if (std::fabs(kt - t_) < 1e-3f) col = kColSel;
             if (ip == EditorDoc::IP_Step) dl->AddRectFilled(ImVec2(x - rr * 0.8f, my - rr * 0.8f), ImVec2(x + rr * 0.8f, my + rr * 0.8f), col);   // square: constant

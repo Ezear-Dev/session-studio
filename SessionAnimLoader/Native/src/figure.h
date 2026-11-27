@@ -20,6 +20,12 @@ struct FigureRec {
     // P6 (optional): local positions of a few bones (pelvis, board) per frame: positions[(i * posBones.size() + k) * 3 + c]
     std::vector<int> posBones;
     std::vector<float> positions;
+    // 2026-11-27 (optional): the visible board per frame (board.h). One entry per frame, or empty: no board at all
+    // (recordings made before, or the board was not readable on one of the frames)
+    std::vector<BoardPose> board;
+    // set by the editor once it has chosen which end of the board is the nose (never by the mod): kept by the part cut
+    // out of a trick recording, so that choice is not made a second time
+    bool boardFaced = false;
 };
 std::string FigureToJson(const FigureRec& r);
 // Rejects: empty figure name, bones <= 0, fewer than 2 frames, inconsistent sizes, unreadable JSON.
@@ -38,6 +44,8 @@ public:
     static constexpr int kBufFrames = kTrickFrames > kMaxFrames ? kTrickFrames : kMaxFrames;
     static constexpr int kGroundPhase = 5;    // phase value of the frames recorded after the ground contact
     static constexpr int kKickMin = 16;       // 0.5 s at least, otherwise dropped
+    // 2026-11-27: a trick popped in mid-air (late flip) is short: 0.23-0.52 s to the ground in the logs
+    static constexpr int kAirPopMin = 5;
     static constexpr int kMaxBones = 256;
     static constexpr int kMaxPos = 32;
 
@@ -47,11 +55,14 @@ public:
     void Tick(const GameState& gs, const Quat* gameLocals, const float (*gamePos)[3], int bones, float dt);
     // copies a finished recording (out.figure is empty: figId tells which one); false if none
     bool TakeFinished(FigureRec& out, int& figId);
+    // game thread: the last trick recording that was thrown away, and why (for the log); false if none since the last call
+    bool TakeDropped(int& figId, const char*& why);
     bool Recording() const { return active_ != 0; }
 
 private:
     void Sample(const GameState& gs, const Quat* locals, const float (*pos)[3], int phase = -1);
     void Finish();
+    void Drop(const char* why);   // the recording in progress is thrown away (a trick: reported by TakeDropped)
     void Start(const GameState& gs, bool loops, const Quat* locals, const float (*pos)[3]);
 
     std::atomic<bool> finished_{false};
@@ -60,8 +71,23 @@ private:
     bool activeLoops_ = false;
     bool activeShort_ = false;
     bool wantStart_ = false;     // the figure id changed: start a loop recording as soon as the recorder is free   // P6 lot 4: short state (crouch, landing): kKickMin frames are enough
+    // the finished recording waiting for the game thread: a slot of its own, so the next move records meanwhile
+    // (2026-11-27: a crouch not written yet blocked the late flip popped 0.4 s later). Written by the hook only while
+    // finished_ is false, read by the game thread only while it is true.
     int finishedId_ = 0;
     bool finishedLoops_ = false;
+    int doneFrames_ = 0;
+    std::vector<Quat> doneBuf_;
+    std::vector<float> donePos_;
+    float doneTimes_[kBufFrames] = {};
+    float doneRatios_[kBufFrames] = {};
+    int donePhases_[kBufFrames] = {};
+    BoardPose doneBoard_[kBufFrames] = {};
+    bool doneBoardHole_ = false;
+    std::atomic<int> droppedId_{0};
+    const char* droppedWhy_ = "";
+    bool prevKick_ = false;    // a trick was on, off a grind, at the previous frame: a new pop then is a pop in mid-air
+    int minFrames_ = kKickMin; // of the trick being recorded
     int frames_ = 0;
     int tail_ = -1;            // lot 5: frames recorded on the ground after a trick (-1: still in the air)
     float accum_ = 0.f;
@@ -74,4 +100,6 @@ private:
     std::vector<float> posBuf_; // kBufFrames * posBones_ * 3
     float times_[kBufFrames] = {};
     float ratios_[kBufFrames] = {};
+    BoardPose board_[kBufFrames] = {};
+    bool boardHole_ = false;   // one frame of the recording had no board: the whole board track is left out
 };

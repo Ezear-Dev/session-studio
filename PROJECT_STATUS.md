@@ -1,7 +1,9 @@
 # PROJECT_STATUS.md — real state of the software
 
 Snapshot of **2026-11-26** (Git `7610976`, mod v0.24, clip format `sanim` version 1, game: Steam build of November
-2026, UE4SS 3.0.1). Update this file after each meaningful change.
+2026, UE4SS 3.0.1). **2026-11-27:** mod **v0.25** (real board in the recordings, §4) is installed, **checked in game by the
+user**; later the same day mod **v0.28** was installed (late tricks, trick names, legs after the catch: §4 gives what
+was checked for each); the v0.24 results below still describe what was checked in game. Update this file after each meaningful change.
 
 **Evidence levels used below**
 - **GAME ✔** — checked in game by the user (date and source given).
@@ -13,10 +15,10 @@ Snapshot of **2026-11-26** (Git `7610976`, mod v0.24, clip format `sanim` versio
 
 | Item | State | Evidence |
 |---|---|---|
-| Offline tests | **ALL PASS (18607 checks)** | `test.cmd` run on 2026-11-26 for this document (exit code 0) |
+| Offline tests | **2 FAIL out of 19123 checks** (the two board / shoe checks on real recordings, §4) | `test.cmd` run on 2026-11-27 with the v0.27 sources (v0.25: ALL PASS 18874, before the new recordings) |
 | Clips in the game folder | 27 loaded, 0 refused | `asn_tests --check-clips <game clips folder>`, same run |
-| DLL + editor build | `dist\main.dll` and `dist\SessionStudio.exe` dated 2026-11-26 20:43-20:44 (rename build) | file dates; `build.cmd` **not re-run** for this document |
-| Installed on the user's game | v0.24 (DLL + Lua + 122 clip files), 2026-11-26 20:47 | `notes/HANDOFF.md`: user test OK, hooked behind ExpandedTricks, editor saves reloaded, Ctrl+F3 works |
+| DLL + editor build | `dist\main.dll` and `dist\SessionStudio.exe` built 2026-11-27 (last build: legs in the end lock) from the v0.28 sources (installed, row below) | `build.cmd` OK, `--selftest` exit 0; the editor only displays the mod version read in the log (no expected number) |
+| Installed on the user's game | **v0.28** DLL + Lua, 2026-11-27 (hashes equal to the build), **not tested in game yet**; rollback: `_archive\backups\installed_before-v0.28_2026-11-27`. Before: **v0.27**, user test 16:25-16:33 (§4); its rollback: `_archive\backups\installed_before-v0.27_2026-11-27`. Before: **v0.26**, user test OK (§4); rollback: `_archive\backups\installed_before-v0.26_2026-11-27`. Before: **v0.25**, user test OK (before that: v0.24 with 122 clip files, 2026-11-26 20:47) | v0.25: user test and game log, 2026-11-27 (§4). v0.24: `notes/HANDOFF.md`: user test OK, hooked behind ExpandedTricks, editor saves reloaded, Ctrl+F3 works |
 | Editor self-test | new folders found, DLL and Lua present | `HANDOFF.md`, 2026-11-26 |
 | Multiplayer on v0.24 | **not tested** | — |
 
@@ -77,6 +79,101 @@ The check count depends on the machine: tests on real game clips are skipped whe
 
 ## 4. Known problems and points to watch
 
+- **Late tricks (late flips): recording is unreliable** (diagnosis of 2026-11-27; mod unchanged).
+  **v0.25 game session 15:07-15:09 (log + files):** six late pops, each 0.36-0.43 s after an `RGS_Ollie` pop; only
+  `Late_BackFoot_Heelflip` and `Late_Front_HeelFlip` were recorded (with board), at the second try.
+  - **Cause 2:** a late trick reaches the ground 0.47-0.52 s after its pop and `FigureRecorder::Finish` drops an air
+    part under 16 frames (0.5 s), silently. 0.467 / 0.483 s pops were dropped, 0.515 / 0.519 s ones kept (one 0.516 s
+    pop was lost too, probably because a finished recording was still waiting to be written).
+  - **Cause 1:** a late trick is a second pop in mid-air. If the first trick is being recorded and is at least 16
+    frames old, it is saved cut short under its own name and the late trick is not started (older logs of a second
+    player: `Ollie_SWS`, `HeelFlip_SWS`, 16 frames; same ordering in today's `figure.cpp`).
+  - The two new recordings: `IsLanding` is on from the third frame, so the studio's markers are takeoff 0, catch 0,
+    landing 0.07, ground 0.53 s (no flip part); landing part present.
+  - Landing sync: jump height is measured from the late pop (log: pop 0, rise 0-3 cm, prediction 0.00-0.07 s).
+    Effect on a clip in game: **not tested**.
+  - Every title other than the late tricks is still the internal name (`Treflip`), not the game's `DisplayName`
+    ("360 Flip", probe of 11-23).
+  - **Fix, mod v0.26 (2026-11-27, user's choice: the late flip is recorded on its own): installed.** GAME ✔ (user test and log
+    15:53-16:01: `Late_Front_KickFlip_RGS` recorded; `Ollie_RGS` and `Ollie_FKS` refused as "cut by another pop in
+    mid-air", then a plain ollie recorded `Ollie_RGS`; `SWS_KickFlip` recorded while a late flip was waiting to be
+    written; no "too short", fault or missing board. No grind was done). OFFLINE ✔, 4 new tests. In `figure.cpp`: a trick still in the air when another pops is no longer
+    saved (so an ollie into a late flip saves no Ollie: a plain ollie records it); a recording popped in mid-air needs
+    5 frames instead of 16 (ground pops unchanged); a finished recording waits in its own slot, so it no longer blocks
+    the next move; a thrown-away trick recording now logs "move not recorded: ... (why)". A pop out of a grind is not
+    treated as a mid-air pop (defensive: no grind in any log). The old test of "a new pop saves the cut trick" was
+    changed on purpose. Clip format, figure format and network wire unchanged. `test.cmd`:
+    2 FAIL out of 18933 checks (the two board / shoe checks on real recordings below). `build.cmd` OK, `--selftest`
+    exit 0. The installed Lua differs from the new one by the version line only. Previous `dist` binaries:
+    `_archive\backups\dist_before-v0.26_2026-11-27`. Landing sync and the missing flip phase are **not** changed.
+- **Trick names read in game, mod v0.27 (2026-11-27, user request): installed, not tested in game**
+  (OFFLINE ✔). At each pop the Lua sends `FlipTrick.DisplayName` (read with the probe of 11-23, never checked on late
+  tricks); the DLL logs "trick name: ..." when new or changed and writes `clips\_trick_names.json` at its folder scan
+  (merged with the earlier file). Title of a variant: name typed in the catalogue, else name read, else derived; card
+  title: name read for the Normal stance. Whether `DisplayName` is what the user sees on screen is **to be checked**;
+  then the two typed names can be removed. Clip, figure and network formats unchanged. `build.cmd` OK, `--selftest`
+  exit 0. Previous `dist` binaries: `_archive\backups\dist_before-v0.27_2026-11-27`.
+- **Result of the v0.27 test, and late-flip cards (2026-11-27)**: **GAME ✔ for reading the names** (33 names in
+  `_trick_names.json`, log 16:25 on). That `DisplayName` is word for word what the screen shows is **not confirmed**
+  (the user did not send the names read on screen). The two names typed by hand were **removed**: "Switch Late Flip"
+  had been put on the wrong variant (the game gives it to `SWS_Late_Front_KickFlip`). **User report:** the Fakie cell
+  of the "Late Back Foot Heel" card was filled by the front-foot heelflip. Cause: the mod recorded under the right
+  internal names, but in **switch and fakie** the game names a late flip with the **other foot** than its internal
+  name (normal and nollie do not); checked on every read name that says a foot. **Fixed in the editor** (`WithStance`,
+  `BuildLibrary`, drawer pick, copy to another variant, derived fallback titles); the mod, clips and files are
+  unchanged. A clip's stance list in Advanced still follows the internal name. `test.cmd`: 2 FAIL out of 19091 (the
+  known two), new tests pass; `--selftest` exit 0; `dist\SessionStudio.exe` replaced at 16:40 (previous:
+  `_archive\backups\dist_before-late-cards_2026-11-27`). **User check pending.**
+  - "Copy to another variant" takes the trick from the chosen variant (code reading: `SetClipVariant`). The five read
+    names that say no foot ("Switch Late Flip", "Nollie Late Flip"...) are placed by the rule, not by their words.
+  - **Assumption, goofy not tested:** the swap is the same for both feet rows. SessionTweaks pairs the internal
+    `BackFoot` / `Front` names with assets named `RF` / `LF`, so for a goofy skater the swapped stances could be Normal
+    and Nollie instead. No goofy late flip has been sent yet.
+  - The DLL sources changed since the installed v0.27 (`trick.cpp`: `WithStance`, typed names removed) but nothing the
+    mod uses: no version bump, nothing to install.
+  - Open: the fakie late **heelflip** recordings have no landing part: at each recorded attempt the log goes to
+    running / walking / on foot at the ground contact (looks like a bail; to be confirmed by the user).
+- **"Move the legs after the catch", mod v0.28 (2026-11-27, user request): installed, GAME ✔** (user: it works, in
+  the studio and in game; log: v0.28 session from 17:03, no fault or refusal; `Ollie_RGS_regular.sanim`, option on,
+  reloaded 4 times 17:11-17:14, with 17 `RGS_Ollie` pops afterwards. A late-flip clip saved at 17:17 was deleted at
+  17:18: its option is not on record. Older late-flip clips were deleted in the same session, so "an old clip plays as
+  before" was not checked on them. Multiplayer not tested.)
+  (OFFLINE ✔). New optional clip field `play.legsAfterCatch` (format change agreed by the user: absent = off, so
+  existing clips are written and played as before; on by default for new late flip clips only). Player: the leg weight
+  of such a clip stays at 1 after the catch (also sent as such to other players; wire format unchanged). Editor: switch
+  in Clip settings, legs no longer frozen. The user saw late flips raise the catch almost at once. Whether the feet
+  then look right on the board in game is **not known**. Mods older than v0.28 ignore the field. The "Go to the landing"
+  / "Go to the trick" buttons were removed from Clip settings (user request). The user reacted positively to the late-trick cards
+  (screenshot, 11-27); the three checks asked for (on-screen wording, fakie heelflip bail, goofy) were not answered. The
+  end lock and the end-pose warning cover the legs of such a clip too (they skipped trick legs before). `build.cmd` OK, `--selftest` exit 0, `dist\SessionStudio.exe`
+  replaced at 16:55 with game and editor closed (previous binaries: `_archive\backups\dist_before-v0.28_2026-11-27`).
+- **Editor trick list (2026-11-27, user request):** the "Seen in game" collection is removed; the list is the
+  catalogue alone (`trick.cpp`), so a trick missing from it has no card (its files stay; its clips stay in My clips).
+  The real names that were only in that collection were added to Flips / Shove-its; the 8 `Late_LF/RF` entries (never
+  sent by the game) are replaced by the 6 late names seen in logs, the four flips titled as the user reads them
+  ("Late Back Foot KickFlip"...). Three more never-sent ollie asset names (`Nollie`, `ShittyNollie`,
+  `ShittySwitchOllie`, the last one inferred) are replaced by the real `Ollie` / `ShittyOllie` entries. Seen since: `SWS_Late_BackFoot_KickFlip`, `SWS_Late_Front_KickFlip`,
+  `FKS_Late_Front_KickFlip` (log) and `SWS_Late_BackFoot_Heelflip` (recording). The game names each stance on its own:
+  the catalogue can hold the on-screen name of a variant (`onScreen`). From the user: `SWS_Late_BackFoot_KickFlip` =
+  "Switch Late Flip"; `FKS_Late_Front_KickFlip` = "Fakie Back Foot Late Flip" (mapping from the log: the only fakie
+  late flip ever sent). The other switch names are **not given yet** (derived name shown). Not checked on screen.
+- **"chest follows the hand" is off by default** (user request 2026-11-27; not a saved setting). Not checked on screen.
+  The screen is **not checked** by the user.
+- **Shoes not flat in the 3D view (user report with screenshots, 2026-11-27)**: **fixed in the editor, user check
+  pending.** Cause (measured): the sole's "up" was taken from the torso axis on the first frame of the `OnFoot`
+  recording; the one made at 15:06 starts leaning 46.1 deg (the older one 2.6 deg), so every shoe leaned 46 deg
+  (31-84 deg against the recorded deck). Now the sole comes from the skeleton's reference toe offset (`mannequin.cpp`;
+  no pose needed). **Still open:** with that rule the front foot is within about 6 deg of the recorded deck but the
+  right (back, regular) foot is about 16-35 deg off it on the board (about 34 deg at the start of `Ollie`). That is in
+  the recorded bone rotation. The recorder samples the pose **before** calling the rest of the chain (code reading:
+  `SafeApply` then `g_prev`), so what ExpandedTricks or SessionTweaks change afterwards is not in recordings. Not known whether the game changes that foot after the recorder reads it (candidates, not
+  checked: SessionTweaks foot fixes, ExpandedTricks) or shows it like that; asked the user to look in game.
+- **Tests and build (2026-11-27, after both changes)**: `test.cmd` **2 FAIL out of 18923 checks**, both in
+  `board_and_shoes_on_the_real_figures` on recordings where the right foot is not flat (`Riding` made 15:18: right toe
+  4.6 cm above the grip; `OnFoot` 15:06: right heel 2.5 cm up). The count moves with the user's recordings. New tests
+  pass. `build.cmd` OK, `--selftest` exit 0 (31 tricks). `SessionStudio\dist\SessionStudio.exe` was replaced at 15:25
+  with the editor closed (previous build: `_archive\backups\dist_before-trick-list_2026-11-27`). Mod not installed;
+  `dist\main.dll` restored to the installed build.
 - **Multiplayer versions:** v0.24 changed the channel to `animloader.clips1`; a v0.21-v0.23 player and a v0.24
   player cannot see each other. The friend still has v0.21. `_archive/tester-packages/` describes old versions
   (v0.18-v0.21); a new package must be written from scratch.
@@ -85,8 +182,30 @@ The check count depends on the machine: tests on real game clips are skipped whe
 - **Unexplained crash** on 2026-11-23, ~2 min after a map change (`ACCESS_VIOLATION`,
   `SessionGame-Win64-Shipping.exe+0x3233233`, no mod on the stack). Not reproduced.
 - **Landing log artefact:** lines "landing: lasted 6-8 s" when the game is paused or in replay (cosmetic, not fixed).
-- **Editor board ≠ game board:** the skeleton's board bones do not flip; the real board is a physics actor.
-  Recording it would need a DLL + Lua change and an in-game probe first.
+- **Editor board and game board:** the skeleton's board bones do not flip; the real board is a physics actor. Since
+  v0.25 it is recorded with the moves (older recordings only have the approximate board).
+  **Real board, v0.25 (2026-11-27)** — the user chose to record and *show* it (read-only; `.sanim` unchanged):
+  - **Probe, GAME ✔** (user test, regular stance; temporary mod removed afterwards; measures in local
+    `notes/probes/results`): the `Flipper` component of the `Skateboard` actor is the visible deck (kickflip 357°,
+    heelflip -356° about its X, deck bone under 8°; riding at (0, 0, 7.0) in mesh space; carried on foot). No hitch felt.
+  - **Recording and display: GAME ✔** (user test 2026-11-27 14:17-14:25, regular: "everything seems to work"). Log and
+    files: board found at load, KickFlip (1 time) and Treflip (2 times) recorded with it, no `board: lost`; one refusal
+    "the board is away from the skater" at 14:18:39, recordings after it had the board. KickFlip file: 357° about the
+    deck's X, starts and ends at about (0, 0, 7). Riding, on foot, heelflip and shove-it were **not** recorded again
+    in that session. Offline: `test.cmd` ALL PASS (18849), `build.cmd` OK,
+    `--selftest` exit 0; DLL + Lua v0.25 installed (previous ones in `_archive/backups/installed_before-board_2026-11-27`).
+    The editor view is checked only by the user.
+  - Still to check: heelflip / shove-it / riding / on foot recorded again, the trick + landing timeline after a
+    shove-it; **goofy never measured** (a scaled mesh is refused, so goofy would record no board); the 1.7 cm offset of the drawn board is derived, not
+    measured, and trucks / wheels are drawn rigid (not measured).
+  - 2026-11-27, at the user's request: the 76 recordings without a board were moved out of the game's `_figures` to
+    a local backup, which the user then asked to delete the same day (they can re-record any time). Only
+    `KickFlip_RGS_regular` and `Treflip_RGS_regular` are left; the mod records a move again the next time it is done.
+    `test.cmd` then ALL PASS (18847: some tests on real recordings are skipped), `--selftest`: 2 recorded moves, 0 clips
+    (no `.sanim` was in the clips folder; the agent did not touch clips).
+  - The user validated the steady trick/landing timeline and the click-in-the-void deselection in the editor
+    ("Niquel", 2026-11-27).
+  - Possible lag of one game frame between the board (read by the Lua) and the pose (taken by the hook): not measured.
 - **Editor preview ≠ game:** physics, SessionTweaks' `body_feel` and game blending apply on top. The live-preview
   idea (probe C0) was a **no-go** on 2026-11-26 (camera locked on the board, game pauses without focus).
 - **Agent limits:** simulated mouse clicks do not reach the ImGui window; mouse-driven UI is verified only by the user.
@@ -131,6 +250,9 @@ the user also asked for care on the stage mannequin (hands with fingers, feet). 
 | 8. Polish and guides: the view messages at the bottom left start right of the Library drawer when it is open (they were hidden under it); `Getting-Started` and `Reference` rewritten for Browse / Animate, the game pill, Clip settings, Preferences and F1. Pose thumbnails on the Browse cards: not done (optional, left for later) | done, **user check pending** | build OK; `--selftest` exit 0; `test.cmd` ALL PASS (18663). The messages and the guides are checked only by the user |
 | 8b. Library drawer looks like Browse (user request 11-27): title and close button, the move being edited with the Browse variant grid (click a cell = that variant), segmented Tricks / Clips / Captures, Tricks organised like Browse (collection list Everything / categories with counts, "Recorded" and "Has clips" filters shared with Browse, the Browse cards in a grid that fits the drawer width; click = that move in the same stance and foot, a dot = that variant), clip rows with switch and "..." button, captures as small cards. The grid and the card list are shared with Browse (`VariantGrid`, `LibraryCards`) | done, **user check pending** | build OK; `--selftest` exit 0; `test.cmd` ALL PASS (18663). The drawer itself is checked only by the user |
 | 8c. Picking a trick (Browse or the drawer) opens the clip that plays on that variant (enabled, higher priority, then more specific), else the first clip made for it; before, the first clip of the list was opened even when it was off (user report 11-27). Rule `ClipToOpen` in `model/library` | done, **user check pending** | build OK; `--selftest` exit 0; `test.cmd` ALL PASS (18667), with a new test of the rule. Not checked in the editor by hand |
+
+| Trick + landing: shorter landing, steady interface (user request 11-27): a trick and a new landing (or the preview of the game's) last 2 s together at most (landing at least 0.8 s, the game's minimum; saved landing clips keep their length). At the violet line the title bar, the Library drawer, the timeline rows (both parts merged), the other part's keys, the part chip and the Inspector card keep their place; no lock banner during playback; zoom works on the whole timeline | done, **user check pending** | `test.cmd` ALL PASS (18869, new `landing_length_...`, `rows_of_the_two_parts_...`), `build.cmd` OK, `--selftest` exit 0. The screen is checked only by the user |
+| 3D view: a click in the void deselects the part (user request 11-27); a click on the body (or near a bone in the skeleton view) keeps it; a handle that is no longer shown no longer swallows clicks | done, **user check pending** | `test.cmd` ALL PASS (18874, new `point_on_the_body_or_in_the_void`), `build.cmd` OK, `--selftest` exit 0. The clicks are checked only by the user |
 
 Sections 6.2-6.6 below are the preparation notes written before the design; where they differ from the spec, the
 spec wins (e.g. §6.6 order).

@@ -50,6 +50,9 @@ with your last save: click it for the details) and the **...** menu.
 A move is done once **per stance** (Normal, Switch, Fakie, Nollie) and **per foot** (Regular, Goofy): they are different
 movements in the game.
 
+The recording also holds the **board** as it moves in game, and the editor shows it. A movement recorded with an older
+version of the mod has no board: click **record again** next to it, then do the move once more.
+
 ---
 
 ## 4. Your first clip

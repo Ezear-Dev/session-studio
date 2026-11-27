@@ -189,7 +189,7 @@ void App::Dialogs() {
         const char* stances[STANCE_Count];
         for (int s = 0; s < nSt; s++) stances[s] = StanceLabel(s);
         int st = std::clamp(askVar_.stance, 0, nSt - 1);
-        if (ui::Segmented("##copystance", stances, nSt, &st)) askVar_.stance = st;
+        if (ui::Segmented("##copystance", stances, nSt, &st)) askVar_ = WithStance(askVar_, st);
         static const char* kFeet[2] = {"Regular", "Goofy"};
         int ft = askVar_.goofy ? 1 : 0;
         if (ui::Segmented("##copyfeet", kFeet, 2, &ft)) askVar_.goofy = ft == 1;
@@ -361,7 +361,7 @@ void App::ShortcutsDialog() {
         Group("PLAYBACK", {{"Space", "Play / stop"}, {"L", "Loop on / off"}, {"Left / Right", "Previous / next frame"},
                            {"Home / End", "Start / end of the clip"}});
         ImGui::TableNextColumn();
-        Group("3D VIEW (MOUSE)", {{"Click", "Pick a body part or a bone"}, {"Drag a ring or arrow", "Rotate, pull or move it"},
+        Group("3D VIEW (MOUSE)", {{"Click", "Pick a body part or a bone"}, {"Click in the void", "Deselect"}, {"Drag a ring or arrow", "Rotate, pull or move it"},
                                   {"Right-click + drag", "Orbit the view"}, {"Middle-click + drag", "Pan the view"},
                                   {"Wheel", "Zoom"}});
         Group("TIMELINE (MOUSE)", {{"Click a key", "Pick it"}, {"Shift+click", "Add to the selection"},

@@ -3,6 +3,7 @@
 #pragma once
 #include <vector>
 #include "../../SessionAnimLoader/Native/src/math.h"
+#include "mannequin.h"
 
 struct OrbitCamera {
     float yawDeg = 200.f, pitchDeg = 15.f, dist = 260.f, fovDeg = 45.f;
@@ -20,6 +21,9 @@ bool Project(const OrbitCamera& c, float aspect, const float p[3], float vpW, fl
 // pickable bone whose joint is closest to the click (radius in pixels), -1 otherwise
 int PickBone(const OrbitCamera& c, float aspect, const std::vector<FTr>& cs, const std::vector<bool>& selectable,
              float vpW, float vpH, float mx, float my, float radiusPx = 12.f);
+// 2026-11-27 (user: a click in the void deselects): is the click on the body drawn from this mesh (UE component space,
+// shown mirrored on Y as everything in the view)? mx / my in pixels of the view
+bool PointOnMesh(const OrbitCamera& c, float aspect, const Mesh& m, float vpW, float vpH, float mx, float my);
 // 2026-11-26 (mannequin): Proj * View for a UE component space point, with the view's Y mirror and D3D clip depth
 // (0..w): screen x / y are the same as Project() of the mirrored point. Column-major. The mirror flips the winding.
 void StageViewProj(const OrbitCamera& c, float aspect, float out[16]);

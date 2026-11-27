@@ -132,6 +132,64 @@ Important steps, technical decisions, problems and their solutions. Current stat
   one turned on. `Ask::ChangeFigure` now opens `ClipToOpen` (`model/library`): the clip `PlayingClip` says the game
   plays, else the first clip made for that variant, else a new clip. Tested in `test_library.cpp`.
 
+- **Real board recording, step 1: probe (11-27)**: scope chosen by the user: record the game's visible board and
+  show it in the editor, read-only (no board keys, no `.sanim` change). First a throwaway **Lua-only** probe
+  (`SessionBoardProbe`, Ctrl+F6, 30 s of samples to a CSV) rather than a DLL reading raw offsets: reflection and
+  component calls do not depend on the game build and nothing of the installed mod changes. Lead to confirm: the
+  board is its own actor and its `Flipper` component is the visible deck (seen in the SessionOpenMP and
+  ExpandedTricks sources on the user's PC). Result: confirmed in game. Dead ends: no skater property
+  leads to the board (`GetSkateboard`, `_skateboard`, ...), `board._flipper` and the truck properties are not readable
+  from Lua, the actor has no owner, `_replicatedSkateboardMeshRotator` stays 0 for the local player.
+- **Real board recording, step 2, v0.25 (11-27)**: the owner chose one `FindAllOf` after the bone table is sent (up to
+  5 tries, nearest `Skateboard` within 2 m, then cached) over reading `skater+0x568` in the DLL (build-dependent,
+  unverified). The Lua sends world values every frame (`ASN_SetBoard`, 17 numbers) just before `ASN_SetState`; the
+  conversion to mesh space is in `src/board.cpp`, tested with the probe's own values; a scaled mesh or a deck farther
+  than 2 m is refused. Figure files get an optional `board` array (7 numbers per frame), written only when **every**
+  frame had a board; figure version, clip format and network wire unchanged. Editor: `EditorDoc::OriginBoard` /
+  `BoardAt` follow the pose's time rules; the nose mark is turned to the animation's front when an earlier shove-it
+  left the physical board turned round; trucks and wheels rigid, 1.7 cm calibration from the riding rows; new setting
+  `ui.realboard` (on), the old approximate board stays for recordings without one. The board is never written in game.
+  **User test the same day: OK** (KickFlip and Treflip recorded again with their board; log checked).
+
+- **Trick + landing timeline, length and steadiness (11-27, user report with screenshots)**: the 2 s landing felt too
+  long; the user gave no preference between the options, so the recommended one: trick + landing <= 2 s
+  (`TrickLandingLength`, floor `kLandHoldMin` 0.8 s; editor only: `kGroundTail` and the recordings are unchanged, saved landing clips keep their
+  length; an unlocked new landing is therefore held shorter in game too). The jump at the violet line came from panels
+  reading `var_` / `doc_`, which are swapped there: what names the edited move now reads the trick (`ShownVar`,
+  `ShownFile`), the rows are `EditorDoc::MergeKeyGroups` of both parts, the other part's keys are drawn like open ones,
+  and notices that pushed the layout were moved or muted during playback.
+
+- **Late tricks diagnosis and trick list (11-27)**: the game sends `Late_Front_KickFlip`, `Late_Front_HeelFlip`,
+  `Late_BackFoot_KickFlip`, `Late_BackFoot_Heelflip`; the catalogue had asset names from SessionTweaks' list
+  (`Late_LF_OllieNorth`...). On the user's request the editor's "Seen in game" collection was removed; the catalogue
+  is now the whole list, completed with every real name found in the logs and recordings. Recording of late tricks
+  (second pop in mid-air, air part about 0.5 s) is diagnosed, not fixed: see `PROJECT_STATUS.md` §4.
+
+- **Shoe soles (11-27)**: calibrating a constant of the mesh on "whatever recording exists" broke when the user
+  re-recorded "on foot" while bent over. The toe's reference offset in `_skeleton.json` (left (-10.05, 13.94, 0),
+  right opposite) gives the sole axes directly; it agrees with the older upright "on foot" recording.
+
+- **Late flips recorded on their own, v0.26 (11-27)**: chosen by the user over merging ollie and late flip into one
+  move (which would change clip selection). A late pop is recognised in the recorder alone (new pop while a trick was
+  on at the previous frame), so no name list is needed. Built and tested offline; not installed yet.
+
+- **v0.26 checked in game; names per stance (11-27)**: a trick's on-screen name cannot be derived from its internal
+  name ("Switch Late Flip"), so the catalogue got an optional name per stance. Editor option "chest follows the hand"
+  now starts off.
+
+- **Trick names from the game, v0.27 (11-27)**: typing one name per trick and stance does not scale. The Lua reads the
+  FlipTrick's `DisplayName` at the pop; the names go to a small file of their own (not the figures, which the user
+  deletes freely). Learned only for tricks done: reading every definition at load would need a new `FindAllOf`.
+
+- **Switch / fakie late flips have the other foot's name (11-27)**: found from the names read by v0.27 after a user
+  report. The studio now builds each card's columns with the move the game shows (`WithStance`); internal names, files
+  and the clip format keep the game's own spelling. A name typed by hand from one report had landed on the wrong
+  variant: names now come only from the game.
+
+- **Legs after the catch, v0.28 (11-27)**: the leg release at the catch (needed because the game's catch places the
+  feet) blocked late flips, where the catch comes at once. The user chose an opt-in per clip over changing the rule by
+  trick name, so that existing clips keep playing the same.
+
 ## Problems met and solutions
 
 | Problem | Cause found | Solution |

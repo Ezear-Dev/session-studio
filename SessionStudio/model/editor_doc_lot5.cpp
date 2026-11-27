@@ -115,6 +115,33 @@ std::vector<EditorDoc::KeyGroup> EditorDoc::KeyGroups(bool allEditable) const {
     return out;
 }
 
+std::vector<EditorDoc::KeyGroup> EditorDoc::MergeKeyGroups(const std::vector<KeyGroup>& a, const std::vector<KeyGroup>& b) {
+    std::vector<KeyGroup> all = a;
+    auto addBones = [](std::vector<int>& to, const std::vector<int>& from) {
+        to.insert(to.end(), from.begin(), from.end());
+        std::sort(to.begin(), to.end());
+        to.erase(std::unique(to.begin(), to.end()), to.end());
+    };
+    for (const KeyGroup& g : b) {
+        auto it = std::find_if(all.begin(), all.end(), [&](const KeyGroup& x) { return x.id == g.id; });
+        if (it == all.end()) { all.push_back(g); continue; }
+        addBones(it->bones, g.bones);
+        for (const KeyRow& r : g.children) {
+            auto c = std::find_if(it->children.begin(), it->children.end(), [&](const KeyRow& x) { return x.label == r.label; });
+            if (c == it->children.end()) it->children.push_back(r);
+            else { addBones(c->bones, r.bones); c->primary = std::min(c->primary, r.primary); }
+        }
+    }
+    auto rank = [](const std::string& id) {
+        for (int i = 0; i < 8; i++) if (id == kGroupId[i]) return i;
+        return 8;   // the pelvis, last
+    };
+    std::sort(all.begin(), all.end(), [&](const KeyGroup& x, const KeyGroup& y) { return rank(x.id) < rank(y.id); });
+    for (KeyGroup& g : all)
+        std::sort(g.children.begin(), g.children.end(), [](const KeyRow& x, const KeyRow& y) { return x.primary < y.primary; });
+    return all;
+}
+
 std::string EditorDoc::GroupOfBone(int bone) const {
     if (bone < 0 || bone >= BoneCount()) return "";
     if (bone == PelvisBone()) return "pelvis";

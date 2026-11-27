@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <utility>
 #include "clip.h"
+#include "board.h"
 #include "mirror.h"
 #include "pelvis.h"
 #include "cycle.h"
@@ -32,6 +33,9 @@ struct GameState {
     float landLead = -1.f;      // 2026-11-26: learned live IsLanding -> ground of this trick (LandLearn), -1 unknown
     uint32_t landTrickHash = 0;
     int landStance = 0;
+    // 2026-11-27: the visible board at this frame, for the move recordings (board.h); boardOk false = not readable
+    bool boardOk = false;
+    BoardPose board;
 };
 
 // Set of clips published by ClipLibrary: clips already bound to the skeleton, sorted by file name. Read only.

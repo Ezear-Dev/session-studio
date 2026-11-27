@@ -1,6 +1,12 @@
 #include "two_part_time.h"
+#include "../../SessionAnimLoader/Native/src/landing_hold.h"
 #include <algorithm>
 #include <cmath>
+
+float TrickLandingLength(float trickLen, float recorded) {
+    const float room = kTrickAndLandingMax - std::max(0.f, trickLen) - TwoPartTime{}.gap;
+    return std::max(0.1f, std::min(std::max(room, (float)kLandHoldMin), recorded));
+}
 
 void SplitTime(const TwoPartTime& tp, float shared, int& part, float& local) {
     const float g = std::clamp(std::isfinite(shared) ? shared : 0.f, 0.f, tp.Total());

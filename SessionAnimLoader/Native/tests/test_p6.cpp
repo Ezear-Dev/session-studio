@@ -19,6 +19,36 @@ TEST(p6_trick_names) {
     for (auto& t : TrickCatalog()) CHECK(SplitTrickName(t.full, b, s));
 }
 
+// 2026-11-27: the trick list is the catalogue alone (no "Seen in game" any more), so every real name must be in it
+TEST(p6_catalogue_has_the_real_trick_names) {
+    auto category = [](const char* base) {
+        for (auto& t : TrickCatalog()) {
+            std::string b; int s = -1;
+            if (SplitTrickName(t.full, b, s) && Lower(b) == Lower(base)) return std::string(t.category);
+        }
+        return std::string();
+    };
+    for (const char* late : {"Late_Front_KickFlip", "Late_Front_HeelFlip", "Late_BackFoot_KickFlip", "Late_BackFoot_Heelflip",
+                             "Late_BackFoot_Ollie", "Late_Front_OllieNorth"})
+        CHECK(category(late) == "Late tricks");
+    CHECK(category("Late_LF_OllieNorth").empty() && category("Late_RF_NollieSouth").empty());   // never sent by the game
+    // asset names, never sent: the game calls the nollie "NLS_Ollie" and "NLS_ShittyOllie" (probe dumps of 11-23);
+    // ShittySwitchOllie is inferred (no dump; logs and recordings only show SWS_ShittyOllie)
+    for (const char* dead : {"Nollie", "ShittyNollie", "ShittySwitchOllie"}) CHECK(category(dead).empty());
+    for (const char* flip : {"Impossible", "Pressure_HardFlip", "Pressure_HeelFlip"}) CHECK(category(flip) == "Flips");
+    for (const char* shove : {"BS_PopShuvIt360", "FS_PopShuvIt", "FS_PopShuvIt360", "FS_ShoveIt", "FS_ShoveIt_360"})
+        CHECK(category(shove) == "Shove-its");
+}
+
+TEST(p6_late_flip_titles_are_the_ones_on_screen) {
+    CHECK(TrickDisplay("Late_BackFoot_KickFlip") == "Late Back Foot KickFlip");
+    CHECK(TrickDisplay("Late_BackFoot_Heelflip") == "Late Back Foot HeelFlip");
+    CHECK(TrickDisplay("Late_Front_KickFlip") == "Late Front Foot KickFlip");
+    CHECK(TrickDisplay("late_front_heelflip") == "Late Front Foot HeelFlip");
+    CHECK(TrickDisplay("Late_BackFoot_Ollie") == "Late Back Foot Ollie");
+    CHECK(TrickDisplay("BS_ShoveIt_360") == "BS ShoveIt 360");   // the other tricks are unchanged
+}
+
 TEST(p6_figure_keys) {
     FigureVariant v; v.state = ST_Trick; v.trick = "KickFlip"; v.stance = STANCE_Switch; v.goofy = true;
     CHECK(FigureKey(v) == "KickFlip_SWS_goofy");

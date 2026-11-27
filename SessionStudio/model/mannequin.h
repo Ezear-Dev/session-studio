@@ -29,8 +29,9 @@ struct MannequinRig {
     int index[2] = {-1, -1}, middle[2] = {-1, -1}, pinky[2] = {-1, -1};   // Finger1, Finger2, Finger4 bases
     int finger[2][5][3] = {};         // 2026-11-26: every finger joint (FingerN, FingerN1, FingerN2), -1 when absent
     // 2026-11-26 (user: feet not flat): the shoe follows the FOOT BONE, not the ankle -> toe line (the toe bone is at the
-    // ball of the foot on the ground, the ankle 10 cm above: that line slopes down). From the standing calibration pose:
-    // the sole's forward and up directions in foot bone space, and the ankle height above the sole.
+    // ball of the foot on the ground, the ankle 10 cm above: that line slopes down). The sole's forward and up directions
+    // in foot bone space and the ankle height above the sole: from the skeleton's reference toe offset (2026-11-27), else
+    // from the standing calibration pose.
     bool shoeOk[2] = {false, false};
     float shoeFwd[2][3] = {}, shoeUp[2][3] = {};
     float ankleH[2] = {10.f, 10.f}, footLen[2] = {14.f, 14.f};   // footLen: ankle -> toe bone along the sole

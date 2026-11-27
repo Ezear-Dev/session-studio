@@ -28,6 +28,8 @@ struct LibCard {
     LibVariant cell[4][2];        // [stance][goofy]; only the first `stances` rows exist
     int recorded = 0, variants = 0, clips = 0;   // over the variants that exist
 };
+// v is one of the card's variants (a card is a move as the game shows it, see WithStance)
+bool CardHolds(const LibCard& card, const FigureVariant& v);
 std::vector<LibCard> BuildLibrary(const std::vector<LibEntry>& entries, const std::function<bool(const FigureVariant&)>& recorded,
                                   const std::vector<const Clip*>& clips);
 

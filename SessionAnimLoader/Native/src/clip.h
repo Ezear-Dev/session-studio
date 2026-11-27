@@ -39,6 +39,9 @@ struct Clip {
     // lot 5 (OBSOLETE since the landing sync, 2026-11-25): landing part of a trick clip. Still read so the editor /
     // converter can split old files into an air clip + a landing clip; the player ignores it.
     float landing = 0.f, groundAt = 0.f;
+    // 2026-11-27 v0.28 (ST_Trick, play.legsAfterCatch): the keys move the legs after the catch too. Off (absent): the
+    // game takes the legs back there
+    bool legsAfterCatch = false;
     // 2026-11-25 (ST_Trick only): instants of the game's events in the recorded figure (play.markers); the player warps
     // the clip time onto the live events (trick_sync.h). ok = false: old clip, real time from the pop.
     TrickMarkers markers;

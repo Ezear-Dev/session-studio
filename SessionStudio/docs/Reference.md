@@ -46,6 +46,15 @@ The editor's **record again** button asks the DLL to record a move again the nex
 
 ---
 
+**Trick names** (mod v0.27): each time you do a trick, the mod reads the name the game gives it in that stance and keeps
+it in `clips\_trick_names.json`. The editor uses it for that variant; a card takes the name of the Normal stance. A
+trick not done yet with v0.27 or later shows a name made from its internal name. A trick missing from the editor's list
+gets no card.
+
+In Switch and Fakie the game names a late flip with the other foot than its internal name, so a card's Switch and
+Fakie columns hold the trick the game shows with the card's foot. A clip's stance list in Advanced still follows the
+internal name (`trigger.trick`).
+
 ## Which clip plays
 
 Every frame, among the enabled clips whose state, stance and feet match:
@@ -107,6 +116,7 @@ in each bone's local space, the pelvis offset is in cm in component space (Z up)
 | `play.loop` | bool | loop (ground states only; tricks never loop) |
 | `play.hold` | bool | a single pose all the time (held pose) |
 | `play.ratioRange` | `[a, b]` | ManualRatio range mapped to the clip (drive `ManualRatio`) |
+| `play.legsAfterCatch` | bool, optional | trick clips, mod v0.28: the keys move the legs after the catch too (absent = off: the game takes the legs back). Clip settings > "Move the legs after the catch"; on by default for new late flip clips. The preview does not show whether the feet stay on the board in game |
 | `play.markers` | `{air, catch, land, ground}` s | trick clips: the game's events in the recording (written by the editor) |
 | `play.landing`, `play.groundAt` | s | obsolete (lot 5 landing part): read, ignored by the player, split by the converter |
 | `play.dismount` | s | riding clips: the part played once when the feet leave the board |
@@ -132,12 +142,19 @@ in each bone's local space, the pelvis offset is in cm in component space (Z up)
 - **Animate**: the 3D view with its floating tools (top: Rotate, Pull (IK), Move, local / world rings; top right:
   **Inspector**, **Clip settings**, view options; bottom right: camera), the Inspector card on its right, the timeline
   at the bottom (transport, Auto key, phase ribbon, "Game" row, tracks). Messages about the view sit at the bottom left.
+- **Trick and landing** share one timeline (violet line = ground contact). A trick and a new landing show 2 s together
+  at most; a landing clip already saved keeps its own length, and an unlocked landing's length can be changed in
+  Clip settings.
+- **Board** (view options, on by default): the game's visible board as it moved when the movement was recorded (flips
+  and spins included; the light arrow marks the nose). Read-only: a clip never changes the board, and in game physics
+  moves it a little differently every time. Trucks and wheels are drawn rigid. Movements recorded before mod v0.25
+  have no board: use **record again** and do the move in game, or turn on **Approximate board** (a rough guide only).
 - **Preferences** (Ctrl+,): Creator / Studio mode, text size, clips folder, backups, welcome at start.
   **Keyboard shortcuts** (F1): every key and mouse gesture.
 
 ## Editor tools
 
-- **Pull (IK)** on hand, elbow, shoulder, foot, knee; "chest follows the hand"; elbow / knee swivel slider.
+- **Pull (IK)** on hand, elbow, shoulder, foot, knee; "chest follows the hand" (off by default); elbow / knee swivel slider.
 - **Rotate** with local or world rings; precise pitch / yaw / roll in Studio mode.
 - **Pelvis**: offset with the feet kept planted; the legs bend or stretch (limited to their reach).
 - **Shoulder check**: the game mesh has no twist bones; red arm = risk of a crushed shoulder; **Fix the shoulder** moves

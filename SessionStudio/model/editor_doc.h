@@ -56,6 +56,15 @@ public:
     // P6: local position recorded for this bone at t (pelvis, board); false if the figure has none
     bool OriginPos(int bone, float t, float out[3]) const;
     void OriginPose(float tOrigin, std::vector<FTr>& out) const;   // original animation at tOrigin (time), component space
+    // 2026-11-27: the game's visible board, recorded with the move; false when the recording (or its dismount part)
+    // has none. OriginBoard follows the time rule of OriginPose, BoardAt the one of ComponentPose.
+    bool HasRealBoard() const { return HasFigure() && !fig_.board.empty() && fig_.board.size() == fig_.times.size(); }
+    bool OriginBoard(float tOrigin, BoardPose& out) const;
+    bool BoardAt(float t, BoardPose& out) const;
+    // The deck can be turned round by an earlier trick (a shove-it): the game keeps it so, the skeleton's board bone does
+    // not turn. The drawn board only differs by its nose mark, so the mark goes to the end the animation calls the front
+    // on the first frame, once for the whole recording. Done by LoadFigure; to be done on a recording before cutting it.
+    void FaceBoardForward(FigureRec& rec) const;
     bool HasSkeleton() const { return !skel_.names.empty(); }
     bool HasFigure() const { return fig_.bones > 0; }
     int FigureIndex() const;   // legacy number of the variant, -1 if it is none of the three old figures
@@ -93,6 +102,8 @@ public:
     // trick steps: one value per frame of the loaded move, empty if absent (raw values, not clamped)
     const std::vector<int>& Phases() const { return fig_.phases; }
     float PhaseStart(int phase) const;   // time of the 1st frame of this phase (clamped to 0..4), -1 if absent
+    void SetLegsAfterCatch(bool on);     // v0.28, undoable
+    bool LegsReleased() const { return !clip_.legsAfterCatch; }   // a trick clip gives its legs back at the catch
     float LegWeightAt(float t) const;    // leg weight of a trick clip: 1 before the catch, then 0 within 0.12 s; 1 without phases
     // 2026-11-26: a leg bone of a trick clip from the catch on: the game takes the legs back there, so it is not posed
     bool LegFrozenAt(int bone, float t) const {
@@ -200,6 +211,9 @@ public:
     // all its bones; its children are one row per bone (fingers: one row per finger), with clear names
     struct KeyGroup { std::string id, label; std::vector<int> bones; std::vector<KeyRow> children; };
     std::vector<KeyGroup> KeyGroups(bool allEditable) const;
+    // 2026-11-27 (one timeline, two files): the rows of both parts as one list, the same whichever part is open, so the
+    // timeline does not change when the playhead crosses the ground contact. Groups in the usual order, rows by bone.
+    static std::vector<KeyGroup> MergeKeyGroups(const std::vector<KeyGroup>& a, const std::vector<KeyGroup>& b);
     std::string GroupOfBone(int bone) const;   // id of the group holding this bone ("armL", "pelvis"...), "" if none
 
     // ---------------------------------------------------------------- dismount part of a riding clip (2026-11-25)

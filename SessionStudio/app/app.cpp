@@ -25,8 +25,10 @@ App::App(std::wstring exeDir) : exeDir_(std::move(exeDir)) {
         bodyView_ = st.Get("ui.view") != "skeleton";   // 2026-11-26 (mannequin): Body by default
         cardOpen_ = st.Get("ui.card") != "0";         // redesign step 4: the inspector card, shown unless closed
         showFloor_ = st.Get("ui.floor") == "1";       // redesign step 3: the floor, OFF by default (tricks dip below it)
+        showRealBoard_ = st.Get("ui.realboard") != "0";   // 2026-11-27: its own setting, on by default
         showBoard_ = st.Get("ui.board") == "1";        // 2026-11-26 (mannequin stage 2): the board, OFF by default (approximate, see board_mesh.h)
         browseCat_ = st.Get("browse.view");   // redesign step 6
+        if (browseCat_ == "Seen in game") browseCat_.clear();   // 2026-11-27: removed collection (Browse and the drawer)
         textSize_ = std::clamp((int)st.GetFloat("ui.textsize", 1.f), 0, 3);   // redesign step 7
         if (ImGui::GetCurrentContext()) ImGui::GetStyle().FontScaleMain = kTextScales[textSize_];   // --selftest has no context
         const std::string bd = st.Get("backupDir");
@@ -55,6 +57,7 @@ int App::SelfTest(std::string& report) {
     report += "recorded moves: " + std::to_string(figHave_.size()) + "\n";
     for (auto& k : figHave_) report += "  " + k + "\n";
     report += "tricks in the list: " + std::to_string(tricks_.size()) + "\n";
+    report += "trick names read in game: " + std::to_string(gTrickNames.Size()) + "\n";
     report += "clips: " + std::to_string(clips_.size()) + ", captures: " + std::to_string(ListClips(true).size()) + "\n";
     // UI Phase 1
     PollGame(99.f);
@@ -137,6 +140,14 @@ void App::ScanFolder() {
             FindClose(h);
         }
     }
+    // v0.27: the trick names the mod read in game (a file half written or broken keeps the previous names)
+    const std::wstring namesPath = clipsDir_ + L"\\_trick_names.json";
+    const uint64_t namesStamp = clipsDir_.empty() ? 0 : FileStamp(namesPath);
+    if (namesStamp != namesStamp_) {
+        TrickNames fresh;
+        std::string text;
+        if (namesStamp == 0 || (ReadFileText(namesPath, text) && fresh.Merge(text))) { gTrickNames = std::move(fresh); namesStamp_ = namesStamp; }
+    }
     RefreshClips();
     BuildTrickList();
     // the figure shown has been (re)recorded by the game: reload it (the keys stay)
@@ -159,17 +170,12 @@ void App::BuildTrickList() {
         const std::string k = Lower(base);
         auto it = byLower.find(k);
         if (it == byLower.end()) { byLower[k] = TrickEntry{base, cat, 0}; order.push_back(k); it = byLower.find(k); }
-        if (stance >= 0) it->second.stances |= (uint8_t)(1u << stance);
+        it->second.stances |= (uint8_t)(1u << stance);
     };
     for (auto& t : TrickCatalog()) {
         std::string b; int s;
         if (SplitTrickName(t.full, b, s)) add(b, s, t.category);
     }
-    for (auto& key : figHave_) {   // tricks done in the game that the catalogue does not know
-        FigureVariant v;
-        if (ParseFigureKey(key, v) && v.state == ST_Trick) add(v.trick, v.stance, "Seen in game");
-    }
-    for (auto& ci : clips_) if ((ci.clip.states & ST_Trick) && !ci.clip.trick.empty()) add(ci.clip.trick, -1, "Seen in game");
     tricks_.clear();
     for (auto& k : order) tricks_.push_back(byLower[k]);
 }
@@ -189,9 +195,9 @@ void App::SelectFigure(const FigureVariant& v) {
     // 2026-11-25 landing sync: the landing of one trick shows the trick's recording after the ground contact
     if (clipsDir_.empty() || !ReadFileText(path, text)) text.clear();
     if (v.state == ST_Landing && !v.trick.empty() && !text.empty()) {
-        FigureRec tr, tail;
+        FigureRec tr, tail;   // 2026-11-27: the board's nose is chosen on the whole trick, before the cut
         if (!ParseFigure(text, tr, err)) text.clear();
-        else if (!GroundTailFigure(tr, tail)) { text.clear(); err = "landing not recorded: record the trick again (“record again” button)"; }
+        else if (doc_.FaceBoardForward(tr), !GroundTailFigure(tr, tail)) { text.clear(); err = "landing not recorded: record the trick again (“record again” button)"; }
         else { tail.figure = FigureKey(v); text = FigureToJson(tail); }
     }
     if (!clipsDir_.empty() && !text.empty() && doc_.LoadFigure(text, v, err)) figErr_.clear();

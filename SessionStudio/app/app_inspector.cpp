@@ -32,6 +32,8 @@ void App::InspectorCard(const ImVec2& pos, float w, float maxH) {
             title = what;
             sub = tool;
         } else { title = "Nothing selected"; sub = "pick a body part"; }
+        // 2026-11-27: a locked landing says so in this line (no extra block on top: the card must not jump)
+        if (!clipPanel_ && LandingLockedHere()) { sub = "Locked: the game's landing"; subCol = theme::Warn; }
         if (theme::Strong()) ImGui::PushFont(theme::Strong(), 0.f);
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted(title.c_str());
@@ -53,13 +55,12 @@ void App::InspectorCard(const ImVec2& pos, float w, float maxH) {
                 ImGui::SeparatorText("Advanced");
                 InspectorAdvanced();
             }
-        } else if (LandingLockedHere()) {   // 2026-11-27
-            ImGui::TextColored(theme::Warn, "%s", "The landing is locked: the game plays its own landing here.");
-            if (ui::Button("Unlock the landing")) SetLandingLocked(false);
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Make the landing of this trick yours: pose it after the ground contact.\nSave writes it with the trick (its own clip file).");
+        } else if (LandingLockedHere()) {   // 2026-11-27: the same content, greyed; the unlock button under it
             ImGui::BeginDisabled();
             InspectorSelection();
             ImGui::EndDisabled();
+            if (ui::Button("Unlock the landing")) SetLandingLocked(false);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Make the landing of this trick yours: pose it after the ground contact.\nSave writes it with the trick (its own clip file).");
         } else InspectorSelection();
         ImGui::PopTextWrapPos();
     } else ImGui::PopStyleVar();
@@ -72,7 +73,9 @@ void App::InspectorSelection() {
     const int n = doc_.BoneCount();
     Clip& c = doc_.clip();
     const bool lockedHere = sel_ >= 0 && doc_.LockedAt(doc_.KeyTime(t_));   // 2026-11-26: locked start / end (task 3)
-    if (lockedHere) ImGui::TextColored(theme::Warn, "%s", "Start and end are locked to the game's pose:\npose between them (Clip settings to unlock).");
+    // inline notices would push the card around while the clip plays or crosses into a locked landing
+    const bool notices = !playing_ && !LandingLockedHere();
+    if (lockedHere && notices) ImGui::TextColored(theme::Warn, "%s", "Start and end are locked to the game's pose:\npose between them (Clip settings to unlock).");
     if (sel_ >= 0 && sel_ == doc_.PelvisBone()) {
         ImGui::BeginDisabled(lockedHere);
         PelvisProps();
@@ -81,7 +84,7 @@ void App::InspectorSelection() {
         const std::string& name = doc_.skeleton().names[sel_];
         ImGui::SeparatorText(("Bone: " + Short(name)).c_str());
         const bool legFrozen = doc_.LegFrozenAt(sel_, t_);   // 2026-11-26: the game takes the legs back from the catch
-        if (legFrozen && !lockedHere) ImGui::TextColored(theme::Warn, "%s", "After the catch, the game takes the legs back:\npose them before the catch, or in the landing clip.");
+        if (legFrozen && !lockedHere && notices) ImGui::TextColored(theme::Warn, "%s", "After the catch, the game takes the legs back:\nturn on \u201cMove the legs after the catch\u201d in Clip settings.");
         ImGui::BeginDisabled(legFrozen || lockedHere);
         float r[3];
         QToRotatorDeg(doc_.EditedRaw(sel_, t_), r[0], r[1], r[2]);
@@ -253,13 +256,14 @@ void App::InspectorClip() {
         if (ui::Switch("##landlock", &locked, "Lock the landing")) SetLandingLocked(locked);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Locked (default): the game plays its own landing after the ground contact; nothing is posed there.\nUnlocked: the landing is yours (its own clip file, written by Save with the trick).\nIn game the landing starts at the real ground contact, whatever the jump height.\nLocking again keeps your landing clip but turns it off.");
         ImGui::TextDisabled("%s", landLocked_ ? "The game's landing (after the violet line)." : "Your landing (after the violet line).");
-        if (inLanding_) { if (ui::Button("Go to the trick")) JumpShared(0.f); }
-        else if (ui::Button("Go to the landing")) JumpShared(Parts().SecondStart());
         ImGui::Spacing();
     }
     if (doc_.IsTrickClip()) {   // 2026-11-25 landing sync: the trick clip follows the jump, the landing is its own clip
         ImGui::TextWrapped("%s", "Synced to the jump: in game, the hang time (yellow area) stretches with the jump height, and the end of the clip falls on the ground contact.");
         if (doc_.HasOldLandingPart()) ImGui::TextColored(kWarn, "%s", "This clip holds an old built-in landing: it no longer follows the ground. Redo it in “Landing of this trick”.");
+        bool legs = doc_.clip().legsAfterCatch;   // v0.28
+        if (ui::Switch("##legscatch", &legs, "Move the legs after the catch")) doc_.SetLegsAfterCatch(legs);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", "Off: from the catch on (the landing part of the ribbon), the game takes the legs back.\nOn: your keys keep moving the legs until the end of the trick. In game the feet may then\nleave the board: check it there. On by default for new late flip clips. Needs the mod v0.28.");
         const bool can = doc_.GroundAt() > 0.f;
         if (!hasComp_) {   // 2026-11-27: on one timeline the landing is already there
             if (!can) ImGui::BeginDisabled();
@@ -275,7 +279,7 @@ void App::InspectorClip() {
     }
     if (doc_.IsLandingClip() && !var_.trick.empty()) {   // the landing clip of one trick
         ImGui::TextWrapped("%s", "Landing of the trick: starts at the ground contact, in real time.");
-        if (!hasComp_) {   // on one timeline: "Go to the trick" above
+        if (!hasComp_) {   // on one timeline the trick is already there
             if (ImGui::Button("Back to the trick")) { FigureVariant tv = var_; tv.state = ST_Trick; askVar_ = tv; Request(Ask::ChangeFigure); }
             ImGui::SameLine();
         }

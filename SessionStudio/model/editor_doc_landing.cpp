@@ -54,6 +54,8 @@ bool GroundTailFigure(const FigureRec& trick, FigureRec& out) {
     r.posBones = trick.posBones;
     const size_t nb = trick.posBones.size();
     if (nb && trick.positions.size() == trick.times.size() * nb * 3) r.positions.assign(trick.positions.begin() + g * nb * 3, trick.positions.end());
+    if (trick.board.size() == trick.times.size()) r.board.assign(trick.board.begin() + g, trick.board.end());   // 2026-11-27
+    r.boardFaced = trick.boardFaced;
     out = std::move(r);
     return true;
 }

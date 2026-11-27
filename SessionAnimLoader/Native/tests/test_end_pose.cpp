@@ -161,6 +161,9 @@ TEST(legs_frozen_from_the_catch_in_trick_clips) {
     CHECK(!d.LegFrozenAt(foot, 0.30f));   // before the catch (frame 14 = 0.467 s)
     CHECK(d.LegFrozenAt(foot, 0.53f));    // after it: the game takes the legs back
     CHECK(!d.LegFrozenAt(arm, 0.53f));
+    d.clip().legsAfterCatch = true;       // 2026-11-27: the clip keeps its legs after the catch
+    CHECK(!d.LegFrozenAt(foot, 0.53f));
+    CHECK_NEAR(d.LegWeightAt(0.53f), 1.0, 1e-6);
     EditorDoc l; SetupLanding(l);
     CHECK(!l.LegFrozenAt(foot, 0.1f));    // landing clips: legs free
 }
@@ -171,6 +174,30 @@ TEST(endpose_trick_legs_ignored_after_the_catch) {
     CHECK(d.IsEditable(calf));
     KeyDeg(d, calf, 0.f, 0.f); KeyDeg(d, calf, 10 * kF, 40.f);   // a leg key before the catch, held to the end
     CHECK(d.EndIssues(nullptr, false).empty());
+}
+
+// 2026-11-27: a clip that keeps its legs after the catch must bring them back like the rest of the body
+TEST(endpose_legs_kept_after_the_catch_are_locked_and_reported) {
+    EditorDoc d; SetupTrick(d);
+    const int calf = Bone(d, "AMXX_L_Calf");
+    const float end = d.clip().duration;
+    d.SetLegsAfterCatch(true);
+    CHECK(d.clip().legsAfterCatch && d.LockEnds());
+    KeyDeg(d, calf, 0.f, 0.f); KeyDeg(d, calf, 10 * kF, 40.f);   // direct edits: applied by locking again
+    d.SetLockEnds(false); d.SetLockEnds(true);
+    bool lockedBack = false;   // locked start and end: the leg gets its end key at the game's pose
+    for (const Track& tr : d.clip().tracks)
+        if (tr.bone == "AMXX_L_Calf")
+            for (const Key& k : tr.keys) lockedBack |= std::fabs(k.t - end) < 1e-3f && std::fabs(k.q.w) > 0.9999f;
+    CHECK(lockedBack);
+    EditorDoc o; SetupTrick(o);
+    SetClipExtraBool(o.clip(), "lockEnds", false);
+    o.SetLegsAfterCatch(true);
+    KeyDeg(o, calf, 0.f, 0.f); KeyDeg(o, calf, 10 * kF, 40.f);   // held to the end, no lock
+    const auto v = o.EndIssues(nullptr, false);
+    CHECK(v.size() == 1u && v[0].kind == EditorDoc::EndIssue::TrickEndNoLanding && HasBone(v[0], calf));
+    o.SetLegsAfterCatch(false);
+    CHECK(o.EndIssues(nullptr, false).empty());                  // the game takes the legs back: nothing to report
 }
 
 TEST(endpose_landing_end_and_start) {

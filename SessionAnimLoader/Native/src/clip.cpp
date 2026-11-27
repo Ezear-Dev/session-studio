@@ -148,6 +148,7 @@ bool ParseClip(const std::string& text, const std::string& file, Clip& out, std:
     c.duration = (float)dur->n;
     if (!OptBool(play, "loop", true, c.loop, err, "play.loop")) return false;
     if (!OptBool(play, "hold", false, c.hold, err, "play.hold")) return false;
+    if (!OptBool(play, "legsAfterCatch", false, c.legsAfterCatch, err, "play.legsAfterCatch")) return false;
     {   // lot 5: landing part of a trick clip
         double la, ga;
         if (!OptNum(play, "landing", 0, la, err, "play.landing") || !OptNum(play, "groundAt", 0, ga, err, "play.groundAt")) return false;
@@ -294,6 +295,7 @@ std::string ClipToJson(const Clip& c) {
     JPut(play, "duration", JNum(c.duration));
     JPut(play, "loop", JBool(c.loop));
     if (c.hold) JPut(play, "hold", JBool(true));
+    if (c.legsAfterCatch) JPut(play, "legsAfterCatch", JBool(true));   // written only when on: older files unchanged
     if (c.landing > 0.f) { JPut(play, "landing", JNum(c.landing)); JPut(play, "groundAt", JNum(c.groundAt)); }
     if (c.markers.ok) {
         JValue mk = JObj();

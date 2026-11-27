@@ -47,6 +47,15 @@ std::string FigureToJson(const FigureRec& r) {
         root.o.emplace_back("posBones", std::move(pb));
         root.o.emplace_back("positions", std::move(pv));
     }
+    if (!r.board.empty()) {   // 7 numbers per frame: x y z, then the quaternion x y z w
+        JValue bd = Arr();
+        for (const BoardPose& s : r.board) {
+            for (int k = 0; k < 3; k++) bd.a.push_back(Num(std::round(s.p[k] * 100.f) / 100.f));
+            bd.a.push_back(Num(s.q.x)); bd.a.push_back(Num(s.q.y)); bd.a.push_back(Num(s.q.z)); bd.a.push_back(Num(s.q.w));
+        }
+        root.o.emplace_back("board", std::move(bd));
+        if (r.boardFaced) root.o.emplace_back("boardFaced", Num(1));
+    }
     return JWrite(root, 0) + "\n";
 }
 
@@ -113,6 +122,28 @@ bool ParseFigure(const std::string& text, FigureRec& out, std::string& err) {
             if (ok) { r.posBones = std::move(bs); r.positions = std::move(ps); }
         }
     }
+    const JValue* bd = v.get("board");
+    if (bd && bd->t == JValue::Arr && bd->a.size() == n * 7) {   // optional (2026-11-27): ignored if inconsistent
+        std::vector<BoardPose> bs(n);
+        bool ok = true;
+        for (size_t i = 0; i < n && ok; i++) {
+            double x[7] = {};
+            for (int k = 0; k < 7; k++) {
+                const JValue& e = bd->a[i * 7 + k];
+                if (e.t != JValue::Num || !std::isfinite(e.n)) { ok = false; break; }
+                x[k] = e.n;
+            }
+            const double len = x[3] * x[3] + x[4] * x[4] + x[5] * x[5] + x[6] * x[6];
+            if (!ok || !(len > 0.5) || !(len < 1.5)) { ok = false; break; }
+            for (int k = 0; k < 3; k++) bs[i].p[k] = (float)x[k];
+            bs[i].q = QNorm(Quat{(float)x[3], (float)x[4], (float)x[5], (float)x[6]});
+        }
+        if (ok) {
+            r.board = std::move(bs);
+            const JValue* faced = v.get("boardFaced");
+            r.boardFaced = faced && faced->t == JValue::Num && faced->n == 1.0;
+        }
+    }
     out = std::move(r);
     return true;
 }
@@ -126,6 +157,11 @@ void FigureRecorder::Reset(int bones, const std::vector<int>& posBones) {
     posBones_.clear();
     for (int b : posBones) if (b >= 0 && b < bones_ && (int)posBones_.size() < kMaxPos) posBones_.push_back(b);
     posBuf_.assign((size_t)kBufFrames * posBones_.size() * 3, 0.f);
+    doneBuf_.assign(buf_.size(), QIdent);
+    donePos_.assign(posBuf_.size(), 0.f);
+    doneFrames_ = 0;
+    droppedId_.store(0);
+    prevKick_ = false;
     active_ = 0;
     finishedId_ = 0;
     frames_ = 0;
@@ -142,6 +178,8 @@ void FigureRecorder::Sample(const GameState& gs, const Quat* locals, const float
     float* pd = posBuf_.data() + (size_t)frames_ * posBones_.size() * 3;
     for (size_t k = 0; k < posBones_.size(); k++)
         for (int c = 0; c < 3; c++) pd[k * 3 + c] = pos ? pos[posBones_[k]][c] : 0.f;
+    if (gs.boardOk) board_[frames_] = gs.board;
+    else boardHole_ = true;
     times_[frames_] = (float)frames_ * kStep;
     ratios_[frames_] = std::isfinite(gs.manualRatio) ? gs.manualRatio : 0.f;
     phases_[frames_] = phase >= 0 ? phase : gs.trickPhase < 0 ? 0 : gs.trickPhase > 4 ? 4 : gs.trickPhase;
@@ -151,12 +189,40 @@ void FigureRecorder::Sample(const GameState& gs, const Quat* locals, const float
 void FigureRecorder::Finish() {
     // lot 5: a trick is judged on its air part (the ground tail does not make a too short trick long enough)
     const int have = (!activeLoops_ && tail_ >= 0) ? frames_ - tail_ : frames_;
-    if (have >= (activeLoops_ && !activeShort_ ? kMinFrames : kKickMin)) {
-        finishedId_ = active_;
-        finishedLoops_ = activeLoops_;
-        finished_.store(true);
+    const int need = activeLoops_ ? (activeShort_ ? kKickMin : kMinFrames) : minFrames_;
+    if (have < need) { Drop("too short"); return; }   // the game thread still wants it
+    if (finished_.load()) { Drop("the previous recording is not written yet"); return; }
+    const size_t nq = (size_t)frames_ * (size_t)bones_, np = (size_t)frames_ * posBones_.size() * 3;
+    for (size_t i = 0; i < nq; i++) doneBuf_[i] = buf_[i];   // preallocated: no allocation in the hook
+    for (size_t i = 0; i < np; i++) donePos_[i] = posBuf_[i];
+    for (int i = 0; i < frames_; i++) {
+        doneTimes_[i] = times_[i];
+        doneRatios_[i] = ratios_[i];
+        donePhases_[i] = phases_[i];
+        doneBoard_[i] = board_[i];
     }
-    active_ = 0;   // too short: dropped (the game thread still wants it)
+    doneFrames_ = frames_;
+    doneBoardHole_ = boardHole_;
+    finishedId_ = active_;
+    finishedLoops_ = activeLoops_;
+    active_ = 0;
+    finished_.store(true);
+}
+
+void FigureRecorder::Drop(const char* why) {
+    if (active_ != 0 && !activeLoops_) {   // loops are dropped all the time (a short manual...): not worth a line
+        droppedWhy_ = why;
+        droppedId_.store(active_);
+    }
+    active_ = 0;
+}
+
+bool FigureRecorder::TakeDropped(int& figId, const char*& why) {
+    const int id = droppedId_.exchange(0);
+    if (id == 0) return false;
+    figId = id;
+    why = droppedWhy_;
+    return true;
 }
 
 void FigureRecorder::Start(const GameState& gs, bool loops, const Quat* locals, const float (*pos)[3]) {
@@ -166,6 +232,7 @@ void FigureRecorder::Start(const GameState& gs, bool loops, const Quat* locals, 
     frames_ = 0;
     tail_ = -1;
     accum_ = 0.f;
+    boardHole_ = false;
     Sample(gs, locals, pos);
 }
 
@@ -176,8 +243,12 @@ void FigureRecorder::Tick(const GameState& gs, const Quat* gameLocals, const flo
     }
     if (!std::isfinite(dt) || dt < 0.f || dt > 0.1f) dt = 0.f;
     const bool newPop = havePop_ ? gs.popSerial != pop_ : gs.kickflip;
+    const bool midAirPop = newPop && prevKick_;   // a late flip: the trick before it never landed
     havePop_ = true;
     pop_ = gs.popSerial;
+    prevKick_ = gs.kickflip && !gs.grind;   // a pop out of a grind is not a late flip, whatever the trick flag says
+    // 2026-11-27: the trick being recorded is still in the air when another one pops: it is not saved under its name
+    if (active_ != 0 && !activeLoops_ && tail_ < 0 && midAirPop) Drop("cut by another pop in mid-air");
     if (active_ != 0) {
         // trick: the air part ends on the ground (or at 2 s), then kGroundTail frames on the ground (lot 5)
         if (!activeLoops_ && tail_ < 0 && (!gs.kickflip || frames_ >= kKickMax)) tail_ = 0;
@@ -197,9 +268,10 @@ void FigureRecorder::Tick(const GameState& gs, const Quat* gameLocals, const flo
     // a new figure is wanted from the frame its id changes, even if the previous recording is still to be taken
     // (the first on-foot pose right after a landing was lost)
     if (gs.figId != prevFig_) wantStart_ = true;
-    if (active_ == 0 && !finished_.load() && gs.figId != 0 && gs.figWanted) {
-        if (gs.kickflip) { if (newPop) Start(gs, false, gameLocals, gamePos); }
-        else if (wantStart_) Start(gs, true, gameLocals, gamePos);
+    if (active_ == 0 && gs.figId != 0 && gs.figWanted) {
+        if (gs.kickflip) {
+            if (newPop) { minFrames_ = midAirPop ? kAirPopMin : kKickMin; Start(gs, false, gameLocals, gamePos); }
+        } else if (wantStart_) Start(gs, true, gameLocals, gamePos);
     }
     if (active_ != 0) wantStart_ = false;
     prevFig_ = gs.figId;
@@ -209,16 +281,16 @@ bool FigureRecorder::TakeFinished(FigureRec& out, int& figId) {
     if (!finished_.load()) return false;
     FigureRec r;
     r.bones = bones_;
-    r.times.assign(times_, times_ + frames_);
-    r.ratios.assign(ratios_, ratios_ + frames_);
-    r.frames.assign(buf_.begin(), buf_.begin() + (size_t)frames_ * (size_t)bones_);
-    if (!finishedLoops_) r.phases.assign(phases_, phases_ + frames_);
+    r.times.assign(doneTimes_, doneTimes_ + doneFrames_);
+    r.ratios.assign(doneRatios_, doneRatios_ + doneFrames_);
+    r.frames.assign(doneBuf_.begin(), doneBuf_.begin() + (size_t)doneFrames_ * (size_t)bones_);
+    if (!finishedLoops_) r.phases.assign(donePhases_, donePhases_ + doneFrames_);
+    if (!doneBoardHole_) r.board.assign(doneBoard_, doneBoard_ + doneFrames_);
     r.posBones = posBones_;
-    r.positions.assign(posBuf_.begin(), posBuf_.begin() + (size_t)frames_ * posBones_.size() * 3);
+    r.positions.assign(donePos_.begin(), donePos_.begin() + (size_t)doneFrames_ * posBones_.size() * 3);
     figId = finishedId_;
     finishedId_ = 0;
-    frames_ = 0;
-    finished_.store(false);
+    finished_.store(false);   // last: the hook may write the slot again from here
     out = std::move(r);
     return true;
 }

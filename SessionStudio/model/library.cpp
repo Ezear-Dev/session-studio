@@ -29,6 +29,10 @@ int ClipToOpen(const std::vector<const Clip*>& clips, const FigureVariant& v) {
     return -1;
 }
 
+bool CardHolds(const LibCard& card, const FigureVariant& v) {
+    return card.base.state == v.state && (!StateNamed(v.state) || Lower(WithStance(card.base, v.stance).trick) == Lower(v.trick));
+}
+
 std::vector<LibCard> BuildLibrary(const std::vector<LibEntry>& entries, const std::function<bool(const FigureVariant&)>& recorded,
                                   const std::vector<const Clip*>& clips) {
     std::vector<LibCard> out;
@@ -40,8 +44,7 @@ std::vector<LibCard> BuildLibrary(const std::vector<LibEntry>& entries, const st
         for (int s = 0; s < c.stances; s++)
             for (int g = 0; g < 2; g++) {
                 LibVariant& lv = c.cell[s][g];
-                lv.v = e.base;
-                lv.v.stance = s;
+                lv.v = WithStance(e.base, s);
                 lv.v.goofy = g == 1;
                 lv.recorded = recorded && recorded(lv.v);
                 for (const Clip* cl : clips) {
