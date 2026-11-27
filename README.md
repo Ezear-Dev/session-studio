@@ -5,6 +5,11 @@ away, without restarting. The game's files are not changed.
 
 This is an unofficial fan project, work in progress (version **v0.29**).
 
+> [!WARNING]
+> **Keep only one clip switched on per trick** (same stance and foot). The editor lets you switch on several variants
+> of the same trick, but Session Anim Loader **cannot play them at random or one after another yet**: it always plays
+> the same one. In the **Clips** list, check that only the clip you want is on, and switch the others off.
+
 ## How to install
 
 1. Download `SessionStudio-v0.29.zip` from this repository's **Releases** page.

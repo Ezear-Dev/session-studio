@@ -7,6 +7,9 @@
 # release packages built by tools/make-release.ps1, and the downloaded UE4SS zip
 /release/
 
+# 3D models (game assets or exports of them): never in the repository
+*.glb
+
 # Built programs
 /SessionAnimLoader/*.dll
 *.exe
