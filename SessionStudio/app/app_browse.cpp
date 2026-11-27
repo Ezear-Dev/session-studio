@@ -32,6 +32,156 @@ void App::AnimateVariant(const FigureVariant& v, bool newClip) {
     if (ask_ == Ask::None) SetWorkspace(1);
 }
 
+// every trick and ground state as a card (Browse and the Animate drawer); clipPtrs = the readable clips
+std::vector<LibCard> App::LibraryCards(std::vector<const Clip*>& clipPtrs) const {
+    std::vector<LibEntry> entries;
+    for (uint32_t s : {ST_OnFoot, ST_Walking, ST_Running, ST_Riding, ST_Pushing, ST_Crouch, ST_Landing, ST_Manual, ST_NoseManual, ST_Powerslide}) {
+        LibEntry e;
+        e.base.state = s;
+        e.title = StateTitle(s);
+        e.category = "On the ground";
+        e.ground = true;
+        if (s == ST_Powerslide) e.note = "not checked in game yet";
+        entries.push_back(e);
+    }
+    for (auto& t : tricks_) {
+        LibEntry e;
+        e.base.state = ST_Trick;
+        e.base.trick = t.base;
+        e.title = TrickDisplay(t.base);
+        e.category = t.category;
+        entries.push_back(e);
+    }
+    clipPtrs.clear();
+    for (auto& ci : clips_) if (ci.err.empty()) clipPtrs.push_back(&ci.clip);
+    return BuildLibrary(entries, [&](const FigureVariant& v) { return FigureReady(v); }, clipPtrs);
+}
+
+// the variant grid of a card: columns = stances, rows = feet. The cells shrink to fit (the drawer is narrow).
+// cur = the variant being edited (orange frame); chosen (may be null) = the one picked here (white frame).
+void App::VariantGrid(const LibCard& card, const FigureVariant& cur, const FigureVariant* chosen, const char* clickTip,
+                      bool* clicked, FigureVariant* clickedVar, bool* doubleClicked, FigureVariant* doubleVar) {
+    const float fs = ImGui::GetFontSize();
+    const float lw = std::round(fs * 4.2f), g2 = std::round(fs * 0.3f), chh = std::round(fs * 2.f);
+    const float cw = std::round(std::clamp((ImGui::GetContentRegionAvail().x - lw - g2 * (card.stances - 1)) / (float)card.stances, fs * 2.4f, fs * 3.3f));
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 o = ImGui::GetCursorScreenPos();
+    for (int s = 0; s < card.stances; s++) {
+        const char* sl = StanceLabel(s);
+        const ImVec2 ts = ImGui::CalcTextSize(sl);
+        dl->AddText(ImVec2(o.x + lw + s * (cw + g2) + (cw - ts.x) * 0.5f, o.y), theme::U32(theme::Text3), sl);
+    }
+    for (int g = 0; g < 2; g++) {
+        const float ry = o.y + fs * 1.3f + g * (chh + g2);
+        dl->AddText(ImVec2(o.x, ry + (chh - fs) * 0.5f), theme::U32(theme::Text3), g ? "Goofy" : "Regular");
+        for (int s = 0; s < card.stances; s++) {
+            const LibVariant& lv = card.cell[s][g];
+            const ImVec2 a(o.x + lw + s * (cw + g2), ry), b(a.x + cw, ry + chh);
+            ImGui::SetCursorScreenPos(a);
+            ImGui::PushID(s * 2 + g);
+            const bool click = ImGui::InvisibleButton("##cell", ImVec2(cw, chh));
+            const bool hov = ImGui::IsItemHovered();
+            const bool dbl = hov && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
+            ImGui::PopID();
+            dl->AddRectFilled(a, b, lv.recorded ? theme::U32(theme::Good, hov ? 0.30f : 0.20f) : theme::U32(hov ? theme::Raised : theme::Surface), fs * 0.35f);
+            if (lv.clipsOn) dl->AddCircleFilled(ImVec2(b.x - fs * 0.45f, a.y + fs * 0.45f), fs * 0.18f, theme::U32(theme::Accent));
+            if (lv.v == cur) dl->AddRect(a, b, theme::U32(theme::Accent), fs * 0.35f, 0, 2.f);
+            if (chosen && lv.v == *chosen) dl->AddRect(ImVec2(a.x + 2.f, a.y + 2.f), ImVec2(b.x - 2.f, b.y - 2.f), theme::U32(theme::Text), fs * 0.3f, 0, 1.5f);
+            if (hov) {
+                std::string tip = VariantTitleUi(lv.v) + "\n" + (lv.recorded ? "recorded in game" : "not recorded yet: do it once in game");
+                if (lv.clips) tip += ", " + std::to_string(lv.clips) + " clip(s) (" + std::to_string(lv.clipsOn) + " on)";
+                ImGui::SetTooltip("%s\n%s", tip.c_str(), clickTip);
+            }
+            if (click && clicked) { *clicked = true; *clickedVar = lv.v; }
+            if (dbl && doubleClicked) { *doubleClicked = true; *doubleVar = lv.v; }
+        }
+    }
+    ImGui::SetCursorScreenPos(ImVec2(o.x, o.y + fs * 1.3f + 2.f * (chh + g2)));
+    ImGui::Dummy(ImVec2(lw + card.stances * (cw + g2), 1.f));
+    {   // legend
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        dl->AddRectFilled(ImVec2(p.x, p.y + 3.f), ImVec2(p.x + fs * 0.8f, p.y + fs * 0.8f), theme::U32(theme::Good, 0.35f), 3.f);
+        dl->AddText(ImVec2(p.x + fs, p.y), theme::U32(theme::Text3), "recorded");
+        dl->AddCircleFilled(ImVec2(p.x + fs * 6.2f, p.y + fs * 0.5f), fs * 0.18f, theme::U32(theme::Accent));
+        dl->AddText(ImVec2(p.x + fs * 6.6f, p.y), theme::U32(theme::Text3), "clip on");
+        dl->AddRect(ImVec2(p.x + fs * 10.5f, p.y + 2.f), ImVec2(p.x + fs * 11.4f, p.y + fs * 0.85f), theme::U32(theme::Accent), 3.f, 0, 2.f);
+        dl->AddText(ImVec2(p.x + fs * 11.7f, p.y), theme::U32(theme::Text3), "editing");
+        ImGui::Dummy(ImVec2(0, fs));
+    }
+}
+
+// one card of the library: a quiet figure, the title, its clips (or category), the stance x feet dots.
+// Leaves the cursor at the card's top right (SameLine-friendly). 0 nothing, 1 clicked, 2 double-clicked, 3 a dot (*dotVar).
+int App::LibCardUi(const LibCard& c, const ImVec2& size, const FigureVariant& cur, bool selected, const char* clickTip, FigureVariant* dotVar) {
+    const float fs = ImGui::GetFontSize(), cw = size.x, ch = size.y;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    int result = 0;
+    ImGui::SetNextItemAllowOverlap();
+    if (ImGui::InvisibleButton("##card", ImVec2(cw, ch))) result = 1;
+    const bool hov = ImGui::IsItemHovered();
+    if (hov && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) result = 2;
+    if (hov) ImGui::SetTooltip("%s\n%d of %d variants recorded in game, %d clip(s) of yours%s\n%s", c.title.c_str(), c.recorded, c.variants, c.clips,
+                               c.note.empty() ? "" : ("\n" + c.note).c_str(), clickTip);
+    // the card
+    dl->AddRectFilled(p, ImVec2(p.x + cw, p.y + ch), theme::U32(hov ? theme::Raised : theme::Surface), fs * 0.6f);
+    dl->AddRect(p, ImVec2(p.x + cw, p.y + ch), selected ? theme::U32(theme::Accent) : theme::U32(theme::Line), fs * 0.6f, 0, selected ? 2.f : 1.f);
+    {   // a quiet figure (pose previews: later)
+        const ImVec2 a(p.x + fs * 0.6f, p.y + fs * 0.6f), b(p.x + cw - fs * 0.6f, p.y + ch * 0.52f);
+        dl->AddRectFilled(a, b, theme::U32(theme::Bg1), fs * 0.4f);
+        const float cx = (a.x + b.x) * 0.5f, h = b.y - a.y, top = a.y + h * 0.18f;
+        const ImU32 fc = theme::U32(c.recorded ? theme::Text3 : theme::Line);
+        dl->AddCircleFilled(ImVec2(cx, top + h * 0.08f), h * 0.09f, fc);
+        const float lw = std::max(2.f, h * 0.06f);
+        dl->AddLine(ImVec2(cx, top + h * 0.17f), ImVec2(cx, top + h * 0.48f), fc, lw);
+        dl->AddLine(ImVec2(cx, top + h * 0.24f), ImVec2(cx - h * 0.2f, top + h * 0.40f), fc, lw);
+        dl->AddLine(ImVec2(cx, top + h * 0.24f), ImVec2(cx + h * 0.18f, top + h * 0.34f), fc, lw);
+        dl->AddLine(ImVec2(cx, top + h * 0.48f), ImVec2(cx - h * 0.1f, top + h * 0.72f), fc, lw);
+        dl->AddLine(ImVec2(cx, top + h * 0.48f), ImVec2(cx + h * 0.12f, top + h * 0.72f), fc, lw);
+        dl->AddLine(ImVec2(cx - h * 0.28f, top + h * 0.76f), ImVec2(cx + h * 0.28f, top + h * 0.76f), theme::U32(theme::Line), lw);
+        if (!c.recorded) {
+            const char* t = "do it once in game";
+            const ImVec2 ts = ImGui::CalcTextSize(t);
+            if (ts.x < b.x - a.x) dl->AddText(ImVec2(cx - ts.x * 0.5f, b.y - ts.y - fs * 0.2f), theme::U32(theme::Text3), t);
+        }
+    }
+    const float ty = p.y + ch * 0.56f;
+    dl->PushClipRect(p, ImVec2(p.x + cw - fs * 0.4f, p.y + ch), true);
+    dl->AddText(theme::Strong(), 0.f, ImVec2(p.x + fs * 0.7f, ty), theme::U32(c.recorded ? theme::Text : theme::Text2), c.title.c_str());
+    if (c.clips) {
+        char cl[24];
+        snprintf(cl, sizeof(cl), "%d clip%s", c.clips, c.clips > 1 ? "s" : "");
+        dl->AddText(ImVec2(p.x + fs * 0.7f, ty + fs * 1.3f), theme::U32(theme::AccentHi), cl);
+    } else if (!c.note.empty()) dl->AddText(ImVec2(p.x + fs * 0.7f, ty + fs * 1.3f), theme::U32(theme::Warn), c.note.c_str());
+    else dl->AddText(ImVec2(p.x + fs * 0.7f, ty + fs * 1.3f), theme::U32(theme::Text3), c.ground ? "on the ground" : c.category.c_str());
+    dl->PopClipRect();
+    // the variant dots: columns = stances, rows = regular / goofy; click = that variant
+    const float dr = std::round(fs * 0.26f), ds = std::round(fs * 0.72f);
+    const float gx = p.x + cw - fs * 0.6f - ds * (float)c.stances, gy = p.y + ch - fs * 0.5f - ds * 2.f;
+    for (int s = 0; s < c.stances; s++)
+        for (int g = 0; g < 2; g++) {
+            const LibVariant& lv = c.cell[s][g];
+            const ImVec2 dc(gx + ds * (s + 0.5f), gy + ds * (g + 0.5f));
+            ImGui::SetCursorScreenPos(ImVec2(dc.x - ds * 0.5f, dc.y - ds * 0.5f));
+            ImGui::PushID(s * 2 + g);
+            const bool click = ImGui::InvisibleButton("##dot", ImVec2(ds, ds));
+            const bool dh = ImGui::IsItemHovered();
+            ImGui::PopID();
+            if (lv.recorded) dl->AddCircleFilled(dc, dr, theme::U32(theme::Good));
+            else dl->AddCircle(dc, dr, theme::U32(theme::Good, 0.7f), 0, 1.2f);
+            if (lv.clipsOn) dl->AddCircleFilled(dc, dr * 0.5f, theme::U32(theme::Accent));
+            if (lv.v == cur) dl->AddCircle(dc, dr + 2.5f, theme::U32(theme::Text), 0, 1.5f);
+            else if (dh) dl->AddCircle(dc, dr + 2.f, theme::U32(theme::Text2), 0, 1.f);
+            if (dh) ImGui::SetTooltip("%s\n%s%s\nClick: open this variant", VariantTitleUi(lv.v).c_str(),
+                                      lv.recorded ? "recorded in game" : "not recorded yet: do it once in game",
+                                      lv.clips ? (", " + std::to_string(lv.clips) + " clip(s) (" + std::to_string(lv.clipsOn) + " on)").c_str() : "");
+            if (click) { result = 3; *dotVar = lv.v; }
+        }
+    ImGui::SetCursorScreenPos(ImVec2(p.x + cw, p.y));
+    ImGui::Dummy(ImVec2(0, ch));
+    return result;
+}
+
 void App::BrowseView() {
     const Layout L = Lay();
     const float fs = ImGui::GetFontSize();
@@ -56,27 +206,8 @@ void App::BrowseView() {
     }
 
     // ---- the data of this frame
-    std::vector<LibEntry> entries;
-    for (uint32_t s : {ST_OnFoot, ST_Walking, ST_Running, ST_Riding, ST_Pushing, ST_Crouch, ST_Landing, ST_Manual, ST_NoseManual, ST_Powerslide}) {
-        LibEntry e;
-        e.base.state = s;
-        e.title = StateTitle(s);
-        e.category = "On the ground";
-        e.ground = true;
-        if (s == ST_Powerslide) e.note = "not checked in game yet";
-        entries.push_back(e);
-    }
-    for (auto& t : tricks_) {
-        LibEntry e;
-        e.base.state = ST_Trick;
-        e.base.trick = t.base;
-        e.title = TrickDisplay(t.base);
-        e.category = t.category;
-        entries.push_back(e);
-    }
     std::vector<const Clip*> clipPtrs;
-    for (auto& ci : clips_) if (ci.err.empty()) clipPtrs.push_back(&ci.clip);
-    const std::vector<LibCard> cards = BuildLibrary(entries, [&](const FigureVariant& v) { return FigureReady(v); }, clipPtrs);
+    const std::vector<LibCard> cards = LibraryCards(clipPtrs);
     std::vector<std::string> cats;   // in the order of the list
     for (auto& c : cards) if (std::find(cats.begin(), cats.end(), c.category) == cats.end()) cats.push_back(c.category);
     const FigureVariant cur = CurrentVariant(inLanding_, var_, comp_.var);
@@ -163,76 +294,18 @@ void App::BrowseView() {
         ImGui::Spacing();
         const float cw = std::round(fs * 11.f), ch = std::round(fs * 7.4f), gap = std::round(fs * 0.8f);
         const int cols = std::max(1, (int)((ImGui::GetContentRegionAvail().x + gap) / (cw + gap)));
-        ImDrawList* dl = ImGui::GetWindowDrawList();
         int col = 0;
         for (int idx : shown) {
             const LibCard& c = cards[idx];
             if (col) ImGui::SameLine(0, gap);
             ImGui::PushID(idx);
-            const ImVec2 p = ImGui::GetCursorScreenPos();
             const std::string key = FigureKey(c.base);
-            const bool selected = browseCard_ == key;
             const bool isCur = c.base.state == cur.state && (!StateNamed(c.base.state) || Lower(c.base.trick) == Lower(cur.trick));
-            ImGui::SetNextItemAllowOverlap();
-            if (ImGui::InvisibleButton("##card", ImVec2(cw, ch))) { browseCard_ = key; detailVar_ = isCur ? cur : c.base; }
-            const bool hov = ImGui::IsItemHovered();
-            if (hov && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) AnimateVariant(isCur ? cur : c.base, false);
-            if (hov) ImGui::SetTooltip("%s\n%d of %d variants recorded in game, %d clip(s) of yours%s\nClick: details · double-click: animate · a dot: that variant",
-                                       c.title.c_str(), c.recorded, c.variants, c.clips, c.note.empty() ? "" : ("\n" + c.note).c_str());
-            // the card
-            dl->AddRectFilled(p, ImVec2(p.x + cw, p.y + ch), theme::U32(hov ? theme::Raised : theme::Surface), fs * 0.6f);
-            dl->AddRect(p, ImVec2(p.x + cw, p.y + ch), selected ? theme::U32(theme::Accent) : theme::U32(theme::Line), fs * 0.6f, 0, selected ? 2.f : 1.f);
-            {   // a quiet figure (pose previews: later)
-                const ImVec2 a(p.x + fs * 0.6f, p.y + fs * 0.6f), b(p.x + cw - fs * 0.6f, p.y + ch * 0.52f);
-                dl->AddRectFilled(a, b, theme::U32(theme::Bg1), fs * 0.4f);
-                const float cx = (a.x + b.x) * 0.5f, h = b.y - a.y, top = a.y + h * 0.18f;
-                const ImU32 fc = theme::U32(c.recorded ? theme::Text3 : theme::Line);
-                dl->AddCircleFilled(ImVec2(cx, top + h * 0.08f), h * 0.09f, fc);
-                const float lw = std::max(2.f, h * 0.06f);
-                dl->AddLine(ImVec2(cx, top + h * 0.17f), ImVec2(cx, top + h * 0.48f), fc, lw);
-                dl->AddLine(ImVec2(cx, top + h * 0.24f), ImVec2(cx - h * 0.2f, top + h * 0.40f), fc, lw);
-                dl->AddLine(ImVec2(cx, top + h * 0.24f), ImVec2(cx + h * 0.18f, top + h * 0.34f), fc, lw);
-                dl->AddLine(ImVec2(cx, top + h * 0.48f), ImVec2(cx - h * 0.1f, top + h * 0.72f), fc, lw);
-                dl->AddLine(ImVec2(cx, top + h * 0.48f), ImVec2(cx + h * 0.12f, top + h * 0.72f), fc, lw);
-                dl->AddLine(ImVec2(cx - h * 0.28f, top + h * 0.76f), ImVec2(cx + h * 0.28f, top + h * 0.76f), theme::U32(theme::Line), lw);
-                if (!c.recorded) {
-                    const char* t = "do it once in game";
-                    const ImVec2 ts = ImGui::CalcTextSize(t);
-                    dl->AddText(ImVec2(cx - ts.x * 0.5f, b.y - ts.y - fs * 0.2f), theme::U32(theme::Text3), t);
-                }
-            }
-            const float ty = p.y + ch * 0.56f;
-            dl->AddText(theme::Strong(), 0.f, ImVec2(p.x + fs * 0.7f, ty), theme::U32(c.recorded ? theme::Text : theme::Text2), c.title.c_str());
-            if (c.clips) {
-                char cl[24];
-                snprintf(cl, sizeof(cl), "%d clip%s", c.clips, c.clips > 1 ? "s" : "");
-                dl->AddText(ImVec2(p.x + fs * 0.7f, ty + fs * 1.3f), theme::U32(theme::AccentHi), cl);
-            } else if (!c.note.empty()) dl->AddText(ImVec2(p.x + fs * 0.7f, ty + fs * 1.3f), theme::U32(theme::Warn), c.note.c_str());
-            else dl->AddText(ImVec2(p.x + fs * 0.7f, ty + fs * 1.3f), theme::U32(theme::Text3), c.ground ? "on the ground" : c.category.c_str());
-            // the variant dots: columns = stances, rows = regular / goofy; click = that variant
-            const float dr = std::round(fs * 0.26f), ds = std::round(fs * 0.72f);
-            const float gx = p.x + cw - fs * 0.6f - ds * (float)c.stances, gy = p.y + ch - fs * 0.5f - ds * 2.f;
-            for (int s = 0; s < c.stances; s++)
-                for (int g = 0; g < 2; g++) {
-                    const LibVariant& lv = c.cell[s][g];
-                    const ImVec2 dc(gx + ds * (s + 0.5f), gy + ds * (g + 0.5f));
-                    ImGui::SetCursorScreenPos(ImVec2(dc.x - ds * 0.5f, dc.y - ds * 0.5f));
-                    ImGui::PushID(s * 2 + g);
-                    const bool click = ImGui::InvisibleButton("##dot", ImVec2(ds, ds));
-                    const bool dh = ImGui::IsItemHovered();
-                    ImGui::PopID();
-                    if (lv.recorded) dl->AddCircleFilled(dc, dr, theme::U32(theme::Good));
-                    else dl->AddCircle(dc, dr, theme::U32(theme::Good, 0.7f), 0, 1.2f);
-                    if (lv.clipsOn) dl->AddCircleFilled(dc, dr * 0.5f, theme::U32(theme::Accent));
-                    if (lv.v == cur) dl->AddCircle(dc, dr + 2.5f, theme::U32(theme::Text), 0, 1.5f);
-                    else if (dh) dl->AddCircle(dc, dr + 2.f, theme::U32(theme::Text2), 0, 1.f);
-                    if (dh) ImGui::SetTooltip("%s\n%s%s\nClick: open this variant", VariantTitleUi(lv.v).c_str(),
-                                              lv.recorded ? "recorded in game" : "not recorded yet: do it once in game",
-                                              lv.clips ? (", " + std::to_string(lv.clips) + " clip(s) (" + std::to_string(lv.clipsOn) + " on)").c_str() : "");
-                    if (click) { browseCard_ = key; detailVar_ = lv.v; askVar_ = lv.v; if (lv.v != cur) Request(Ask::ChangeFigure); }
-                }
-            ImGui::SetCursorScreenPos(ImVec2(p.x + cw, p.y));
-            ImGui::Dummy(ImVec2(0, ch));
+            FigureVariant dv;
+            const int r = LibCardUi(c, ImVec2(cw, ch), cur, browseCard_ == key, "Click: details · double-click: animate · a dot: that variant", &dv);
+            if (r == 1) { browseCard_ = key; detailVar_ = isCur ? cur : c.base; }
+            else if (r == 2) AnimateVariant(isCur ? cur : c.base, false);
+            else if (r == 3) { browseCard_ = key; detailVar_ = dv; askVar_ = dv; if (dv != cur) Request(Ask::ChangeFigure); }
             ImGui::PopID();
             col = (col + 1) % cols;
             if (col == 0) ImGui::Dummy(ImVec2(0, gap * 0.25f));
@@ -277,47 +350,13 @@ void App::BrowseDetail(const LibCard& card, const FigureVariant& cur, const std:
     if (!card.note.empty()) ImGui::TextColored(theme::Warn, "%s", card.note.c_str());
     ImGui::Spacing();
 
-    // the big grid: columns = stances, rows = feet
-    const float lw = std::round(fs * 4.2f), cw = std::round(fs * 3.3f), chh = std::round(fs * 2.f), g2 = std::round(fs * 0.3f);
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    const ImVec2 o = ImGui::GetCursorScreenPos();
-    for (int s = 0; s < card.stances; s++) {
-        const char* sl = StanceLabel(s);
-        const ImVec2 ts = ImGui::CalcTextSize(sl);
-        dl->AddText(ImVec2(o.x + lw + s * (cw + g2) + (cw - ts.x) * 0.5f, o.y), theme::U32(theme::Text3), sl);
-    }
-    for (int g = 0; g < 2; g++) {
-        const float ry = o.y + fs * 1.3f + g * (chh + g2);
-        dl->AddText(ImVec2(o.x, ry + (chh - fs) * 0.5f), theme::U32(theme::Text3), g ? "Goofy" : "Regular");
-        for (int s = 0; s < card.stances; s++) {
-            const LibVariant& lv = card.cell[s][g];
-            const ImVec2 a(o.x + lw + s * (cw + g2), ry), b(a.x + cw, ry + chh);
-            ImGui::SetCursorScreenPos(a);
-            ImGui::PushID(s * 2 + g);
-            const bool click = ImGui::InvisibleButton("##cell", ImVec2(cw, chh));
-            const bool hov = ImGui::IsItemHovered();
-            const bool dbl = hov && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
-            ImGui::PopID();
-            dl->AddRectFilled(a, b, lv.recorded ? theme::U32(theme::Good, hov ? 0.30f : 0.20f) : theme::U32(hov ? theme::Raised : theme::Surface), fs * 0.35f);
-            if (lv.clipsOn) dl->AddCircleFilled(ImVec2(b.x - fs * 0.45f, a.y + fs * 0.45f), fs * 0.18f, theme::U32(theme::Accent));
-            if (lv.v == cur) dl->AddRect(a, b, theme::U32(theme::Accent), fs * 0.35f, 0, 2.f);
-            if (lv.v == detailVar_) dl->AddRect(ImVec2(a.x + 2.f, a.y + 2.f), ImVec2(b.x - 2.f, b.y - 2.f), theme::U32(theme::Text), fs * 0.3f, 0, 1.5f);
-            if (hov) ImGui::SetTooltip("%s\n%s\nClick: choose · double-click: animate it", VariantTitleUi(lv.v).c_str(), lv.recorded ? "recorded in game" : "not recorded yet");
-            if (click) detailVar_ = lv.v;
-            if (dbl) AnimateVariant(lv.v, false);
-        }
-    }
-    ImGui::SetCursorScreenPos(ImVec2(o.x, o.y + fs * 1.3f + 2.f * (chh + g2)));
-    ImGui::Dummy(ImVec2(lw + card.stances * (cw + g2), 1.f));
-    {   // legend
-        const ImVec2 p = ImGui::GetCursorScreenPos();
-        dl->AddRectFilled(ImVec2(p.x, p.y + 3.f), ImVec2(p.x + fs * 0.8f, p.y + fs * 0.8f), theme::U32(theme::Good, 0.35f), 3.f);
-        dl->AddText(ImVec2(p.x + fs, p.y), theme::U32(theme::Text3), "recorded");
-        dl->AddCircleFilled(ImVec2(p.x + fs * 6.2f, p.y + fs * 0.5f), fs * 0.18f, theme::U32(theme::Accent));
-        dl->AddText(ImVec2(p.x + fs * 6.6f, p.y), theme::U32(theme::Text3), "clip on");
-        dl->AddRect(ImVec2(p.x + fs * 10.5f, p.y + 2.f), ImVec2(p.x + fs * 11.4f, p.y + fs * 0.85f), theme::U32(theme::Accent), 3.f, 0, 2.f);
-        dl->AddText(ImVec2(p.x + fs * 11.7f, p.y), theme::U32(theme::Text3), "editing");
-        ImGui::Dummy(ImVec2(0, fs));
+    // the big grid (shared with the Animate drawer)
+    {
+        bool click = false, dbl = false;
+        FigureVariant cv, dv;
+        VariantGrid(card, cur, &detailVar_, "Click: choose · double-click: animate it", &click, &cv, &dbl, &dv);
+        if (click) detailVar_ = cv;
+        if (dbl) AnimateVariant(dv, false);
     }
     ImGui::Separator();
 

@@ -57,6 +57,11 @@ private:
     void BrowseDetail(const LibCard& card, const FigureVariant& cur, const std::vector<const Clip*>& clipPtrs);
     void BrowseClipsTable(const std::string& q);
     void BrowseCaptures(const std::string& q);
+    std::vector<LibCard> LibraryCards(std::vector<const Clip*>& clipPtrs) const;   // Browse and the drawer
+    // one card (Browse and the drawer): 0 nothing, 1 clicked, 2 double-clicked, 3 a variant dot clicked (*dotVar)
+    int LibCardUi(const LibCard& c, const ImVec2& size, const FigureVariant& cur, bool selected, const char* clickTip, FigureVariant* dotVar);
+    void VariantGrid(const LibCard& card, const FigureVariant& cur, const FigureVariant* chosen, const char* clickTip,
+                     bool* clicked, FigureVariant* clickedVar, bool* doubleClicked, FigureVariant* doubleVar);
     void AnimateVariant(const FigureVariant& v, bool newClip);   // pick v (through the confirmations) and go to Animate
     std::string browseCat_;               // "" every card, a category, "#clips", "#captures" (saved "browse.view")
     char browseSearch_[64] = {};
@@ -70,7 +75,7 @@ private:
     void PollGame(float dt);              // game process, mod files, log (install state, reload of the last save)
     void OpenInExplorer(const std::wstring& dir);
     // ---------------------------------------------------------------- UI Phase 2 (2026-11-25): Library
-    void LibraryTricks(const std::function<void(const FigureVariant&)>& pick);
+    void LibraryTricks(const std::vector<LibCard>& cards, const std::function<void(const FigureVariant&)>& pick);
     void LibraryClips();
     void LibraryCaptures();
     void ClipMenuItems(const std::string& file, bool capture);   // Open / Enable / Rename / Duplicate / Delete
@@ -81,8 +86,6 @@ private:
     std::vector<std::string> captures_;   // "captures\x.sanim", refreshed with the clips
     bool clipsAll_ = false;               // Clips tab: every clip, not only the variant's (saved)
     int libTab_ = 0;                      // 0 Tricks, 1 Clips, 2 Captures (saved)
-    bool libTabRestore_ = true;           // select the saved tab during the first frames only
-    int libTabFrames_ = 0;
     std::string libFile_, libErr_;        // target of Rename / Delete, error shown in the dialog
     char renameBuf_[128] = {};
     bool popRename_ = false, popDelete_ = false, popRenameClose_ = false;

@@ -1,28 +1,56 @@
-// Session Studio -- Library panel: variant, tricks, clips, captures, clip file actions.
+// Session Studio -- the Library drawer of Animate (B), and the clip file actions shared with Browse.
 #include "app_internal.h"
 
 using namespace app_detail;
 
-// ------------------------------------------------------------------ UI Phase 2 (2026-11-25): Library
-// Top: the variant (stance x feet) and whether the game's animation is recorded, always visible.
-// Tabs: Tricks (what to animate), Clips (files, with enable / rename / duplicate / delete), Captures (Ctrl+F4 poses).
-// Redesign step 2 (2026-11-27): Browse shows it on the whole window; Animate shows it as a drawer over the stage (B).
-// Temporary: step 6 replaces it with the real Browse workspace.
+// ------------------------------------------------------------------ the Library drawer
+// UI Phase 2 (2026-11-25) made it the Library panel; redesign step 2 turned it into the Animate drawer, step 6 gave
+// Browse its own page. 2026-11-27 (user: "make it look more like Browse"): the same pieces as Browse. Top: the move
+// being edited with Browse's variant grid; below, a segmented switch Tricks / Clips / Captures. Tricks are rows with
+// the stance x feet dots of the Browse cards; clips are rows with an on / off switch like the Browse detail.
+namespace {
+void LibCaps(const char* text) {
+    ImGui::Spacing();
+    ImGui::TextColored(theme::Text3, "%s", text);
+}
+
+void LibTitle(const char* text, float scale) {
+    if (theme::Strong()) ImGui::PushFont(theme::Strong(), ImGui::GetStyle().FontSizeBase * scale);
+    ImGui::TextUnformatted(text);
+    if (theme::Strong()) ImGui::PopFont();
+}
+
+bool SameMove(const FigureVariant& a, const FigureVariant& b) {
+    return a.state == b.state && (!StateNamed(a.state) || Lower(a.trick) == Lower(b.trick));
+}
+} // namespace
+
 void App::TricksPanel() {
     const Layout L = Lay();
+    const float fs = ImGui::GetFontSize();
     Place(L.lib.x, L.lib.y, L.lib.w, L.lib.h);
-    if (ws_ == 1) {   // drawer: above the stage, with a close button; brought to the front when it opens
-        static int lastFrame = -10;
-        if (ImGui::GetFrameCount() != lastFrame + 1) ImGui::SetNextWindowFocus();
-        lastFrame = ImGui::GetFrameCount();
-        bool open = true;
-        BeginPanel("Library", kPanel & ~ImGuiWindowFlags_NoBringToFrontOnFocus, &open);
-        if (!open) drawer_ = false;
-    } else BeginPanel("Library", kPanel);
+    static int lastFrame = -10;   // brought to the front when it opens
+    if (ImGui::GetFrameCount() != lastFrame + 1) ImGui::SetNextWindowFocus();
+    lastFrame = ImGui::GetFrameCount();
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, theme::Bg1);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(fs * 0.9f, fs * 0.8f));
+    ImGui::Begin("##library", nullptr, (kPanel & ~ImGuiWindowFlags_NoBringToFrontOnFocus) | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
+
+    // ---- header: the title and a close button
+    ImGui::AlignTextToFramePadding();
+    LibTitle("Library", 1.2f);
+    ImGui::SameLine(ImGui::GetContentRegionMax().x - ImGui::GetFrameHeight());
+    if (ui::IconButton("libclose", theme::Icon::Close, "x", false, ui::Kind::Ghost)) drawer_ = false;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Close the Library (B)");
+
     if (clipsDir_.empty()) {   // empty state: nothing can be listed without the game's clips folder
-        ImGui::TextWrapped("The game's clips folder is not chosen yet.");
-        ImGui::TextDisabled("...\\Win64\\Mods\\SessionAnimLoader\\clips");
-        if (ImGui::Button("Choose the folder...")) dirDialog_ = true;
+        ImGui::PushTextWrapPos(0.f);
+        ImGui::TextColored(theme::Text2, "%s", "The game's clips folder is not chosen yet.");
+        ImGui::TextColored(theme::Text3, "%s", "...\\Win64\\Mods\\SessionAnimLoader\\clips");
+        ImGui::PopTextWrapPos();
+        if (ui::Button("Choose the folder...", ui::Kind::Primary)) dirDialog_ = true;
         ImGui::End();
         return;
     }
@@ -31,181 +59,161 @@ void App::TricksPanel() {
         askVar_ = v;
         Request(Ask::ChangeFigure);
     };
+    std::vector<const Clip*> clipPtrs;
+    const std::vector<LibCard> cards = LibraryCards(clipPtrs);
 
-    // ---- variant
-    ImGui::SeparatorText("Variant");
-    const int nSt = StateAllStances(var_.state) ? STANCE_Count : 2;   // manuals, grinds...: normal / switch only
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextDisabled("Stance");
-    ImGui::SameLine(ImGui::GetFontSize() * 3.6f);
-    const float indentX = ImGui::GetFontSize() * 3.6f;
-    for (int s = 0; s < nSt; s++) {
-        FigureVariant v = var_; v.stance = s;
-        const bool on = var_.stance == s;
-        if (s) {   // wrap to a new line when the panel is too narrow for the next button
-            const ImGuiStyle& st = ImGui::GetStyle();
-            const float w = ImGui::GetFrameHeight() + st.ItemInnerSpacing.x + ImGui::CalcTextSize(StanceLabel(s)).x;
-            const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
-            if (ImGui::GetItemRectMax().x + st.ItemSpacing.x + w <= right) ImGui::SameLine();
-            else ImGui::SetCursorPosX(indentX);
-        }
-        ImGui::PushStyleColor(ImGuiCol_Text, FigureReady(v) ? kOk : (on ? theme::Text : kDim));
-        if (ImGui::RadioButton(StanceLabel(s), on)) pick(v);
-        ImGui::PopStyleColor();
-        if (ImGui::IsItemHovered()) {
-            static const char* kTip[4] = {"Normal: the skater's natural stance.", "Switch: the opposite stance (the other foot forward).",
-                                          "Fakie: rolling backwards, natural stance.", "Nollie: pop with the front foot, on the nose (the front of the board)."};
-            ImGui::SetTooltip("%s", kTip[s & 3]);
-        }
-    }
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextDisabled("Foot");
-    ImGui::SameLine(ImGui::GetFontSize() * 3.6f);
-    for (int g = 0; g < 2; g++) {
-        FigureVariant v = var_; v.goofy = g == 1;
-        if (g) ImGui::SameLine();
-        ImGui::PushStyleColor(ImGuiCol_Text, FigureReady(v) ? kOk : (var_.goofy == (g == 1) ? theme::Text : kDim));
-        if (ImGui::RadioButton(g ? "Goofy" : "Regular", var_.goofy == (g == 1))) pick(v);
-        ImGui::PopStyleColor();
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip(g ? "Goofy: right foot forward." : "Regular: left foot forward.");
+    // ---- the move being edited: its variant grid (click = that variant), recorded or not
+    const LibCard* card = nullptr;
+    for (auto& c : cards) if (SameMove(c.base, var_)) card = &c;
+    ImGui::Spacing();
+    LibTitle(card ? card->title.c_str() : VariantTitleUi(var_).c_str(), 1.1f);
+    if (card) {
+        ImGui::TextColored(theme::Text3, "%s  ·  recorded in %d of %d variants", card->category.c_str(), card->recorded, card->variants);
+        ImGui::Spacing();
+        bool click = false;
+        FigureVariant cv;
+        VariantGrid(*card, var_, nullptr, "Click: edit this variant", &click, &cv, nullptr, nullptr);
+        if (click) pick(cv);
     }
     if (FigureReady(var_)) {
-        Badge("Game animation ready", kGood);
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("The game's movement for this variant is recorded: you can edit it.\nGreen in the lists: variants already recorded.");
+        ImGui::TextColored(theme::Good, "%s", "Game movement recorded");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("The game's movement for this variant is recorded: you can edit it.");
         ImGui::SameLine();
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetStyle().FramePadding.y * 0.5f);
         if (ImGui::SmallButton(FigureRedo(var_) ? "redo in game" : "record again")) RequestRerecord(var_);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("The next time you do this move in game, its movement is recorded again.");
     } else {
-        Badge("Do it once in game", kAlert);
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Do \"%s\" once in game (mod installed):\nthe mod records the game's movement by itself, then you can edit it here.", VariantTitleUi(var_).c_str());
-    }
-    if (ws_ == 0) {   // Browse: go and animate what is picked
-        ImGui::Spacing();
-        if (ui::Button("Animate this variant", ui::Kind::Primary)) SetWorkspace(1);
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Opens the Animate workspace (3D view and timeline) on %s (Tab).", VariantTitleUi(var_).c_str());
+        ImGui::PushTextWrapPos(0.f);
+        ImGui::TextColored(theme::Warn, "Do \"%s\" once in game: the mod records it by itself.", VariantTitleUi(var_).c_str());
+        ImGui::PopTextWrapPos();
     }
 
-    // ---- tabs
+    // ---- Tricks / Clips / Captures
     int nClips = 0;
     for (auto& ci : clips_) if (ClipTargets(ci.clip, var_)) nClips++;
-    const std::string clipsTab = "Clips (" + std::to_string(clipsAll_ ? (int)clips_.size() : nClips) + ")###clips";
-    const std::string capTab = "Captures (" + std::to_string(captures_.size()) + ")###captures";
+    const std::string clipsLab = "Clips " + std::to_string(clipsAll_ ? (int)clips_.size() : nClips);
+    const std::string capsLab = "Captures " + std::to_string(captures_.size());
+    const char* tabs[3] = {"Tricks", clipsLab.c_str(), capsLab.c_str()};
     ImGui::Spacing();
-    if (ImGui::BeginTabBar("##biblio")) {
-        // the last tab used comes back at the next launch (settings "library.tab")
-        auto flags = [&](int k) { return libTabRestore_ && libTab_ == k ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None; };
-        int now = libTab_;
-        if (ImGui::BeginTabItem("Tricks", nullptr, flags(0))) { now = 0; LibraryTricks(pick); ImGui::EndTabItem(); }
-        if (ImGui::BeginTabItem(clipsTab.c_str(), nullptr, flags(1))) { now = 1; LibraryClips(); ImGui::EndTabItem(); }
-        if (ImGui::BeginTabItem(capTab.c_str(), nullptr, flags(2))) { now = 2; LibraryCaptures(); ImGui::EndTabItem(); }
-        ImGui::EndTabBar();
-        // SetSelected takes effect a frame later: keep asking until the saved tab is really shown
-        if (libTabRestore_) { if (now == libTab_ || ++libTabFrames_ > 10) libTabRestore_ = false; }
-        else if (now != libTab_) { libTab_ = now; SaveSetting(settings_, "library.tab", std::to_string(now)); }
-    }
+    ImGui::Separator();
+    ImGui::Spacing();
+    if (ui::Segmented("##libtab", tabs, 3, &libTab_)) SaveSetting(settings_, "library.tab", std::to_string(libTab_));
+    ImGui::Spacing();
+    if (libTab_ == 0) LibraryTricks(cards, pick);
+    else if (libTab_ == 1) LibraryClips();
+    else LibraryCaptures();
     ImGui::End();
 }
 
-void App::LibraryTricks(const std::function<void(const FigureVariant&)>& pick) {
+// Organised like Browse (user 2026-11-27): the same collections (Everything, then each category, with counts), the same
+// "Recorded" / "Has clips" filters and the same cards. The collection and the filters are Browse's own (one choice for
+// both places). Click a card = animate that move in the stance and foot being edited; a dot = that exact variant.
+void App::LibraryTricks(const std::vector<LibCard>& cards, const std::function<void(const FigureVariant&)>& pick) {
+    const float fs = ImGui::GetFontSize();
     ImGui::SetNextItemWidth(-1);
-    ImGui::InputTextWithHint("##cherche", "search a trick...", search_, sizeof(search_));
-    const std::string q = Lower(search_);
-    ImGui::BeginChild("##liste", ImVec2(0, 0), ImGuiChildFlags_None);
-    auto has = [&](const FigureVariant& base) {   // variants recorded
-        int rec = 0;
-        for (int s = 0; s < STANCE_Count; s++) for (int g = 0; g < 2; g++) { FigureVariant v = base; v.stance = s; v.goofy = g == 1; if (FigureReady(v)) rec++; }
-        return rec;
-    };
-    auto clipCount = [&](const FigureVariant& base) {
+    ImGui::InputTextWithHint("##cherche", "Search a trick...", search_, sizeof(search_));
+    // the collection: Browse's sidebar as a list box (My clips and Captures have their own tabs here)
+    std::vector<std::string> cats;
+    for (auto& c : cards) if (std::find(cats.begin(), cats.end(), c.category) == cats.end()) cats.push_back(c.category);
+    const std::string cat = (!browseCat_.empty() && browseCat_[0] == '#') ? std::string() : browseCat_;
+    auto label = [&](const std::string& k) {
         int n = 0;
-        for (auto& ci : clips_) {
-            if (!(ci.clip.states & base.state)) continue;
-            if (StateNamed(base.state) && ci.clip.trickHash && ci.clip.trickHash != TrickHash(base.trick)) continue;
-            n++;
-        }
-        return n;
+        for (auto& c : cards) n += k.empty() || c.category == k;
+        return (k.empty() ? std::string("Everything") : k) + "  (" + std::to_string(n) + ")";
     };
-    auto line = [&](const FigureVariant& base, const std::string& title, const char* note) {
-        if (!q.empty() && Lower(title).find(q) == std::string::npos) return;
-        const bool cur = base.state == var_.state && (!StateNamed(base.state) || Lower(base.trick) == Lower(var_.trick));
-        const int nc = clipCount(base), nr = has(base);
-        std::string lab = title;
-        if (note) lab += std::string("  (") + note + ")";
-        if (nc) lab += "  [" + std::to_string(nc) + " clip" + (nc > 1 ? "s" : "") + "]";
-        ImGui::PushID(title.c_str());
-        ImGui::PushStyleColor(ImGuiCol_Text, nr ? kOk : ImGui::GetStyleColorVec4(ImGuiCol_Text));
-        if (ImGui::Selectable(lab.c_str(), cur)) {
-            FigureVariant v = base;
-            v.stance = var_.stance; v.goofy = var_.goofy;
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::BeginCombo("##collection", label(cat).c_str())) {
+        if (ImGui::Selectable(label("").c_str(), cat.empty())) { browseCat_.clear(); SaveSetting(settings_, "browse.view", ""); }
+        for (auto& k : cats)
+            if (ImGui::Selectable(label(k).c_str(), cat == k)) { browseCat_ = k; SaveSetting(settings_, "browse.view", k); }
+        ImGui::EndCombo();
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", "Which tricks and states to show (the same choice as in Browse).");
+    if (ui::Toggle("Recorded##only", browseRecOnly_)) browseRecOnly_ = !browseRecOnly_;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Only what you already did in game (at least one variant recorded).");
+    ImGui::SameLine();
+    if (ui::Toggle("Has clips##only", browseClipsOnly_)) browseClipsOnly_ = !browseClipsOnly_;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Only what has at least one clip of yours.");
+    ImGui::Spacing();
+
+    LibFilter f;
+    f.search = search_;
+    f.category = cat;
+    f.recordedOnly = browseRecOnly_;
+    f.withClipsOnly = browseClipsOnly_;
+    ImGui::BeginChild("##liste", ImVec2(0, 0), ImGuiChildFlags_None);
+    // 2026-11-25 (user): grabs set aside; grinds parked (one shared recording), so neither is listed
+    const float gap = std::round(fs * 0.6f), avail = ImGui::GetContentRegionAvail().x;
+    const int cols = std::max(1, (int)((avail + gap) / (fs * 9.f + gap)));
+    const float cw = std::floor((avail - gap * (cols - 1)) / cols), ch = std::round(fs * 6.6f);
+    std::string shownCat;
+    int col = 0, shown = 0;
+    for (size_t i = 0; i < cards.size(); i++) {
+        const LibCard& c = cards[i];
+        if (!CardMatches(c, f)) continue;
+        shown++;
+        if (cat.empty() && !search_[0] && c.category != shownCat) {   // a quiet title per category, as in the Browse sidebar
+            shownCat = c.category;
+            col = 0;
+            LibCaps(shownCat.c_str());
+        }
+        if (col) ImGui::SameLine(0, gap);
+        ImGui::PushID((int)i);
+        FigureVariant dv;
+        const int r = LibCardUi(c, ImVec2(cw, ch), var_, SameMove(c.base, var_), "Click: animate it (same stance and foot) · a dot: that variant", &dv);
+        if (r == 1) {
+            FigureVariant v = c.base;   // keep the stance and the foot being edited
+            v.stance = var_.stance;
+            v.goofy = var_.goofy;
             if (!StateAllStances(v.state) && v.stance > STANCE_Switch) v.stance = STANCE_Normal;
             pick(v);
-        }
-        ImGui::PopStyleColor();
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s\n%d variant(s) recorded in game, %d clip(s)%s", title.c_str(), nr, nc,
-                              note ? "\nIn-game detection not checked yet: the clip may never play." : "");
+        } else if (r == 3) pick(dv);
         ImGui::PopID();
-    };
-    if (q.empty()) ImGui::TextDisabled("On the ground");
-    // 2026-11-25 (user): grabs set aside; the powerslide is still to be tried in game
-    for (uint32_t s : {ST_OnFoot, ST_Walking, ST_Running, ST_Riding, ST_Pushing, ST_Crouch, ST_Landing, ST_Manual, ST_NoseManual, ST_Powerslide}) {
-        FigureVariant v; v.state = s;
-        line(v, StateTitle(s), s == ST_Powerslide ? "not checked" : nullptr);
+        col = (col + 1) % cols;
+        if (col == 0) ImGui::Dummy(ImVec2(0, gap * 0.25f));
     }
-    // 2026-11-25: grinds, one line per grind the game named (crooked, smith, feeble...): recorded in game or in a clip.
-    // PARKED by the user the same night: _replicatedGrindName stays empty offline, every grind is one "Grind" (kept hidden)
-    constexpr bool kShowGrinds = false;
-    if (kShowGrinds) {
-        std::map<std::string, std::string> grinds;   // lower -> name as the game writes it
-        for (auto& key : figHave_) { FigureVariant v; if (ParseFigureKey(key, v) && v.state == ST_Grind && !v.trick.empty()) grinds.emplace(Lower(v.trick), v.trick); }
-        for (auto& ci : clips_) if ((ci.clip.states & ST_Grind) && !ci.clip.trick.empty()) grinds.emplace(Lower(ci.clip.trick), ci.clip.trick);
-        if (q.empty()) { ImGui::Spacing(); ImGui::TextDisabled("Grinds"); }
-        for (auto& g : grinds) { FigureVariant v; v.state = ST_Grind; v.trick = g.second; line(v, TrickDisplay(g.second), nullptr); }
-        if (grinds.empty() && q.empty()) ImGui::TextDisabled("Do a grind in game: it shows up here,\none per type (crooked, smith, feeble...).");
-    }
-    std::string cat;
-    for (auto& t : tricks_) {
-        if (t.category != cat) { cat = t.category; if (q.empty()) { ImGui::Spacing(); ImGui::TextDisabled("%s", cat); } }
-        FigureVariant v; v.state = ST_Trick; v.trick = t.base;
-        line(v, TrickDisplay(t.base), nullptr);
-    }
+    if (!shown) ImGui::TextColored(theme::Text2, "%s", "Nothing matches: try another name, or turn the filters off.");
     ImGui::Spacing();
-    ImGui::TextWrapped("Green: already done in game (movement recorded). A trick missing from the list shows up as soon as you do it in game.");
+    ImGui::PushTextWrapPos(0.f);
+    ImGui::TextColored(theme::Text3, "%s", "Dots: one per stance (columns) and foot (rows). Green: recorded in game. Orange centre: a clip of yours is on. White ring: what you are editing. A trick missing from the list shows up as soon as you do it in game.");
+    ImGui::PopTextWrapPos();
     ImGui::EndChild();
 }
 
 void App::LibraryClips() {
-    if (ImGui::Button("+ New clip for this variant")) Request(Ask::New);
-    if (ImGui::RadioButton("This variant", !clipsAll_) && clipsAll_) { clipsAll_ = false; SaveSetting(settings_, "library.all", "0"); }
-    ImGui::SameLine();
-    if (ImGui::RadioButton("All clips", clipsAll_) && !clipsAll_) { clipsAll_ = true; SaveSetting(settings_, "library.all", "1"); }
+    const float fs = ImGui::GetFontSize();
+    static const char* kScope[2] = {"This variant", "All clips"};
+    int scope = clipsAll_ ? 1 : 0;
+    if (ui::Segmented("##clipscope", kScope, 2, &scope)) { clipsAll_ = scope == 1; SaveSetting(settings_, "library.all", clipsAll_ ? "1" : "0"); }
+    if (ui::Button("+ New clip for this variant", ui::Kind::Normal, ImVec2(-1, 0))) Request(Ask::New);
+    ImGui::Spacing();
     ImGui::BeginChild("##clips", ImVec2(0, 0), ImGuiChildFlags_None);
     int shown = 0;
-    const float fs = ImGui::GetFontSize();
     for (auto& ci : clips_) {
         if (!clipsAll_ && ci.err.empty() && !ClipTargets(ci.clip, var_)) continue;   // broken files: always shown
         shown++;
         const Clip& c = ci.clip;
         const bool open = ci.file == fileName_;
         ImGui::PushID(ci.file.c_str());
+        const std::string stem = ci.file.size() > 6 ? ci.file.substr(0, ci.file.size() - 6) : ci.file;
         if (!ci.err.empty()) {   // a file the game refuses too: say so, offer the menu (delete), nothing else
-            ImGui::TextColored(kBad, "%s", ci.file.c_str());
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(theme::Bad, "%s", stem.c_str());
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Unreadable file: the game refuses it too.\n%s", ci.err.c_str());
-            ImGui::SameLine();
-            if (ImGui::SmallButton("...")) ImGui::OpenPopup("##menu");
+            ImGui::SameLine(ImGui::GetContentRegionMax().x - ImGui::GetFrameHeight());
+            if (ui::IconButton("menu", theme::Icon::More, "...", false, ui::Kind::Ghost)) ImGui::OpenPopup("##menu");
             if (ImGui::BeginPopup("##menu")) { ClipMenuItems(ci.file, false); ImGui::EndPopup(); }
-            ImGui::TextColored(kBad, "  unreadable: %s", ci.err.c_str());
+            ImGui::PushTextWrapPos(0.f);
+            ImGui::TextColored(theme::Bad, "unreadable: %s", ci.err.c_str());
+            ImGui::PopTextWrapPos();
             ImGui::PopID();
             continue;
         }
         bool en = c.enabled;
         if (ui::Switch("##on", &en)) ToggleClipEnabled(ci.file, en);
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip(c.enabled ? "On: plays in game. Untick to turn it off without deleting it." : "Off: does not play in game. Tick to turn it on.");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip(c.enabled ? "On: plays in game. Switch off to keep it without playing it." : "Off: does not play in game.");
         ImGui::SameLine();
-        const std::string stem = ci.file.size() > 6 ? ci.file.substr(0, ci.file.size() - 6) : ci.file;
-        const float menuW = fs * 1.8f;
-        ImGui::PushStyleColor(ImGuiCol_Text, c.enabled ? ImGui::GetStyleColorVec4(ImGuiCol_Text) : kDim);
+        const float menuW = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
+        ImGui::PushStyleColor(ImGuiCol_Text, open ? theme::AccentHi : c.enabled ? theme::Text : theme::Text3);
         if (ImGui::Selectable((stem + (open ? "  (open)" : "")).c_str(), open, 0, ImVec2(std::max(fs * 4.f, ImGui::GetContentRegionAvail().x - menuW), 0))) {
             if (!open) { askFile_ = ci.file; Request(Ask::Open); }
         }
@@ -222,45 +230,61 @@ void App::LibraryClips() {
         }
         if (ImGui::BeginPopupContextItem("##ctx")) { ClipMenuItems(ci.file, false); ImGui::EndPopup(); }
         ImGui::SameLine();
-        if (ImGui::SmallButton("...")) ImGui::OpenPopup("##menu");
+        if (ui::IconButton("menu", theme::Icon::More, "...", false, ui::Kind::Ghost)) ImGui::OpenPopup("##menu");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rename, duplicate, turn on, delete");
         if (ImGui::BeginPopup("##menu")) { ClipMenuItems(ci.file, false); ImGui::EndPopup(); }
         // second line: what it targets, and problems
-        std::string sub = clipsAll_ ? VariantTitleUi(VariantOfClip(c)) : std::string(c.mode == Mode::Additive ? "add" : "replace");
-        if (!c.enabled) sub += " · off";
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x);
-        if (noEffect) { ImGui::TextColored(kWarn, "%s · changes nothing!", sub.c_str()); }
-        else ImGui::TextDisabled("%s", sub.c_str());
+        std::string sub = clipsAll_ ? VariantTitleUi(VariantOfClip(c)) + " · " : std::string();
+        sub += c.mode == Mode::Additive ? "add" : "replace";
+        char len[16];
+        snprintf(len, sizeof(len), " · %.2f s", c.duration);
+        sub += len;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetFrameHeight() * 1.8f + ImGui::GetStyle().ItemSpacing.x);
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y * 0.5f);
+        if (noEffect) ImGui::TextColored(theme::Warn, "%s · changes nothing!", sub.c_str());
+        else ImGui::TextColored(theme::Text3, "%s", sub.c_str());
+        ImGui::Dummy(ImVec2(0, fs * 0.15f));
         ImGui::PopID();
     }
     if (!shown) {
-        ImGui::Spacing();
-        ImGui::TextWrapped(clipsAll_ ? "No clip in the game folder." : "No clip for this variant. \"+ New clip\" makes one; Ctrl+S saves it into the game.");
+        ImGui::PushTextWrapPos(0.f);
+        ImGui::TextColored(theme::Text2, "%s", clipsAll_ ? "No clip in the game folder." : "No clip for this variant yet. \"+ New clip\" makes one; Ctrl+S saves it into the game.");
+        ImGui::PopTextWrapPos();
     }
     ImGui::Spacing();
-    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-    ImGui::TextWrapped("Delete moves the file to the backups (recoverable).");
-    ImGui::PopStyleColor();
+    ImGui::TextColored(theme::Text3, "%s", "Delete moves the file to the backups.");
     ImGui::EndChild();
 }
 
 void App::LibraryCaptures() {
-    ImGui::TextWrapped("Ctrl+F4 in game freezes the skater's pose here. Opening a capture makes a new clip from it.");
-    ImGui::BeginChild("##caps", ImVec2(0, 0), ImGuiChildFlags_None);
     const float fs = ImGui::GetFontSize();
-    for (auto& f : captures_) {
+    ImGui::PushTextWrapPos(0.f);
+    ImGui::TextColored(theme::Text2, "%s", "Ctrl+F4 in game freezes the skater's pose here. Opening a capture makes a new clip from it.");
+    ImGui::PopTextWrapPos();
+    ImGui::Spacing();
+    ImGui::BeginChild("##caps", ImVec2(0, 0), ImGuiChildFlags_None);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float h = std::round(fs * 2.4f), gap = std::round(fs * 0.4f);
+    for (auto& f : captures_) {   // small cards, as in Browse > Captures
         ImGui::PushID(f.c_str());
         std::string stem = f.substr(f.find('\\') + 1);
         if (stem.size() > 6) stem = stem.substr(0, stem.size() - 6);
-        if (ImGui::Selectable(stem.c_str(), false, 0, ImVec2(std::max(fs * 4.f, ImGui::GetContentRegionAvail().x - fs * 1.8f), 0))) { askFile_ = f; Request(Ask::Open); }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Click: open as a new clip (the capture itself does not change).");
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float w = ImGui::GetContentRegionAvail().x;
+        if (ImGui::InvisibleButton("##cap", ImVec2(w, h))) { askFile_ = f; Request(Ask::Open); }
+        const bool hov = ImGui::IsItemHovered();
+        if (hov) ImGui::SetTooltip("%s\nClick: open as a new clip (the capture itself does not change) · right-click: delete", stem.c_str());
         if (ImGui::BeginPopupContextItem("##ctx")) { ClipMenuItems(f, true); ImGui::EndPopup(); }
-        ImGui::SameLine();
-        if (ImGui::SmallButton("...")) ImGui::OpenPopup("##menu");
-        if (ImGui::BeginPopup("##menu")) { ClipMenuItems(f, true); ImGui::EndPopup(); }
+        dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), theme::U32(hov ? theme::Raised : theme::Surface), fs * 0.5f);
+        dl->AddRect(p, ImVec2(p.x + w, p.y + h), theme::U32(theme::Line), fs * 0.5f);
+        if (theme::HasIcons()) dl->AddText(ImVec2(p.x + fs * 0.7f, p.y + (h - fs) * 0.5f), theme::U32(theme::Text3), theme::Glyph(theme::Icon::Camera).c_str());
+        dl->PushClipRect(p, ImVec2(p.x + w - fs * 0.5f, p.y + h), true);
+        dl->AddText(ImVec2(p.x + fs * 2.2f, p.y + (h - fs) * 0.5f), theme::U32(theme::Text), stem.c_str());
+        dl->PopClipRect();
+        ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y));
         ImGui::PopID();
     }
-    if (captures_.empty()) ImGui::TextDisabled("No capture yet.");
+    if (captures_.empty()) ImGui::TextColored(theme::Text3, "%s", "No capture yet: Ctrl+F4 in game.");
     ImGui::EndChild();
 }
 

@@ -121,6 +121,12 @@ Important steps, technical decisions, problems and their solutions. Current stat
 - **Redesign step 8, polish and guides (11-27)**: the stage messages start right of the Library drawer when it is open.
   Both guides now describe the two pages. Pose thumbnails on the Browse cards were left out: they need an offscreen
   render of each recording, too big for a polish step.
+- **Library drawer like Browse (11-27, user request)**: the drawer of Animate now uses the Browse pieces. The variant
+  grid and the list of cards moved into `App::VariantGrid` / `App::LibraryCards` (`app_browse.cpp`), used by both; the
+  drawer is a plain window without title bar (own header and close button), and the tab bar became `ui::Segmented`
+  (the "restore the saved tab over several frames" trick of the ImGui tab bar is gone with it). Its Tricks list then
+  took the Browse organisation: the card drawing moved to `App::LibCardUi` (one card, used by both), the collection is
+  a combo over Browse's own `browseCat_` and the filters are Browse's (one choice for both places).
 
 ## Problems met and solutions
 
