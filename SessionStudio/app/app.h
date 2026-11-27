@@ -161,6 +161,9 @@ private:
     bool FigureReady(const FigureVariant& v) const;
     bool FigureRedo(const FigureVariant& v) const;
     void RequestRerecord(const FigureVariant& v);
+    void ReloadShownFigure();                              // the open part, after the game recorded its movement again
+    void ReloadOtherPart();                                // then the other part of the trick + landing timeline
+    void LinkLandingSeam();                                // your landing starts where the trick ends (every frame)
     // 2026-11-25 landing sync: the landing of one trick is edited over that trick's recording (its ground tail)
     static FigureVariant FigureSource(const FigureVariant& v);   // Landing + trick -> the trick; else v
     const Clip* TrickClipFor(const FigureVariant& landing) const; // first enabled saved clip of the trick of that landing

@@ -42,7 +42,7 @@ void App::SetShared(float g) {
     int part = 0;
     float local = 0.f;
     SplitTime(Parts(), g, part, local);
-    if ((part == 1) != inLanding_) SwapParts();
+    if ((part == 1) != inLanding_) { SwapParts(); doc_.TakeClipboard(comp_.doc); }   // copy on one side, paste on the other
     t_ = local;
 }
 
@@ -117,6 +117,35 @@ void App::BuildLandingPart() {
     if (msgs_.size() > keepMsgs) msgs_.resize(keepMsgs);
     hasComp_ = usable;
     if (!hasComp_) { comp_ = Companion{}; landLocked_ = true; }
+}
+
+// 2026-11-27: after a new recording, the part that is not under the playhead is read again too. The game's own landing
+// (locked, never written: nothing of yours in it) is made again from the new recording; a landing clip of yours, saved
+// or unlocked, keeps its keys and only gets the new game movement under them. A trick that had no landing gets one.
+void App::ReloadOtherPart() {
+    if (!hasComp_) { BuildLandingPart(); return; }   // does nothing unless a trick clip is open
+    const std::string keepStatus = status_;
+    const float keepAge = statusAge_;
+    const size_t keepMsgs = msgs_.size();
+    SwapParts();
+    ReloadShownFigure();
+    SwapParts();
+    status_ = keepStatus;   // the message about the part shown stays
+    statusAge_ = keepAge;
+    if (msgs_.size() > keepMsgs) msgs_.resize(keepMsgs);
+    const bool gamesOwn = landLocked_ && (inLanding_ ? fileName_ : comp_.fileName).empty();
+    if (gamesOwn) {
+        const float at = SharedT();
+        BuildLandingPart();   // leaves the landing part first, so it starts from the trick
+        SetShared(hasComp_ ? std::min(at, Parts().Total()) : at);
+    }
+}
+
+void App::LinkLandingSeam() {
+    if (!hasComp_) { doc_.UnlinkStart(); return; }
+    EditorDoc& land = inLanding_ ? doc_ : comp_.doc;
+    if (landLocked_) land.UnlinkStart();                       // the game's landing: nothing of yours to write
+    else land.LinkStartToTrick(inLanding_ ? comp_.doc : doc_);
 }
 
 void App::SetLandingLocked(bool lock) {

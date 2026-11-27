@@ -150,17 +150,20 @@ void App::ScanFolder() {
     }
     RefreshClips();
     BuildTrickList();
-    // the figure shown has been (re)recorded by the game: reload it (the keys stay)
-    if (!clipsDir_.empty() && skeletonOk_) {
-        const uint64_t st = FileStamp(FigurePath(var_));
-        if (st != figStamp_) {
-            const Clip keep = doc_.clip();
-            SelectFigure(var_);
-            doc_.clip().states = keep.states; doc_.clip().trick = keep.trick; doc_.clip().trickHash = keep.trickHash;
-            if (doc_.HasFigure()) Status("game animation of \"" + VariantTitleUi(var_) + "\" loaded");
-            if (fileName_.empty() && doc_.clip().tracks.empty() && doc_.SeedKeys() > 0) savedText_ = ClipToJson(doc_.clip());
-        }
+    // the figure shown has been (re)recorded by the game: reload it (the keys stay), in both parts of the timeline
+    // (a trick and its landing are read from the same recording)
+    if (!clipsDir_.empty() && skeletonOk_ && FileStamp(FigurePath(var_)) != figStamp_) {
+        ReloadShownFigure();
+        if (doc_.HasFigure()) Status("game animation of \"" + VariantTitleUi(var_) + "\" loaded");
+        ReloadOtherPart();
     }
+}
+
+void App::ReloadShownFigure() {
+    const Clip keep = doc_.clip();
+    SelectFigure(var_);
+    doc_.clip().states = keep.states; doc_.clip().trick = keep.trick; doc_.clip().trickHash = keep.trickHash;
+    if (fileName_.empty() && doc_.clip().tracks.empty() && doc_.SeedKeys() > 0) savedText_ = ClipToJson(doc_.clip());
 }
 
 void App::BuildTrickList() {
@@ -349,6 +352,8 @@ bool App::SaveAs(const std::string& raw, bool overwriteOk) {
 void App::SaveCurrent() {
     if (NeedDir()) return;
     // 2026-11-27 (one timeline, two files): the part under the playhead, then the other part if it needs it
+    if (doc_.HasPending()) CommitKeyNow(true);
+    LinkLandingSeam();   // the files written hold the same pose on both sides of the seam
     auto saveOpen = [&]() {
         if (hasComp_ && !PartNeedsSave(inLanding_, doc_, fileName_, savedText_) && inLanding_ && fileName_.empty()) return true;   // a locked new landing: nothing to write
         const std::string name = fileName_.empty() ? AutoName() : fileName_;
@@ -390,6 +395,7 @@ void App::Status(const std::string& s) {
 bool App::CommitKeyNow(bool quiet) {
     if (!doc_.HasPending()) { if (!quiet) Status("nothing to key: rotate a bone first"); return false; }
     if (LandingLockedHere()) { Status("the landing is locked (the game's): unlock it in Clip settings to pose it"); return false; }
+    if (doc_.StartLinked() && doc_.KeyTime(t_) < 1e-3f) { Status("the landing starts where the trick ends: pose the end of the trick, or a later moment of the landing"); return false; }
     if (doc_.LockedAt(doc_.KeyTime(t_))) {   // 2026-11-26 (task 3): the locked start / end stays the game's pose
         Status("start and end are locked to the game's pose: pose between them, or discard the change");
         return false;
@@ -534,6 +540,7 @@ void App::Frame(float dt) {
 
     if (wantClose_) { wantClose_ = false; Request(Ask::Close); }
     PollGame(dt);
+    LinkLandingSeam();   // 2026-11-27: before anything is drawn or saved
     {   // 2026-11-26 (task 3): a trick's end is free when the trick has a landing clip for all its variants
         std::string missing;
         doc_.SetHasLandingCover(doc_.IsTrickClip() && HasLandingForAllVariants(doc_.clip(), missing));

@@ -36,6 +36,7 @@ Important steps, technical decisions, problems and their solutions. Current stat
 | 11-26 | v0.24 | **Rename**: AnimStudio → Session Studio (editor) + Session Anim Loader (mod); installed and checked in game |
 | 11-26 | editor | **UX/UI redesign started** on branch `redesign-ui`: design v1 (restyle of the 4-panel layout) rejected, v2 approved (Browse / Animate workspaces); step 0 splits `app.cpp` into panel files without behaviour change |
 | 11-27 | editor | `redesign-ui` (steps 0-8c) merged into `main` by fast-forward and pushed to GitHub at the owner's request; `test.cmd` ALL PASS (18667) just before. Steps 7-8c were still "user check pending" |
+- **2026-11-27, official first release (v0.28):** the owner declared the prepared package the official release and asked for commit and push. Before the commit: no personal data found by pattern scan in the changes, and the source zip identical to the working tree for every file it ships. The GitHub release page, the tag and the repository visibility were not touched.
 
 ## Key technical decisions
 
@@ -190,10 +191,39 @@ Important steps, technical decisions, problems and their solutions. Current stat
   feet) blocked late flips, where the catch comes at once. The user chose an opt-in per clip over changing the rule by
   trick name, so that existing clips keep playing the same.
 
+- **First release package, v0.28 (11-27)**: GPL-3.0 for the whole project, release number = mod number, nothing
+  recorded or authored shipped (every move is recorded by the player). The user asked for an `INSTALLER.cmd` that
+  installs UE4SS only when missing, and one that asks where the editor goes. UE4SS is therefore bundled: the loader
+  files of the official 3.0.1 zip (same bytes as the tested install), with the four settings values of that install
+  and none of its sample mods. An existing UE4SS is never modified; an unconfirmed version stops the installer by
+  default, because a wrong one can crash the game (`ue4ss_abi.h`). The source zip comes from the working copy as Git
+  lists it, minus the internal working documents, plus the compiled third-party files. Editor icon drawn by
+  `tools\make-icon.ps1` (own shapes, no font or image), embedded by `SessionStudio.rc` with the version details.
+  One comment of `ue4ss_abi.h` lost a personal local path inherited from upstream.
+
+- **Uninstaller (11-27, user request)**: "put the game back as it was" is done from a record written by the installer,
+  not by deleting known folders: clips, other mods and a UE4SS the player already had live in the same places. The first
+  run's "was it there before" is never overwritten by an update. UE4SS goes only if we installed it, unchanged, with no
+  other mod in `Mods`. Clips are moved, not deleted (agent's choice). `UNINSTALL.cmd` hands over to a temporary copy of
+  itself, because it may delete its own folder (cmd failed with exit 1 otherwise, caught by the tests).
+
+- **Clean install and uninstall checked in game (11-27)**: the packaged UE4SS (loader only, four settings changed, no
+  `shared` folder, no sample mod) is enough for the mod; the uninstaller left no new item in the game folder.
+
+- **The seam of the two-part timeline is a link, not a copy (11-27, user request)**: the landing's start was copied
+  once, when the landing was made. It is now rewritten from the pose seen at the trick's end, in the model, outside the
+  undo history (so the trick's undo carries it back). Chosen over a "paste the visible pose" feature, which the user
+  did not need. Editor only: clip format and mod unchanged. No switch: an unlocked landing always starts at the
+  trick's end; a pose meant for the impact goes a few frames later.
+
 ## Problems met and solutions
 
 | Problem | Cause found | Solution |
 |---|---|---|
+| "Record again" left the old landing on the trick's timeline (user) | the folder rescan reloaded only the open part of the two-part timeline | both parts are reloaded; the game's own landing is rebuilt. Also a Record again button next to Save |
+| Installer put the editor into the source folder (user's test) | any folder named `SessionStudio` was used as it was | only an editor folder or an empty one (backups / settings allowed) is used; others are refused |
+| Toast over the Welcome card (user's test) | the toast uses the foreground draw list | not drawn while the card is open |
+| First package zip unusable (every entry named after the folder) | PowerShell binds the array comma before `+` | parentheses; `make-release.ps1` now reads each zip back and compares the names |
 | Axis switch in P2 jumped | no fade on parameter change | every clip / parameter change is faded (P3 rule) |
 | Right hand flipped with the same value as the left | local frame turned 180° | go through the mirror; documented fact |
 | Capture alone created nothing visible | manual vs nose manual arm poses differ only 5-17° | the editor's job is to retouch poses |

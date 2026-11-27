@@ -51,6 +51,7 @@ void App::CopyNow() {
 void App::PasteNow() {
     if (LandingLockedHere()) { Status("the landing is locked (the game's): unlock it in Clip settings to pose it"); return; }   // 2026-11-27
     if (!doc_.CanPaste()) { Status("nothing to paste: copy a pose or keys first (Ctrl+C)"); return; }
+    if (!doc_.ClipboardHasKeys() && doc_.StartLinked() && doc_.KeyTime(t_) < 1e-3f) { Status("the landing starts where the trick ends: paste at the end of the trick"); return; }
     if (!doc_.ClipboardHasKeys() && doc_.LockedAt(doc_.KeyTime(t_))) {   // 2026-11-26 (task 3)
         Status("start and end are locked to the game's pose: paste the pose between them");
         return;
@@ -76,7 +77,12 @@ void App::PasteNow() {
 
 bool App::HasLandingForAllVariants(const Clip& trick, std::string& missing) const {
     std::vector<const Clip*> cs;
-    for (auto& ci : clips_) if (ci.err.empty()) cs.push_back(&ci.clip);   // enabled landing clips of that trick only (checked inside)
+    // 2026-11-27: the unlocked landing on the timeline counts as it is in memory (Save writes it with the trick), in
+    // place of its file: the end of a new trick can be posed before anything is saved
+    const bool mine = hasComp_ && !landLocked_;
+    const std::string& landFile = inLanding_ ? fileName_ : comp_.fileName;
+    for (auto& ci : clips_) if (ci.err.empty() && !(mine && !landFile.empty() && ci.file == landFile)) cs.push_back(&ci.clip);   // enabled landing clips of that trick only (checked inside)
+    if (mine) cs.push_back(&(inLanding_ ? doc_ : comp_.doc).clip());
     return LandingCoversAllVariants(trick, cs, missing);
 }
 

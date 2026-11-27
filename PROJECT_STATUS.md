@@ -15,15 +15,90 @@ was checked for each); the v0.24 results below still describe what was checked i
 
 | Item | State | Evidence |
 |---|---|---|
-| Offline tests | **2 FAIL out of 19123 checks** (the two board / shoe checks on real recordings, §4) | `test.cmd` run on 2026-11-27 with the v0.27 sources (v0.25: ALL PASS 18874, before the new recordings) |
+| Offline tests | **2 FAIL out of 19133 checks** (the two board / shoe checks on real recordings, §4) | `test.cmd` run on 2026-11-27, release preparation (v0.25: ALL PASS 18874, before the new recordings) |
 | Clips in the game folder | 27 loaded, 0 refused | `asn_tests --check-clips <game clips folder>`, same run |
 | DLL + editor build | `dist\main.dll` and `dist\SessionStudio.exe` built 2026-11-27 (last build: legs in the end lock) from the v0.28 sources (installed, row below) | `build.cmd` OK, `--selftest` exit 0; the editor only displays the mod version read in the log (no expected number) |
-| Installed on the user's game | **v0.28** DLL + Lua, 2026-11-27 (hashes equal to the build), **not tested in game yet**; rollback: `_archive\backups\installed_before-v0.28_2026-11-27`. Before: **v0.27**, user test 16:25-16:33 (§4); its rollback: `_archive\backups\installed_before-v0.27_2026-11-27`. Before: **v0.26**, user test OK (§4); rollback: `_archive\backups\installed_before-v0.26_2026-11-27`. Before: **v0.25**, user test OK (before that: v0.24 with 122 clip files, 2026-11-26 20:47) | v0.25: user test and game log, 2026-11-27 (§4). v0.24: `notes/HANDOFF.md`: user test OK, hooked behind ExpandedTricks, editor saves reloaded, Ctrl+F3 works |
+| Installed on the user's game | **v0.28** DLL + Lua, 2026-11-27 (hashes equal to the build); later in game checks: §1b; rollback: `_archive\backups\installed_before-v0.28_2026-11-27`. Before: **v0.27**, user test 16:25-16:33 (§4); its rollback: `_archive\backups\installed_before-v0.27_2026-11-27`. Before: **v0.26**, user test OK (§4); rollback: `_archive\backups\installed_before-v0.26_2026-11-27`. Before: **v0.25**, user test OK (before that: v0.24 with 122 clip files, 2026-11-26 20:47) | v0.25: user test and game log, 2026-11-27 (§4). v0.24: `notes/HANDOFF.md`: user test OK, hooked behind ExpandedTricks, editor saves reloaded, Ctrl+F3 works |
 | Editor self-test | new folders found, DLL and Lua present | `HANDOFF.md`, 2026-11-26 |
 | Multiplayer on v0.24 | **not tested** | — |
 
 The check count depends on the machine: tests on real game clips are skipped when the game folder is missing
 (earlier notes quote 10842 or 4924 checks for older states).
+
+## 1b. First release, v0.28 (2026-11-27: declared the official release by the owner, committed and pushed; **no GitHub release page yet**)
+
+User decisions: GPL-3.0 for everything; release number = mod v0.28; a zip with `INSTALLER.cmd` that installs UE4SS only
+when it is missing; the installer asks where to put the editor; no clip and no recording shipped.
+
+| Item | State | Evidence |
+|---|---|---|
+| Package `release\out\SessionStudio-v0.28.zip` + `-source.zip` + `SHA256SUMS.txt` | built | `tools\make-release.ps1`: file names read back from both zips, forbidden-file and personal-data checks OK |
+| Packaged mod | the **same files as installed** on the user's game | DLL `FCFA6D0D…` and Lua `4CDBCC68…` hashes equal. The rebuild from today's sources differs from that DLL by 4 bytes (offsets of the kind a build timestamp takes); the tested file was put back in `dist` and shipped |
+| UE4SS in the package | official `UE4SS_v3.0.1.zip` (downloaded with the user's OK), loader only | `UE4SS.dll` / `dwmapi.dll` have the same SHA-256 as the user's installed files; the packaged settings have the same values (comments ignored). **A fresh install with the packaged UE4SS has never been run in game** |
+| Installer (`installer\`) | OFFLINE ✔ on made-up game folders, with `-Yes` | fresh install, update (clips, `_studio.json`, UE4SS settings and editor settings kept; old DLL backed up), unknown / 3.0.0 / newer-layout UE4SS and leftover `dwmapi.dll` refused, 3.0.1 other build accepted, wrong folder, unextracted zip. The Steam search function alone finds the real game folder (nothing installed). **Not tested:** the questions, the folder windows, the desktop shortcut, a double-click on a downloaded zip (Windows warnings), a PC without the VC++ runtime |
+| Editor icon and version details | in the exe | version 0.28.0.0 read from the exe; icon extracted from it at 256 / 48 / 32 / 16 px and looked at. **Title bar and taskbar icon: user check pending** |
+| Source zip | builds | DLL and editor built from the extracted zip alone (VS 2022) |
+| Docs | `README.md` rewritten, new `INSTALL.md`, `THIRD-PARTY-NOTICES.txt`; guides updated | not read by the user yet. README's "download from Releases" is true only once a release is published |
+| Tests | **2 FAIL out of 19133** (the two board / shoe checks on local recordings, §4) | `test.cmd`, 2026-11-27 |
+| `dist\SessionStudio.exe` | the new build with the icon (same file as in the package) | replaced once the user's editor was closed; `--selftest` of a copy of that build exit 0. Previous binaries: `_archive\backups\dist_before-release-v0.28_2026-11-27` |
+
+**User test 1 (11-27, installer run on the real game, questions answered by hand):** it ran to the end, the Welcome card
+shows five green dots and the icon is in the title bar (user's screenshot). Taskbar / Alt+Tab icon and the in-game
+check: no report yet. Two problems came out, both fixed the same day:
+- The "game animation ... loaded" toast was drawn over the Welcome card: it is now hidden while the card is open
+  (build OK, `--selftest` exit 0; **not checked on screen**).
+- The installer put the editor into the repository's `SessionStudio` source folder (a folder of that name was used as
+  it was); the packaging check then stopped on its settings file. The installer now refuses a `SessionStudio` folder
+  holding other files (its own backups and settings excepted, so `Documents` still works). The five stray files were
+  deleted at the user's request; the desktop shortcut then pointed to nothing.
+
+Package rebuilt after these fixes (new editor build; mod files unchanged): installer tests, now 12 scenarios, all pass.
+**Clean-install test: not run yet**; local helper in `notes\test-clean-install\` (puts UE4SS and `Mods` aside and back;
+tried on a made-up folder only, before-fix binaries: `_archive\backups\dist_before-toast-fix_2026-11-27`).
+
+**User requests before test 2 (11-27), done:**
+- The editor is always installed in a `SessionStudio` folder created inside the folder chosen (an existing editor is
+  updated in place, and proposed first).
+- **`UNINSTALL.cmd`** (package, and a copy in `Win64\SessionAnimLoader_uninstall\`). The installer records what it does
+  (`Win64\SessionAnimLoader_install.json`); the uninstaller restores the state before the first install, keeps UE4SS
+  when other mods use it or it changed, keeps files changed since, **moves** clips and recordings to
+  `Documents\SessionStudio\clips-after-uninstall_<date>\`, and does nothing without a record. OFFLINE ✔ on made-up
+  folders (12 cases, folder snapshots identical before / after; installer: 12 scenarios; all pass). **Never run on a
+  real game.** Not known: whether UE4SS creates other files in game that would stay behind (test 2's helper lists
+  them); the questions and the folder windows; the shortcut removal. The user's own current install has no record, and
+  an install made over it will treat the mod as "there before": uninstalling keeps it.
+- Thanks to matsix (SessionOpenMP) and Portman2 (ExpandedTricks) in the README, the notices and the package README.
+
+**User's test with the new package (11-27, "install: OK, try: OK"; uninstall not run yet).** The files show it ran on
+the **normal setup**, not on a game without mods (no folder of the set-aside helper, all the user's mods in place): the
+record has no UE4SS entry and the UE4SS files keep their old dates (**an existing UE4SS stays untouched at install:
+checked on the real game**), the mod files are marked as there before, the editor is in `Documents\SessionStudio`, and
+`UE4SS.log` of the later session shows the mod v0.28 loaded. **The clean install with the packaged UE4SS is still
+untested.** Two more offline cases (the player's own UE4SS build, with and without other mods): identical before /
+after install, update and uninstall (uninstaller tests now 14 cases, all pass).
+
+**First real uninstall (11-27, user, output sent; disk checked afterwards): as planned.** On the normal setup: editor
+files, desktop shortcut, uninstaller copy and record removed; `Documents\SessionStudio\backups` kept (118 files); UE4SS
+files with their old dates, all other mods and the clips folder in place; the mod's four files kept (there before the
+first installation), identical to the package. **Not yet reported:** that the game still starts with the mods after it.
+Not covered by this run: removing a mod or a UE4SS the installer added, and moving clips.
+
+**Clean-install test, GAME ✔ (11-27 19:00-19:07: user's run and uninstaller output; logs and disk read afterwards).**
+This supersedes the "never run" notes above for the fresh install and the uninstall. Set-aside, then the package: its
+UE4SS 3.0.1 started with only our mod (native log: ExpandedTricks absent, "installed ... chained on the engine"; Lua
+v0.28 loaded, SessionOpenMP absent). 70 bones, board found, moves recorded with their board, replay stand-by, a
+KickFlip clip loaded and played (applied 1452 frames), Ctrl+F3 OFF 19:05:43 / ON 19:05:50, 0 faults, no refusal.
+`UNINSTALL.cmd`: removed the mod, the UE4SS it had installed, `mods.txt`, the editor, the shortcut and its own copy,
+and moved the 13 clip files to `Documents\SessionStudio\clips-after-uninstall_...` (checked there). Restore: the
+helper's list of new items in the game folder is **empty** (nothing left behind; the two logs existed before the test),
+and the user's setup is back (mods, clips, package DLL). Limits: the user's own PC (VC++ runtime present, `dxgi.dll`
+of Unreal Mod Unlocker still loaded, zip built locally so no download warning); regular stance only.
+
+Open before publishing: a first start without the points above (another PC, downloaded zip); goofy; multiplayer; a
+clip copied to another PC. Older list: the in-game test of a clean install; `--check-clips`; with / without ExpandedTricks and a clip
+copied to another PC (`notes/RELEASE-CHECKLIST.md`); goofy mirror and replay were checked on older versions only for
+parts of this; multiplayer not tested since v0.21. "Version 3 only" or "or later" is not decided (the texts say
+version 3). The repository is private: the GitHub release page and the visibility are the user's decisions.
 
 ## 2. Session Anim Loader (game mod)
 
@@ -78,6 +153,36 @@ The check count depends on the machine: tests on real game clips are skipped whe
 | `--selftest` | ✔ | output in `dist\selftest.txt` |
 
 ## 4. Known problems and points to watch
+
+- **Trick / landing seam** (user request 2026-11-27, **OFFLINE ✔; user check OK**: "no jump", answering the question
+  "in the editor and in game"; the individual check steps were not reported one by one): the user does not need an
+  exact paste, only a seamless junction. With an unlocked landing on the trick's timeline, its start is now **linked** to
+  what is seen at the trick's end (`EditorDoc::LinkStartToTrick`, called every frame and before saving; keys at 0 only,
+  no undo step, locked there; also for an existing landing clip, which then shows as not saved if its start differed).
+  The unlocked landing in memory also counts as landing cover, so a new trick's end can be posed before saving. The
+  clipboard now follows the playhead across the two parts; paste still pastes the change, not the visible pose.
+  `test.cmd`: 2 known FAILs of 19199, 6 new tests pass; build OK; `--selftest` exit 0; in game not checked. `dist\SessionStudio.exe`
+  is that build (replaced once the user's editor was closed), the same file as in the package. Code reading: the
+  player applies the pelvis offset with the layer weight only, not the leg weight, as the link assumes; the cross-fade
+  of the two clips at touchdown is not checked. The "Record again" fix
+  above was confirmed by the user. Causes of the paste report, measured with a temporary test: (1) each part of the two-part timeline is its own `EditorDoc` with **its own
+  clipboard**: a copy made in one part cannot be pasted in the other, which pastes nothing or an older copy of its own;
+  (2) the clipboard holds key values, i.e. the change added to the game's pose: pasted at another instant the visible
+  pose differs by as much as the game's pose moved (8 frames of a 1 deg/frame figure: 8.0 deg). (2) is the documented
+  design of the 11-26 copy / paste.
+
+- **Trick + landing timeline: "record again" leaves the old landing** (user report 2026-11-27; **fixed in the editor,
+  user check pending**: `App::ReloadOtherPart` reads the other part again too; the game's own landing (locked, never
+  written) is rebuilt, a landing clip of the user keeps its keys, a trick that had none gets one. Interface code, no
+  offline test). With it, on the user's request, a **Record again** button in the top bar next to Save (variant shown;
+  "Do it in game" while asked; disabled when not recorded yet); not seen on screen, 1280x720 not checked. Build OK,
+  `--selftest` exit 0, `test.cmd` 2 known FAILs of 19133. `dist\main.dll` kept as the tested one. Previous binaries:
+  `_archive\backups\dist_before-record-again_2026-11-27`. Cause (code reading, never confirmed on screen before the
+  fix): the mod writes the trick's recording with its ground tail again (log of the
+  clean test: KickFlip rewritten each time, 57-85 frames), but `App::ScanFolder` reloads only the open part (`var_`).
+  The other part (`comp_`, built by `BuildLandingPart` only when a clip is opened or made) keeps the old recording until
+  the trick is opened again; a landing that was missing is not added either. Same code for every trick. The generic
+  "Landing" state has a recording of its own, which a trick's "record again" does not touch (by design).
 
 - **Late tricks (late flips): recording is unreliable** (diagnosis of 2026-11-27; mod unchanged).
   **v0.25 game session 15:07-15:09 (log + files):** six late pops, each 0.36-0.43 s after an `RGS_Ollie` pop; only
@@ -214,7 +319,7 @@ The check count depends on the machine: tests on real game clips are skipped whe
   editor "shows bones, not the skinned body" and that multiplayer is "v0.19, 2-player test pending";
   `notes/HANDOFF.md` mentions a `tester-package/` folder that no longer exists at the root (it is in
   `_archive/tester-packages/`); `notes/RELEASE-CHECKLIST.md` still uses AnimStudio names.
-- **Licence** of the editor and Lua parts not chosen; to settle before any release.
+- **Licence:** GPL-3.0 for the whole project (user's choice, 2026-11-27).
 - Leftover diagnostic: "diag legs" lines are still logged per trick (`main.cpp`; cheap; "remove later" per the
   2026-11-24 notes).
 

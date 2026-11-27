@@ -10,9 +10,13 @@ Other players only see your clips in a SessionOpenMP session, when they have Ses
 
 ## 1. What to install
 
+The release package installs everything with **INSTALLER.cmd**: see `INSTALL.html` (installing, updating,
+removing, troubleshooting), in the package and in the editor's `docs` folder. No clip and no recording comes with it: you record each move yourself (part 3). What ends
+up on your PC:
+
 | Item | Where | Role |
 |---|---|---|
-| **UE4SS** | in `...\SessionGame\Binaries\Win64\` (file `UE4SS.dll`) | the mod loader. Without it, nothing loads. |
+| **UE4SS 3.0.1** (only this version) | in `...\SessionGame\Binaries\Win64\` (file `UE4SS.dll`) | the mod loader. Without it, nothing loads. |
 | **SessionAnimLoader** (Lua) | `...\Win64\Mods\SessionAnimLoader\` with `Scripts\main.lua` and `enabled.txt` | watches what the skater does. |
 | **SessionAnimLoaderNative** (DLL) | `...\Win64\Mods\SessionAnimLoaderNative\` with `dlls\main.dll` and `enabled.txt` | adds your pose on top of the game's. |
 | **The editor** | anywhere (the Desktop, for example) | `SessionStudio.exe` and its `docs` folder. |
@@ -53,6 +57,10 @@ movements in the game.
 The recording also holds the **board** as it moves in game, and the editor shows it. A movement recorded with an older
 version of the mod has no board: click **record again** next to it, then do the move once more.
 
+To replace a recording (a bad landing, for example), pick the move and click **Record again** in the top bar, next to
+**Save**, then do the move in game. The button reads **Do it in game** until then; the studio reloads the new recording
+by itself, the trick and its landing together. Your clips are not changed.
+
 ---
 
 ## 4. Your first clip
@@ -91,11 +99,14 @@ version of the mod has no board: click **record again** next to it, then do the 
   back as in the game.
 - **Lock start and end** (Clip settings, on for new trick and landing clips): the start and the end stay at the game's
   pose, so the clip joins the game without a jump. A trick's end is free when the trick has a landing clip (the
-  landing takes over); a landing's start is free (it continues the trick). Padlocks on the timeline show the
+  landing takes over); a landing opened on its own has a free start. Padlocks on the timeline show the
   locked instants: pose between them. Untick it to pose them yourself.
-- **Landing of this trick** (Clip settings): the landing after a trick, shown on the same timeline.
+- **Landing of this trick** (Clip settings): the landing after a trick, shown on the same timeline. With your own
+  landing (unlocked), its start **follows the end of the trick**: pose the end of the trick and the landing starts from
+  that exact pose. The padlock at the start of the landing shows it.
 - **Copy / paste** (Ctrl+C / Ctrl+V): copies the selected keys, or your pose of the selected part, and pastes it at
-  the playhead, inside the open clip.
+  the playhead, in the same clip or, on a trick's timeline, from the trick to its landing and back. What is pasted is
+  your change to the game's movement: at another moment the pose follows what the game does there.
 - **Yellow warnings** (timeline and bottom left of the 3D view): a part is not back at the game's pose at the end of
   a trick or landing. Click to go there; the button next to it fixes it.
 - **Your clips**: Browse > **My clips** lists them all, with an on / off switch. Right-click a clip (or its **...**

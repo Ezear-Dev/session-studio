@@ -10,6 +10,16 @@ constexpr float kFrame = 1.f / 30.f;   // the timeline's frame (30 per second, l
 float SnapFrame(float t) { return std::round(t / kFrame) * kFrame; }
 }
 
+void EditorDoc::TakeClipboard(EditorDoc& from) {
+    if (&from == this || !from.CanPaste()) return;
+    clipKind_ = from.clipKind_;
+    cbPose_ = from.cbPose_;
+    cbKeys_ = from.cbKeys_;
+    cbHasPel_ = from.cbHasPel_;
+    for (int k = 0; k < 3; k++) cbPel_[k] = from.cbPel_[k];
+    from.ClearClipboard();
+}
+
 int EditorDoc::CopyPose(float t, int root) {
     const int n = BoneCount();
     if (n == 0 || (root >= n)) return 0;

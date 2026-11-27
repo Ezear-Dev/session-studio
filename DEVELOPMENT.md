@@ -28,9 +28,36 @@ Without them, the editor is skipped and the rest still builds.
 `build.cmd` generates `UE4SS.lib` from `third_party\ue4ss\UE4SS.def` when it is missing.
 Some tests read real files from the game's clips folder at the default Steam path, and are skipped without them.
 
-## Install (game closed)
+## Release package
 
-In the game's `SessionGame\Binaries\Win64\` folder, with UE4SS installed:
+1. Version: set the same number in `SessionAnimLoader\Native\main.cpp` (`kVersion`), `SessionAnimLoader\Lua\Scripts\main.lua`
+   (`VERSION`) and `SessionStudio\app\res\SessionStudio.rc`, and update the number written in `README.md`, `INSTALL.md`
+   and `installer\README.txt`.
+2. Run `test.cmd`, then `build.cmd`.
+3. Put the official `UE4SS_v3.0.1.zip` (from the [RE-UE4SS v3.0.1 release](https://github.com/UE4SS-RE/RE-UE4SS/releases/tag/v3.0.1))
+   in `release\cache\`. The script checks its SHA-256 and never downloads anything.
+4. From the repository root (needs `git` and `node`):
+
+```
+powershell -ExecutionPolicy Bypass -File tools\make-release.ps1
+```
+
+It writes the player package, the matching source zip and `SHA256SUMS.txt` in `release\out\` (not in Git). It takes an
+explicit list of files, and stops on a version mismatch, on personal data, or on a file that must never ship (clips,
+recordings, logs, settings). The two zips are published **together**: the GPL-3.0 requires the source of the
+distributed binaries.
+
+The installer (`installer\`) can be tried on a made-up game folder: create an empty file named
+`SessionGame-Win64-Shipping.exe` in a temporary folder, then run the packaged `files\install.ps1` with
+`-GameDir <that folder> -EditorDir <another folder> -Yes`. Same for `files\uninstall.ps1` with
+`-GameDir <that folder> -KeepDir <folder for the clips> -Yes`: compare the folder before the install and after the
+uninstall, they must be identical. Never run either with `-Yes` against a real game folder.
+
+The icon is `SessionStudio\app\res\SessionStudio.ico`, drawn by `tools\make-icon.ps1`.
+
+## Install from a build (game closed)
+
+Players use the release package: see [INSTALL.md](INSTALL.md). To install what you just built, in the game's `SessionGame\Binaries\Win64\` folder, with UE4SS installed:
 
 | Copy | To |
 |---|---|

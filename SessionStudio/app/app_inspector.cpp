@@ -283,6 +283,9 @@ void App::InspectorClip() {
             if (ImGui::Button("Back to the trick")) { FigureVariant tv = var_; tv.state = ST_Trick; askVar_ = tv; Request(Ask::ChangeFigure); }
             ImGui::SameLine();
         }
+        // 2026-11-27: on the trick's timeline the start follows the trick's end by itself: no button
+        if (doc_.StartLinked()) ImGui::TextWrapped("%s", "Its start is the end of the trick: change the end of the trick and it follows.");
+        else {
         if (LandingLockedHere()) ImGui::BeginDisabled();
         if (ImGui::Button("Take the end of the trick")) {
             if (doc_.HasPending()) Status("set or discard the pending change first (K)");
@@ -294,6 +297,7 @@ void App::InspectorClip() {
         }
         if (LandingLockedHere()) ImGui::EndDisabled();
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", "Replaces the keys: at the start, the pose at the end of the trick clip;\nat the end, the game's pose (the landing hands back to the game smoothly).");
+        }
     }
     if (doc_.IsTrickClip() || doc_.IsLandingClip()) {   // 2026-11-26 (task 3): locked start and end
         const bool avail = doc_.LockAvailable();
@@ -321,7 +325,7 @@ void App::InspectorClip() {
             const char* what = s && e ? "Locked: start and end (padlocks on the timeline)."
                              : s && doc_.HasLandingCover() ? "Locked: start. The end is free: the landing clip takes over."
                              : s ? "Locked: start. The end is posed: bring it back to lock it."
-                             : e ? "Locked: end. The start is free: it continues the trick."
+                             : e ? (doc_.StartLinked() ? "Locked: end. The start follows the end of the trick." : "Locked: end. The start is free: it continues the trick.")
                              : "";
             if (*what) ImGui::TextDisabled("%s", what);
         }

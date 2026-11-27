@@ -11,6 +11,7 @@
 #include "workspace.h"
 #include "ui_theme.h"
 #include "stage_renderer.h"
+#include "res/resource.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -118,6 +119,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmd, int) {
     ImGui_ImplWin32_EnableDpiAwareness();
     const float scale = ImGui_ImplWin32_GetDpiScaleForMonitor(MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY));
     WNDCLASSEXW wc = {sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, hInst, nullptr, LoadCursorW(nullptr, IDC_ARROW), nullptr, nullptr, L"SessionStudio", nullptr};
+    // the icon of app/res: the large one for the taskbar and Alt+Tab, the small one for the title bar, each at the
+    // size Windows asks for (LR_SHARED: Windows frees them)
+    wc.hIcon = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(IDI_SESSIONSTUDIO), IMAGE_ICON, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_SHARED);
+    wc.hIconSm = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(IDI_SESSIONSTUDIO), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED);
     RegisterClassExW(&wc);
     // UI Phase 1: the window comes back where it was (if that place is still on a screen)
     const std::wstring ini = ExeDir() + L"SessionStudio.ini";

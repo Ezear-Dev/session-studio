@@ -101,8 +101,16 @@ the scripts call `D:\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\v
   refuse cleanly (log, no crash) when offsets do not match the game build.
 - **Compatibility:** existing `.sanim` clips must keep loading and playing the same. Ask the user before changing the
   clip format, the meaning of a key, or the multiplayer wire format. Unknown top-level clip fields are preserved.
-- Bump `kVersion` (`main.cpp`) and `VERSION` (`main.lua`) together when the mod changes; they must match the editor
-  that reads their log lines.
+- Bump `kVersion` (`main.cpp`), `VERSION` (`main.lua`) and the version in `SessionStudio/app/res/SessionStudio.rc`
+  together; the mod must match the editor that reads its log lines. `tools/make-release.ps1` refuses a mismatch. The
+  release number is the mod's (owner's choice, 2026-11-27).
+- Releases (`DEVELOPMENT.md`, "Release package"): only `tools/make-release.ps1` builds the player package (explicit
+  file list, into `release/`, not in Git), with the matching source zip. No clip and no recording is ever shipped.
+  The installer (`installer/`) never modifies an existing UE4SS and never replaces anything in `clips`. It writes down
+  all it does (`Win64\SessionAnimLoader_install.json`); `uninstall.ps1` undoes only that, back to the state before the
+  FIRST install. Without a record it touches nothing; it never deletes clips and never removes a folder that is not
+  empty. A new installed file must go through `Install-File`. The editor always gets its own sub-folder.
+  Only UE4SS **3.0.1** (the experimental build once crashed the game with a C++ mod: see `ue4ss_abi.h`).
 - The editor parses DLL log lines (`model/workspace.cpp`): changing a log line means updating the parser and its test.
 - Every new user-facing string is English; there is no translation layer any more.
 
@@ -117,8 +125,9 @@ creator gains.
   `.gitignore`). Obsolete material goes to `_archive/`. No personal paths or private data in the repository or packages.
 - Skate Style and other closed tools: ideas only, no code, no assets. ReSkate Animator Studio is GPL-3.0 (per our
   study): ask before reusing any of its code. No game asset in the repository.
-- The native mod is GPL-3.0 (SessionOpenMP ABI header, ExpandedTricks hook method). No licence chosen for the rest;
-  a distributed editor will very likely have to be GPL-3.0: raise it before any release (`notes/RELEASE-CHECKLIST.md`).
+- **Licence: GPL-3.0 for the whole project** (owner's choice, 2026-11-27; copyright "Ezear-Dev"). A distributed binary
+  needs its source beside it (the source zip, as long as the repository is private). Third-party notices:
+  `THIRD-PARTY-NOTICES.txt` (update it when a dependency changes).
 
 ## 5. Technical facts you must not rediscover
 

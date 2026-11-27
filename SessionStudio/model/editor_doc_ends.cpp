@@ -187,6 +187,71 @@ bool EditorDoc::FixEndIssue(const EndIssue& e, const Clip* linkedTrick) {
     return changed;
 }
 
+// ------------------------------------------------------------------ the seam of the two-part timeline (2026-11-27)
+bool EditorDoc::LinkStartToTrick(const EditorDoc& trick) {
+    startLinked_ = IsLandingClip() && trick.IsTrickClip() && HasFigure() && trick.HasFigure() && BoneCount() == trick.BoneCount() &&
+                   EffectiveDrive() == Drive::Time && trick.EffectiveDrive() == Drive::Time;
+    if (!startLinked_) return false;
+    constexpr float kSameDeg = 0.05f, kSameCm = 0.01f;   // under this, nothing is written (the file's rounding)
+    const float te = TrickEnd(trick.clip_), end = clip_.duration;
+    auto angle = [](const Quat& a, const Quat& b) {   // precise near zero (an arc cosine is not)
+        const Quat d = QNorm(QMul(QInv(a), b));
+        return 2.f * std::atan2(std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z), std::fabs(d.w)) * kRad;
+    };
+    bool changed = false;
+    for (int b = 0; b < BoneCount(); b++) {
+        if (!IsEditable(b)) continue;
+        // what is SEEN at the end of the trick, keyed changes only (legs given back after the catch count as the game's)
+        const Quat gameT = trick.OriginFor(b, te);
+        Quat seen = trick.PoseNoPending(b, te, gameT);
+        if (b < (int)trick.leg_.size() && trick.leg_[b]) seen = QSlerp(gameT, seen, EaseSine(trick.LegWeightAt(te)));
+        const bool posed = angle(gameT, seen) > kSameDeg;
+        int ti = TrackIndex(b);
+        if (ti < 0 && !posed) continue;
+        const Quat game0 = OriginFor(b, 0.f);
+        const Quat want = posed ? seen : game0;
+        const Quat gameEnd = OriginFor(b, end);
+        if (angle(PoseNoPending(b, 0.f, game0), want) > kSameDeg) {
+            if (ti < 0) {   // a part the link adds goes from the trick's pose back to the game's at the end
+                Track tr;
+                tr.bone = skel_.names[b];
+                tr.index = b;
+                tr.keys.push_back(Key{end, KeyForOrigin(gameEnd, -1, gameEnd), true});
+                clip_.tracks.push_back(tr);
+                ti = (int)clip_.tracks.size() - 1;
+            }
+            PutKey(clip_.tracks[ti].keys, 0.f, KeyForOrigin(game0, ti, want));
+            if (clip_.tracks[ti].keys.size() == 1) PutKey(clip_.tracks[ti].keys, end, KeyForOrigin(gameEnd, ti, gameEnd));   // a lone key would hold all along
+            changed = true;
+        }
+        if (ti >= 0 && !posed && clip_.mode == Mode::Additive) {   // nothing left but the game's pose at both ends: no part
+            bool empty = true;
+            for (auto& k : clip_.tracks[ti].keys)
+                if ((k.t > kKeyEps && std::fabs(k.t - end) > kKeyEps) || angle(QIdent, k.q) > kSameDeg) empty = false;
+            if (empty) { clip_.tracks.erase(clip_.tracks.begin() + ti); changed = true; }
+        }
+    }
+    if (PelvisBone() >= 0) {
+        float want[3] = {0, 0, 0}, have[3] = {0, 0, 0};
+        if (!trick.clip_.pelvis.empty()) EvalClipPelvis(trick.clip_, te, false, want);
+        if (!clip_.pelvis.empty()) EvalClipPelvis(clip_, 0.f, false, have);
+        const float gap[3] = {want[0] - have[0], want[1] - have[1], want[2] - have[2]};
+        const float zero[3] = {0, 0, 0};
+        if (Len3(gap) > kSameCm) {
+            if (clip_.pelvis.empty()) PutPel(clip_.pelvis, end, zero);
+            PutPel(clip_.pelvis, 0.f, want);
+            if (clip_.pelvis.size() == 1) PutPel(clip_.pelvis, end, zero);
+            changed = true;
+        }
+        if (Len3(want) <= kSameCm && !clip_.pelvis.empty()) {
+            bool empty = true;
+            for (auto& k : clip_.pelvis) if ((k.t > kKeyEps && std::fabs(k.t - end) > kKeyEps) || Len3(k.v) > kSameCm) empty = false;
+            if (empty) { clip_.pelvis.clear(); changed = true; }
+        }
+    }
+    return changed;
+}
+
 // ------------------------------------------------------------------ locked start and end (task 3)
 void SetClipExtraBool(Clip& c, const char* name, bool v) {
     JValue j; j.t = JValue::Bool; j.b = v;
@@ -242,6 +307,7 @@ bool EditorDoc::EndLocked() const {
     return true;
 }
 bool EditorDoc::LockedAt(float t) const {
+    if (StartLinked() && std::fabs(t) < kKeyEps) return true;   // 2026-11-27: it is the trick's end
     if (StartLocked() && std::fabs(t) < kKeyEps) return true;
     return EndLocked() && std::fabs(t - clip_.duration) < kKeyEps;
 }

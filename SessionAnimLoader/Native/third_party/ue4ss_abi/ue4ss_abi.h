@@ -2,7 +2,8 @@
 //
 // PINNED TO UE4SS **v3.0.1 STABLE** (the release build installed on both Epic and Steam, and the one
 // the SessionCoop package ships to joiners). Transcribed from the user's copy of the release source:
-//   C:\Users\lilma\Downloads\RE-UE4SS-3.0.1\RE-UE4SS-3.0.1\UE4SS\include\Mod\CppUserModBase.hpp
+//   RE-UE4SS-3.0.1\UE4SS\include\Mod\CppUserModBase.hpp
+// (Session Anim Loader, 2026-11-27: the local folder in front of that path was removed; no other change.)
 //
 // WHY NOT INCLUDE THE REAL HEADER: it reaches imgui/fmt through GUI/Console.hpp and
 // DynamicOutput/Output.hpp, and stubbing that chain is an expanding chase. The ABI we must agree on is

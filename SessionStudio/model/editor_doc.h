@@ -203,6 +203,13 @@ public:
     // mode), end keys = the game's pose (the landing fades back to the game). keepKeys false: the keys are replaced.
     // Returns the key count (0: nothing to take, or the clip has keys and keepKeys).
     int SeedLandingFromTrick(const Clip& trick, bool keepKeys = true);
+    // 2026-11-27, one timeline: this landing starts exactly as the trick is SEEN at its end (keyed changes; legs the
+    // trick gave back after the catch count as the game's). Called again after every change: writes only the keys at 0
+    // (a part it adds also gets a game's-pose key at the end), adds no undo step: undoing the trick brings the landing
+    // back with it. While linked, 0 is a locked instant of the landing. True if the landing changed.
+    bool LinkStartToTrick(const EditorDoc& trick);
+    void UnlinkStart() { startLinked_ = false; }
+    bool StartLinked() const { return startLinked_ && IsLandingClip(); }
     // interpolation of a key: 0 smooth, 1 linear, 2 constant (step)
     enum Interp { IP_Smooth = 0, IP_Linear = 1, IP_Step = 2 };
     void SetKeyInterp(float t, int bone /* -1 = all */, int interp);
@@ -270,6 +277,8 @@ public:
     bool CanPaste() const { return clipKind_ != CB_None; }
     bool ClipboardHasKeys() const { return clipKind_ == CB_Keys; }
     void ClearClipboard() { clipKind_ = CB_None; cbPose_.clear(); cbKeys_.clear(); cbHasPel_ = false; }
+    // 2026-11-27: the clipboard follows the playhead from one part of the two-part timeline to the other
+    void TakeClipboard(EditorDoc& from);
 
     // ---------------------------------------------------------------- ends of trick and landing clips (2026-11-26)
     // Add mode trick and landing clips only (Replace, loops, held poses, dismount parts: never an issue).
@@ -375,6 +384,7 @@ private:
     struct CbKey { float dt; std::vector<std::pair<int, Key>> bones; bool hasPel = false; PosKey pel{}; };
     std::vector<CbKey> cbKeys_;           // keys: one entry per copied (row, time), dt from the first one
     // locked ends
+    bool startLinked_ = false;            // a landing whose start is its trick's end (LinkStartToTrick)
     bool landCover_ = false;              // the trick has a landing clip for all its variants (given by the app)
     void LockKeysAt(float t, bool skipLegs);
     bool EndLockedRule() const;           // the end lock rule alone (without the "trick end still posed" exception)

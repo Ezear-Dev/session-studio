@@ -1,7 +1,7 @@
 # Session Studio: reference for creators
 
 This is the detailed reference. For a first clip, read `Getting-Started.md`.
-Version: mod (SessionAnimLoaderNative) v0.24, clip format `sanim` version 1, Session: Skate Sim Steam build of November 2026.
+Version: mod (SessionAnimLoaderNative) v0.28, clip format `sanim` version 1, Session: Skate Sim Steam build of November 2026.
 
 ---
 
@@ -12,11 +12,12 @@ Version: mod (SessionAnimLoaderNative) v0.24, clip format `sanim` version 1, Ses
 2. **The DLL** (`Mods\SessionAnimLoaderNative`) hooks the skater mesh's final bone pass. On top of the game's finished pose, it
    adds the clips whose trigger matches. It also records the game's own movement of each move the first time you do it
    (`clips\_figures\*.json`), plus the skeleton (`clips\_skeleton.json`).
-3. **The editor** shows those recordings as a skeleton and writes `.sanim` clips into the clips folder. The DLL rescans
+3. **The editor** shows those recordings on a mannequin (or as a skeleton) and writes `.sanim` clips into the clips folder. The DLL rescans
    that folder every second and reloads a file whose content changed.
 
 Only your own skater is changed. In a SessionOpenMP session, players who have Session Anim Loader and the same clip files
-also see your clips (v0.19, 2-player test pending).
+also see your clips. Multiplayer is experimental: it was tried with two players on v0.21, not on later versions. All
+players need the same mod version (v0.24 and later cannot see older ones).
 
 ---
 
@@ -131,7 +132,8 @@ in each bone's local space, the pelvis offset is in cm in component space (Z up)
 
 ## Editor layout
 
-- **Top bar**: Browse / Animate switch (Tab), **Library** drawer (B, Animate only), what is edited, **Save** (Ctrl+S),
+- **Top bar**: Browse / Animate switch (Tab), **Library** drawer (B, Animate only), what is edited, **Record again** (the
+  game's movement of the variant shown, recorded anew the next time you do it), **Save** (Ctrl+S),
   **Undo / Redo**, the **game pill** (game and mod state, result of the last save; click for details) and the **...**
   menu (new, open, save as, Studio mode, Preferences, shortcuts, welcome and setup check, guide, folders).
 - **Browse**: collections on the left (every trick and ground state by category, **My clips**, **Captures**; search
@@ -168,9 +170,12 @@ in each bone's local space, the pelvis offset is in cm in component space (Z up)
   bone and its children (or every editable bone); a key right away with Auto key on.
 - **Lock start and end** (Add mode trick and landing clips): locked instants are keyed at the game's pose after every
   edit. Trick: start locked, end locked unless the trick has an enabled landing clip for all its variants (legs never
-  locked at a trick's end). Landing: end locked, start free. A trick end posed beyond 3 degrees / 1 cm when the trick
+  locked at a trick's end). Landing: end locked; start free when opened on its own. A trick end posed beyond 3 degrees / 1 cm when the trick
   loses its landing cover is kept (warning) until it is brought back. Changing the length moves the locked end key.
-- **Copy / paste** inside the open clip: a pose (your change, keyed like a normal key) or keys (spacing and
+- **Seam** (trick and your unlocked landing on one timeline): the start of the landing is what is seen at the end of
+  the trick (keyed changes and pelvis; legs given back after the catch count as the game's). It follows every change and
+  undo of the trick, only the landing's keys at 0 are written, and it is locked there. Saving writes both files.
+- **Copy / paste** inside the open clip, or across the two parts of that timeline: a pose (your change, keyed like a normal key) or keys (spacing and
   interpolation kept, snapped to frames, keys past the end skipped).
 - **End warnings**: parts more than 3 degrees / 1 cm from the game's pose at a trick or landing end, or a landing
   start different from its trick's end. Legs are ignored at a trick's end.
@@ -194,9 +199,10 @@ The editor reads `SessionAnimLoader.native.log` to show the game state and the r
 
 - Grinds, grabs: not detected reliably. Walking / running: work in progress. Powerslide: not checked.
 - The hook depends on this game build: after a game update the DLL may refuse to install (logged, nothing breaks).
-- The editor shows bones, not the skinned body.
+- The editor shows a mannequin or the bones, not your skater's body, and the game adds its own physics and blending.
 - Other players see your clips only with Session Anim Loader and identical clip files.
 
 ## Licence
 
-SessionAnimLoaderNative is GPL-3.0 (it reuses the UE4SS ABI header of SessionOpenMP and ExpandedTricks' hook method).
+Session Studio and Session Anim Loader are free software under the GNU General Public License version 3. The native
+mod reuses the UE4SS ABI header of SessionOpenMP and ExpandedTricks' hook method; see `THIRD-PARTY-NOTICES.txt`.

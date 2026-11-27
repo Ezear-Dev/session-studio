@@ -150,7 +150,11 @@ void App::HeaderBar() {
     const float wPill = ImGui::CalcTextSize(gameTxt.c_str()).x + fs * 1.2f + fs * 0.9f;
     const float wBtn = ImGui::CalcTextSize("Save").x + st.FramePadding.x * 2.f;
     const float gapS = st.ItemSpacing.x, gapL = fs * 1.1f;
-    const float right = wSave + gapL + wPill + gapL + wBtn + gapS + IconW("Undo") + gapS * 0.5f + IconW("Redo") + gapS + IconW("...");
+    // 2026-11-27 (user request): "Record again" next to Save, for the variant shown (a trick and its landing share one
+    // recording). Its width is that of the longer label, so the bar does not move when the label changes.
+    const bool recAsked = FigureRedo(ShownVar()), recThere = FigureReady(ShownVar());
+    const float wRec = std::max(ImGui::CalcTextSize("Record again").x, ImGui::CalcTextSize("Do it in game").x) + st.FramePadding.x * 2.f;
+    const float right = wSave + gapL + wPill + gapL + wRec + gapS + wBtn + gapS + IconW("Undo") + gapS * 0.5f + IconW("Redo") + gapS + IconW("...");
     const float rx = ImGui::GetWindowContentRegionMax().x - right;
 
     // ---- centre: the variant (click: the Library) and the clip
@@ -199,6 +203,16 @@ void App::HeaderBar() {
         if (ImGui::BeginPopup("##game")) { GamePopup(); ImGui::EndPopup(); }
     }
     ImGui::SameLine(0, gapL);
+    const bool recOff = clipsDir_.empty() || recAsked || !recThere;
+    if (recOff) ImGui::BeginDisabled();
+    if (ui::Button(recAsked ? "Do it in game##rerecord" : "Record again##rerecord", ui::Kind::Normal, ImVec2(wRec, 0.f))) RequestRerecord(ShownVar());
+    if (recOff) ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("%s", clipsDir_.empty() ? "Choose the clips folder first."
+            : recAsked ? "Asked: the game records this movement again the next time you do it.\nThe studio then reloads it by itself."
+            : !recThere ? "Not recorded yet: do the move once in game, it is recorded by itself."
+                        : "Record the game's movement again, for the variant shown (a trick and its landing together).\nClick, then do the move in game. The current recording stays until the new one is made.\nYour clips are not changed.");
+    ImGui::SameLine(0, gapS);
     if (ui::Button("Save", ui::Kind::Primary)) Request(Ask::Save);   // the only orange filled button
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Save (Ctrl+S)\nWrites the clip to the game's clips folder (automatic name for a new clip).\nThe previous version is copied to the backups first.\nThe game pill (left of this button) tells you whether the game reloaded it.");
     // undo / redo (never called "Annuler": that word is the Cancel of every dialog)
@@ -556,9 +570,9 @@ void App::GamePopup() {
 }
 
 // the last message for a few seconds, at the bottom-right of the stage (Animate) or of the window (Browse);
-// drawn above everything, never catches the mouse
+// drawn above everything, never catches the mouse; so not shown while the welcome card is open (it covered it)
 void App::Toast() {
-    if (status_.empty() || statusAge_ > 6.f) return;
+    if (showWelcome_ || status_.empty() || statusAge_ > 6.f) return;
     const Layout L = Lay();
     const float fs = ImGui::GetFontSize();
     const float a = std::clamp((6.f - statusAge_) / 0.8f, 0.f, 1.f) * std::clamp(statusAge_ / 0.12f, 0.f, 1.f);   // fade in and out

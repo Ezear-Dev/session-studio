@@ -1,0 +1,36 @@
+// Windows resources of SessionStudio.exe: the icon (tools\make-icon.ps1) and the file's version details.
+// The version follows the mod's (kVersion in main.cpp, VERSION in main.lua): change the three together
+// (tools\make-release.ps1 refuses to package when they differ).
+#include <winver.h>
+#include "resource.h"
+
+IDI_SESSIONSTUDIO ICON "SessionStudio.ico"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION 0,28,0,0
+PRODUCTVERSION 0,28,0,0
+FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+FILEFLAGS 0x0L
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "Ezear-Dev"
+            VALUE "FileDescription", "Session Studio"
+            VALUE "FileVersion", "0.28.0.0"
+            VALUE "InternalName", "SessionStudio"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Ezear-Dev. GNU GPL version 3."
+            VALUE "OriginalFilename", "SessionStudio.exe"
+            VALUE "ProductName", "Session Studio"
+            VALUE "ProductVersion", "0.28"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

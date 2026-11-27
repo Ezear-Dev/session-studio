@@ -4,6 +4,8 @@
 
 # Backups and packages
 *.zip
+# release packages built by tools/make-release.ps1, and the downloaded UE4SS zip
+/release/
 
 # Built programs
 /SessionAnimLoader/*.dll
