@@ -118,6 +118,9 @@ Important steps, technical decisions, problems and their solutions. Current stat
   modal the same look and keys (Enter = main button unless it is a Danger one, Esc = the last button). The welcome
   stays a plain window, not a modal: the "Clips folder" dialog it opens must come on top of it. New Preferences
   (text size = `style.FontScaleMain`, saved "ui.textsize") and a full keyboard and mouse list (F1).
+- **Redesign step 8, polish and guides (11-27)**: the stage messages start right of the Library drawer when it is open.
+  Both guides now describe the two pages. Pose thumbnails on the Browse cards were left out: they need an offscreen
+  render of each recording, too big for a polish step.
 
 ## Problems met and solutions
 

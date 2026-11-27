@@ -26,7 +26,7 @@ A clip targets one or more **states** and, for each, **stances** and **feet**.
 
 | State (`trigger.states`) | Editor name | Notes |
 |---|---|---|
-| `Trick` | flip tricks (Library > Tricks) | `trigger.trick` = the game's trick name (`KickFlip`, `Treflip`…); empty = every flip trick |
+| `Trick` | flip tricks (Browse > Tricks) | `trigger.trick` = the game's trick name (`KickFlip`, `Treflip`…); empty = every flip trick |
 | `Manual`, `NoseManual` | Manual, Nose manual | loop while held |
 | `OnFoot` | On foot (standing) | off the board, slow |
 | `Walking`, `Running` | Walking, Running | off the board, by speed. **Work in progress** |
@@ -55,7 +55,8 @@ Every frame, among the enabled clips whose state, stance and feet match:
 3. Then the most specific one: a named trick > feet set > fewer stances.
 4. Then file order.
 
-The editor lists the competing clips under **Several clips on this variant** (Clip tab).
+Browse shows the clip that plays on each variant (variant detail, on the right). **Clip settings** lists the competing
+clips under **Several clips on this variant**.
 
 Between two ground poses, the change is cross-faded for at least the size of the pose gap (up to 0.8 s). A trick
 clip's legs are given back to the game after the catch; a landing clip writes the legs again.
@@ -118,6 +119,22 @@ in each bone's local space, the pelvis offset is in cm in component space (Z up)
 
 ---
 
+## Editor layout
+
+- **Top bar**: Browse / Animate switch (Tab), **Library** drawer (B, Animate only), what is edited, **Save** (Ctrl+S),
+  **Undo / Redo**, the **game pill** (game and mod state, result of the last save; click for details) and the **...**
+  menu (new, open, save as, Studio mode, Preferences, shortcuts, welcome and setup check, guide, folders).
+- **Browse**: collections on the left (every trick and ground state by category, **My clips**, **Captures**; search
+  Ctrl+K; filters **Recorded** and **Has clips**), one card per move with a dot per stance x feet (green = recorded,
+  orange centre = one of your clips is on, white ring = the variant being edited), the variant detail on the right
+  (variant grid, which clip plays in game, its clips with an on / off switch, **Animate this variant**, **New clip for
+  this variant**). **My clips** is a sortable table with filters; right-click a clip for open, rename, duplicate, delete.
+- **Animate**: the 3D view with its floating tools (top: Rotate, Pull (IK), Move, local / world rings; top right:
+  **Inspector**, **Clip settings**, view options; bottom right: camera), the Inspector card on its right, the timeline
+  at the bottom (transport, Auto key, phase ribbon, "Game" row, tracks). Messages about the view sit at the bottom left.
+- **Preferences** (Ctrl+,): Creator / Studio mode, text size, clips folder, backups, welcome at start.
+  **Keyboard shortcuts** (F1): every key and mouse gesture.
+
 ## Editor tools
 
 - **Pull (IK)** on hand, elbow, shoulder, foot, knee; "chest follows the hand"; elbow / knee swivel slider.
@@ -141,7 +158,7 @@ in each bone's local space, the pelvis offset is in cm in component space (Z up)
 - **End warnings**: parts more than 3 degrees / 1 cm from the game's pose at a trick or landing end, or a landing
   start different from its trick's end. Legs are ignored at a trick's end.
 - **Backups**: every save copies the previous version to `Documents\SessionStudio\backups\<clip>\` (20 kept per clip).
-  Delete from the Library moves the file there too.
+  Deleting a clip (Browse > My clips, or the Library drawer) moves the file there too.
 
 ---
 

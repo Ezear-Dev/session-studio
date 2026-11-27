@@ -691,12 +691,14 @@ void App::ViewPanel() {
     // banners, bottom left, stacked upwards (left of the camera card)
     {
         const float m = std::round(fsz * 0.6f), px = fsz * 0.7f, py = fsz * 0.4f;
-        const float maxW = std::max(fsz * 8.f, sz.x - OverlaySize("##camera").x - m * 3.f - px * 2.f - fsz * 0.2f);
+        // redesign step 8: with the Library drawer open, start right of it (it covers the left of the stage)
+        const float x0 = drawer_ ? std::max(p0.x, L.lib.x + L.lib.w + L.gap) : p0.x;
+        const float maxW = std::max(fsz * 8.f, p0.x + sz.x - x0 - OverlaySize("##camera").x - m * 3.f - px * 2.f - fsz * 0.2f);
         float y = p0.y + sz.y - m;
         dl->PushClipRect(p0, ImVec2(p0.x + sz.x, p0.y + sz.y), true);
         for (const Banner& bn : banners) {
             const ImVec2 ts = ImGui::CalcTextSize(bn.text.c_str(), nullptr, false, maxW);
-            const ImVec2 q0(p0.x + m, y - ts.y - py * 2.f), q1(q0.x + fsz * 0.2f + ts.x + px * 2.f, y);
+            const ImVec2 q0(x0 + m, y - ts.y - py * 2.f), q1(q0.x + fsz * 0.2f + ts.x + px * 2.f, y);
             dl->AddRectFilled(q0, q1, theme::U32(theme::Bg0, 0.88f), fsz * 0.4f);
             dl->AddRectFilled(q0, ImVec2(q0.x + fsz * 0.2f, q1.y), theme::U32(bn.col), fsz * 0.4f, ImDrawFlags_RoundCornersLeft);
             dl->AddText(nullptr, 0.f, ImVec2(q0.x + fsz * 0.2f + px, q0.y + py), theme::U32(bn.col), bn.text.c_str(), nullptr, maxW);
