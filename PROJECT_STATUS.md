@@ -111,7 +111,7 @@ The check count depends on the machine: tests on real game clips are skipped whe
 
 ---
 
-## 6. UX/UI redesign project (started 2026-11-26, branch `redesign-ui`)
+## 6. UX/UI redesign project (started 2026-11-26 on branch `redesign-ui`, merged into `main` 2026-11-27)
 
 **Current state (2026-11-26):** design v2 approved by the user — two full-screen workspaces, *Browse* (library) and
 *Animate* (full-width stage + full-width timeline, floating tools, contextual inspector card, clip settings panel);

@@ -35,6 +35,7 @@ Important steps, technical decisions, problems and their solutions. Current stat
 | 11-26 | editor | Solid **mannequin** in the 3D view (six looks until accepted), optional approximate board |
 | 11-26 | v0.24 | **Rename**: AnimStudio → Session Studio (editor) + Session Anim Loader (mod); installed and checked in game |
 | 11-26 | editor | **UX/UI redesign started** on branch `redesign-ui`: design v1 (restyle of the 4-panel layout) rejected, v2 approved (Browse / Animate workspaces); step 0 splits `app.cpp` into panel files without behaviour change |
+| 11-27 | editor | `redesign-ui` (steps 0-8c) merged into `main` by fast-forward and pushed to GitHub at the owner's request; `test.cmd` ALL PASS (18667) just before. Steps 7-8c were still "user check pending" |
 
 ## Key technical decisions
 
