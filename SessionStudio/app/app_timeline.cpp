@@ -146,42 +146,102 @@ void App::EndWarnings(bool withFix) {
     }
 }
 
-// UI Phase 4: the transport row (time, frames, keys, interpolation)
+// UI Phase 4: go to a time (through the pending-change check)
 void App::JumpTo(float t) {
     if (doc_.EffectiveDrive() == Drive::ManualRatio) return;
     askTime_ = std::clamp(t, 0.f, doc_.clip().duration);
     Request(Ask::ChangeTime);
 }
 
+// redesign step 5 (2026-11-27): one header line. Left: keys and interpolation. Centre: transport, Auto key, the time.
+// Right: end warnings, zoom, view options, help. (Was three lines: transport, view bar, selection line.)
 void App::TimelineTransport() {
     Clip& c = doc_.clip();
     const float fs = ImGui::GetFontSize();
+    const ImGuiStyle& st = ImGui::GetStyle();
     static const char* kInterpName[3] = {"smooth", "linear", "constant"};
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Clip    ");   // "Clip settings" moved next to "Options" on the 3D view (user 2026-11-27)
-    ImGui::SameLine();
+    const float lineY = ImGui::GetCursorPosY();
+    const float winR = ImGui::GetWindowContentRegionMax().x;
+
+    // ---- left: keys
+    if (ui::Button("+ key")) CommitKeyNow();
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Set a key at the playhead (K).");
+    ImGui::SameLine(0, st.ItemSpacing.x * 0.5f);
+    const bool pelSel = sel_ >= 0 && sel_ == doc_.PelvisBone();
+    if (!keySel_.empty()) {
+        if (ui::Button("- keys")) DeleteSelectedKeys();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Delete the selected keys (Del).");
+    } else {
+        if (ui::Button("- key")) { doc_.Checkpoint("delete key"); doc_.DeleteKeysAt(doc_.KeyTime(t_), (doc_.IsEditable(sel_) || pelSel) ? sel_ : -1); }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Delete the key at the playhead (of the part picked, or of every part).");
+    }
+    {   // interpolation: of the selected keys, else of the key of the selected bone under the playhead
+        int cur = -1;
+        if (!keySel_.empty()) {
+            const KeySel& k0 = keySel_.front();
+            cur = doc_.KeyInterp(k0.t, k0.bones.empty() ? -1 : k0.bones.front());
+            for (auto& k : keySel_) if (doc_.KeyInterp(k.t, k.bones.empty() ? -1 : k.bones.front()) != cur) cur = -2;   // mixed
+        } else if (doc_.IsEditable(sel_) || pelSel) cur = doc_.KeyInterp(t_, sel_);
+        if (cur != -1) {
+            ImGui::SameLine(0, st.ItemSpacing.x);
+            int m = cur;
+            if (ui::Segmented("##interp", kInterpName, 3, &m)) {
+                if (!keySel_.empty()) SetSelectedInterp(m);
+                else { doc_.Checkpoint("interpolation"); doc_.SetKeyInterp(t_, sel_, m); }
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("How the pose goes from this key to the next one:\nsmooth: a soft curve through the keys\nlinear: constant speed from one key to the next\nconstant: the pose holds until the next key");
+        }
+    }
+    if (doc_.CanPaste()) {   // 2026-11-26 copy / paste
+        ImGui::SameLine(0, st.ItemSpacing.x);
+        if (ui::IconButton("paste", theme::Icon::Paste, "Paste")) PasteNow();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", doc_.ClipboardHasKeys() ? "Paste (Ctrl+V): the copied keys, the first one at the playhead (same spacing and interpolation)."
+                                                                                 : "Paste (Ctrl+V): keys the copied pose at the playhead. The other keys keep their pose.");
+    }
+    if (!keySel_.empty()) {   // what is selected, in one short line (details in the tooltip)
+        ImGui::SameLine(0, st.ItemSpacing.x);
+        ImGui::AlignTextToFramePadding();
+        if (keySel_.size() == 1) {
+            const KeySel& k = keySel_.front();
+            std::string who = k.bones.empty() ? std::string("all bones") : k.bones.size() == 1 ? BoneLabelUi(doc_.skeleton().names[k.bones.front()]) : (std::to_string(k.bones.size()) + " bones");
+            if (k.bones.size() == 1 && k.bones.front() == doc_.PelvisBone()) who = "Pelvis";
+            ImGui::TextColored(theme::AccentHi, "1 key · %.2f s", k.t);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Selected key: %.2f s · %s\nDel: delete · Esc: deselect · drag: move", k.t, who.c_str());
+        } else {
+            float a = 1e9f, b = -1e9f;
+            for (auto& k : keySel_) { a = std::min(a, k.t); b = std::max(b, k.t); }
+            ImGui::TextColored(theme::AccentHi, "%d keys", (int)keySel_.size());
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%d keys selected, from %.2f to %.2f s\nDel: delete · Esc: deselect", (int)keySel_.size(), a, b);
+        }
+    }
+    const float leftEnd = ImGui::GetItemRectMax().x - ImGui::GetWindowPos().x;
+
+    // ---- centre: transport, Auto key, time (centred in the panel when there is room)
+    ImGui::SameLine(std::max(leftEnd + fs * 1.5f, (winR - tlCenterW_) * 0.5f));
+    ImGui::SetCursorPosY(lineY);
+    ImGui::BeginGroup();
     if (doc_.EffectiveDrive() != Drive::ManualRatio) {
         const float nowF = std::round(t_ / kFrame);
-        if (ui::IconButton("tostart", theme::Icon::ToStart, "|<")) JumpTo(0.f);
+        if (ui::IconButton("tostart", theme::Icon::ToStart, "|<", false, ui::Kind::Ghost)) JumpTo(0.f);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Start of the clip (Home)");
-        ImGui::SameLine(0, fs * 0.2f);
-        if (ui::IconButton("prevframe", theme::Icon::Prev, "<")) JumpTo((nowF - 1.f) * kFrame);
+        ImGui::SameLine(0, fs * 0.15f);
+        if (ui::IconButton("prevframe", theme::Icon::Prev, "<", false, ui::Kind::Ghost)) JumpTo((nowF - 1.f) * kFrame);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Previous frame (left arrow)");
-        ImGui::SameLine(0, fs * 0.2f);
+        ImGui::SameLine(0, fs * 0.15f);
         {   // play / pause: the main action of the transport, always orange
             const std::string pl = theme::HasIcons() ? theme::Glyph(playing_ ? theme::Icon::Pause : theme::Icon::Play) + (playing_ ? "  Pause##c" : "  Play##c")
                                                      : std::string(playing_ ? "Pause##c" : "Play##c");
             if (ui::Button(pl.c_str(), ui::Kind::Primary, ImVec2(fs * 5.f, 0))) { if (playing_) playing_ = false; else Request(Ask::Play); }
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip(playing_ ? "Pause (Space)" : "Plays the clip (Space)");
-        ImGui::SameLine(0, fs * 0.2f);
-        if (ui::IconButton("nextframe", theme::Icon::Next, ">")) JumpTo((nowF + 1.f) * kFrame);
+        ImGui::SameLine(0, fs * 0.15f);
+        if (ui::IconButton("nextframe", theme::Icon::Next, ">", false, ui::Kind::Ghost)) JumpTo((nowF + 1.f) * kFrame);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Next frame (right arrow)");
-        ImGui::SameLine(0, fs * 0.2f);
-        if (ui::IconButton("toend", theme::Icon::ToEnd, ">|")) JumpTo(c.duration);
+        ImGui::SameLine(0, fs * 0.15f);
+        if (ui::IconButton("toend", theme::Icon::ToEnd, ">|", false, ui::Kind::Ghost)) JumpTo(c.duration);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("End of the clip (End)");
         // 2026-11-25 (user request): loop and speed of the editor playback, to study the motion
-        ImGui::SameLine(0, fs * 0.5f);
+        ImGui::SameLine(0, fs * 0.4f);
         const bool gameLoops = doc_.LoopsInTime();
         const bool loopOn = gameLoops || loopPreview_;
         if (gameLoops) ImGui::BeginDisabled();
@@ -191,7 +251,7 @@ void App::TimelineTransport() {
             ImGui::SetTooltip("%s", gameLoops ? "This clip also loops in game: playback always loops."
                                               : loopOn ? "Loop is ON (L): the clip replays endlessly, to study it.\nEditor only: in game, the clip plays as before."
                      : "Loop is OFF (L): the clip plays once.\nEditor only: in game, the clip plays as before.");
-        ImGui::SameLine(0, fs * 0.2f);
+        ImGui::SameLine(0, fs * 0.15f);
         static const float kSpeeds[3] = {1.f, 0.5f, 0.25f};
         static const char* kSpeedName[3] = {"x1", "x0.5", "x0.25"};
         int si = 0;
@@ -205,154 +265,132 @@ void App::TimelineTransport() {
     } else {
         float r = doc_.SimulatedRatio();
         ImGui::SetNextItemWidth(fs * 12.f);
-        if (ImGui::SliderFloat("simulated ManualRatio", &r, std::min(c.r0, c.r1), std::max(c.r0, c.r1), "%.2f")) {
+        if (ImGui::SliderFloat("##ratio", &r, std::min(c.r0, c.r1), std::max(c.r0, c.r1), "ManualRatio %.2f")) {
             if (!doc_.HasPending()) doc_.SetSimulatedRatio(r);
             else Status("set or discard the pending change first (K)");
         }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("This clip follows the game's ManualRatio (balance of the manual):\nslide to see the pose for a given ratio.");
     }
-    // redesign step 2 (2026-11-27): Auto key lives with the transport (record style: red dot when on)
+    // redesign step 2: Auto key lives with the transport (record style: red dot when on)
     ImGui::SameLine(0, fs * 0.6f);
     if (ui::RecordToggle("Auto key", autoKey_)) autoKey_ = !autoKey_;
     if (ImGui::IsItemHovered()) ImGui::SetTooltip(autoKey_ ? "Auto key is ON: every gesture sets a key at the time shown.\nClick to turn it off (then you set keys yourself with K)."
                                                            : "Auto key is OFF: you set the key yourself with K (or the \"+ key\" button).\nClick to turn it on.");
-    ImGui::SameLine(0, fs);
-    // time and frame readout (30 images per second, like the game's recordings)
-    ImGui::AlignTextToFramePadding();
-    ImGui::Text("%.2f s", t_);
-    ImGui::SameLine(0, fs * 0.4f);
-    ImGui::TextColored(kMuted, "frame %d / %d   length %.2f s", (int)std::lround(t_ / kFrame), (int)std::lround(c.duration / kFrame), c.duration);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The clip is set frame by frame: 30 frames per second.");
-    if (doc_.IsHold()) { ImGui::SameLine(); ImGui::TextDisabled("(held pose: a single pose, all the time)"); }
-    else if (doc_.EffectiveDrive() == Drive::Cycle) { ImGui::SameLine(); ImGui::TextDisabled("(one full stride, synced to the game's steps)"); }
-    ImGui::SameLine(0, fs);
-    if (ImGui::Button("+ key (K)")) CommitKeyNow();
-    ImGui::SameLine();
-    const bool pelSel = sel_ >= 0 && sel_ == doc_.PelvisBone();
-    if (!keySel_.empty()) {
-        if (ImGui::Button("- selected keys (Del)")) DeleteSelectedKeys();
-    } else if (ImGui::Button("- key")) { doc_.Checkpoint("delete key"); doc_.DeleteKeysAt(doc_.KeyTime(t_), (doc_.IsEditable(sel_) || pelSel) ? sel_ : -1); }
-    ImGui::SameLine();
-    if (doc_.CanPaste()) {   // 2026-11-26 copy / paste
-        if (ImGui::Button("Paste (Ctrl+V)")) PasteNow();
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", doc_.ClipboardHasKeys() ? "Pastes the copied keys, the first one at the playhead (same spacing and interpolation)."
-                                                                             : "Keys the copied pose at the playhead. The other keys keep their pose.");
-        ImGui::SameLine();
-    }
-    // interpolation: of the selected keys, else of the key of the selected bone under the playhead
+    // the time, large, then the frame (30 images per second, like the game's recordings)
+    ImGui::SameLine(0, fs * 0.9f);
     {
-        int cur = -1;
-        if (!keySel_.empty()) {
-            const KeySel& k0 = keySel_.front();
-            cur = doc_.KeyInterp(k0.t, k0.bones.empty() ? -1 : k0.bones.front());
-            for (auto& k : keySel_) if (doc_.KeyInterp(k.t, k.bones.empty() ? -1 : k.bones.front()) != cur) cur = -2;   // mixed
-        } else if (doc_.IsEditable(sel_) || pelSel) cur = doc_.KeyInterp(t_, sel_);
-        if (cur != -1) {
-            for (int m = 0; m < 3; m++) {
-                if (m) ImGui::SameLine();
-                if (ImGui::RadioButton(kInterpName[m], cur == m) && cur != m) {
-                    if (!keySel_.empty()) SetSelectedInterp(m);
-                    else { doc_.Checkpoint("interpolation"); doc_.SetKeyInterp(t_, sel_, m); }
-                }
-            }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("smooth: a soft curve through the keys\nlinear: constant speed from one key to the next\nconstant: the pose holds until the next key");
-            ImGui::SameLine();
+        const float big = ImGui::GetStyle().FontSizeBase * 1.35f;
+        const float y0 = ImGui::GetCursorPosY();
+        ImGui::PushFont(theme::Strong(), big);
+        const float hBig = ImGui::GetFontSize();
+        ImGui::SetCursorPosY(y0 + (ImGui::GetFrameHeight() - hBig) * 0.5f - 1.f);
+        ImGui::Text("%.2f", t_);
+        ImGui::PopFont();
+        ImGui::SameLine(0, fs * 0.3f);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextColored(theme::Text2, "s  ·  frame %d / %d", (int)std::lround(t_ / kFrame), (int)std::lround(c.duration / kFrame));
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("The playhead, in seconds and in frames (30 per second). The clip lasts %.2f s.", c.duration);
+    }
+    if (doc_.IsHold()) { ImGui::SameLine(); ImGui::AlignTextToFramePadding(); ImGui::TextDisabled("held pose"); if (ImGui::IsItemHovered()) ImGui::SetTooltip("A single pose, applied all the time."); }
+    else if (doc_.EffectiveDrive() == Drive::Cycle) { ImGui::SameLine(); ImGui::AlignTextToFramePadding(); ImGui::TextDisabled("one stride"); if (ImGui::IsItemHovered()) ImGui::SetTooltip("One full stride, synced to the game's steps."); }
+    ImGui::EndGroup();
+    tlCenterW_ = ImGui::GetItemRectSize().x;
+    const float centreEnd = ImGui::GetItemRectMax().x - ImGui::GetWindowPos().x;
+
+    // ---- right: end warnings, zoom, view options, help (aligned on the right edge)
+    ImGui::SameLine(std::max(centreEnd + fs * 1.5f, winR - tlRightW_));
+    ImGui::SetCursorPosY(lineY);
+    ImGui::BeginGroup();
+    {   // 2026-11-26 end warnings: one chip; click = the list, each line jumps to the part and the instant, with its fix
+        std::string missing;
+        const Clip* lt = nullptr;
+        bool all = false;
+        if (doc_.IsTrickClip()) all = HasLandingForAllVariants(doc_.clip(), missing);
+        else if (doc_.IsLandingClip() && !var_.trick.empty()) lt = TrickClipFor(var_);
+        const size_t nIssues = (doc_.IsTrickClip() || doc_.IsLandingClip()) ? doc_.EndIssues(lt, all).size() : 0;
+        if (nIssues) {
+            const std::string lab = (theme::HasIcons() ? theme::Glyph(theme::Icon::Warning) + " " : std::string("! ")) + std::to_string(nIssues) + "##endwarn";
+            ImGui::PushStyleColor(ImGuiCol_Button, theme::Alpha(theme::Warn, 0.14f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::Alpha(theme::Warn, 0.26f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::Alpha(theme::Warn, 0.34f));
+            ImGui::PushStyleColor(ImGuiCol_Text, theme::Warn);
+            if (ImGui::Button(lab.c_str())) ImGui::OpenPopup("##endwarnings");
+            ImGui::PopStyleColor(4);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%d part(s) of the body are not back at the end of this clip.\nClick: the list, with a fix for each.", (int)nIssues);
+            ImGui::SetNextWindowSizeConstraints(ImVec2(fs * 18.f, 0.f), ImVec2(fs * 34.f, fs * 30.f));
+            if (ImGui::BeginPopup("##endwarnings")) { EndWarnings(true); ImGui::EndPopup(); }
+            ImGui::SameLine(0, fs * 0.8f);
         }
     }
-    if (doc_.IsTrickClip()) {
-        ImGui::TextDisabled("%s", "legs: given back to the game 0.12 s after the catch");
-    }
-}
-
-// UI Phase 4: view controls (zoom, fit, row density, enlarge) and the selection line
-void App::TimelineViewBar() {
-    const Clip& c = doc_.clip();
-    const float fs = ImGui::GetFontSize();
-    static const char* kInterpName[3] = {"smooth", "linear", "constant"};
     const float dur = c.duration;
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(kMuted, "Zoom");
-    ImGui::SameLine();
     const float mid = tview_.Start(dur) + tview_.Span(dur) * 0.5f;
     const float anchor = tview_.Visible(t_, dur) ? t_ : mid;   // zoom around the playhead when it is visible
-    if (ImGui::Button("-##zoom")) tview_.ZoomAt(1.f / 1.5f, anchor, dur);
+    if (ui::IconButton("zoomout", theme::Icon::ZoomOut, "-", false, ui::Kind::Ghost)) tview_.ZoomAt(1.f / 1.5f, anchor, dur);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("See more time (Ctrl + wheel on the timeline)");
-    ImGui::SameLine(0, fs * 0.2f);
-    if (ImGui::Button("+##zoom")) tview_.ZoomAt(1.5f, anchor, dur);
+    ImGui::SameLine(0, fs * 0.15f);
+    if (ui::IconButton("zoomin", theme::Icon::ZoomIn, "+", false, ui::Kind::Ghost)) tview_.ZoomAt(1.5f, anchor, dur);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("See closer (Ctrl + wheel on the timeline)");
-    ImGui::SameLine(0, fs * 0.2f);
+    ImGui::SameLine(0, fs * 0.15f);
     const bool fitted = tview_.Fitted(dur);
     if (fitted) ImGui::BeginDisabled();
-    if (ImGui::Button("Fit")) tview_.Fit();
+    if (ui::Button("Fit", ui::Kind::Ghost)) tview_.Fit();
     if (fitted) ImGui::EndDisabled();
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("Shows the whole clip across the width.");
-    ImGui::SameLine(0, fs * 0.4f);
-    ImGui::TextColored(kMuted, fitted ? "whole clip" : "x%.1f  (%.2f to %.2f s)", tview_.Zoom(dur), tview_.Start(dur), tview_.Start(dur) + tview_.Span(dur));
-    ImGui::SameLine(0, fs);
-    if (ImGui::Checkbox("compact rows", &compactRows_)) SaveSetting(settings_, "timeline.compact", compactRows_ ? "1" : "0");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Lower rows: more body parts visible at once.");
-    ImGui::SameLine();
-    // 2026-11-25: was "all bones" next to the keys, unclear; a view option, saved
-    if (ImGui::Checkbox("empty rows too", &allRows_)) SaveSetting(settings_, "timeline.allbones", allRows_ ? "1" : "0");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Also shows the body parts that have no key yet.\nUnticked: only the ones your clip animates (easier to read).");
-    ImGui::SameLine();
-    {
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip(fitted ? "The whole clip is shown." : "Show the whole clip across the width (now x%.1f, %.2f to %.2f s).", tview_.Zoom(dur), tview_.Start(dur), tview_.Start(dur) + tview_.Span(dur));
+    ImGui::SameLine(0, fs * 0.15f);
+    if (ui::IconButton("tlview", theme::Icon::Down, "v", false, ui::Kind::Ghost)) ImGui::OpenPopup("##tlview");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rows and size of the timeline");
+    if (ImGui::BeginPopup("##tlview")) {
+        if (ui::Switch("##compact", &compactRows_, "Compact rows")) SaveSetting(settings_, "timeline.compact", compactRows_ ? "1" : "0");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Lower rows: more body parts visible at once.");
+        // 2026-11-25: was "all bones" next to the keys, unclear; a view option, saved
+        if (ui::Switch("##allrows", &allRows_, "Empty rows too")) SaveSetting(settings_, "timeline.allbones", allRows_ ? "1" : "0");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Also shows the body parts that have no key yet.\nOff: only the ones your clip animates (easier to read).");
+        ImGui::Separator();
         const Layout L = Lay();
-        if (ImGui::Button(bottomBeforeBig_ > 0.f ? "Shrink the timeline" : "Enlarge the timeline")) {
+        if (ImGui::MenuItem(bottomBeforeBig_ > 0.f ? "Shrink the timeline" : "Enlarge the timeline")) {
             if (bottomBeforeBig_ > 0.f) { bottomU_ = bottomBeforeBig_; bottomBeforeBig_ = 0.f; }
             else { bottomBeforeBig_ = L.bottom / fs; bottomU_ = L.h * 0.55f / fs; bottomDefault_ = false; }
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Gives the timeline more room, then puts it back as before.\nYou can also drag the edge between the 3D view and the timeline.");
+        ImGui::EndPopup();
     }
-    ImGui::SameLine(0, fs);
-    // selection line
-    {
-        if (keySel_.empty()) ImGui::TextDisabled("Click: pick a key · Shift+click: add · Shift+drag: box · right-click: menu · Ctrl+wheel: zoom · Shift+wheel or middle-click: scroll");
-        else if (keySel_.size() == 1) {
-            const KeySel& k = keySel_.front();
-            std::string who = k.bones.empty() ? std::string("all bones") : k.bones.size() == 1 ? BoneLabelUi(doc_.skeleton().names[k.bones.front()]) : (std::to_string(k.bones.size()) + " bones");
-            if (k.bones.size() == 1 && k.bones.front() == doc_.PelvisBone()) who = "Pelvis";
-            const int ip = doc_.KeyInterp(k.t, k.bones.empty() ? -1 : k.bones.front());
-            ImGui::TextColored(theme::AccentHi, "Selected key: %.2f s · %s · %s", k.t, who.c_str(), ip >= 0 ? kInterpName[ip] : "?");
-        } else {
-            float a = 1e9f, b = -1e9f;
-            for (auto& k : keySel_) { a = std::min(a, k.t); b = std::max(b, k.t); }
-            ImGui::TextColored(theme::AccentHi, "%d keys selected (%.2f to %.2f s) · Del to delete · Esc to deselect", (int)keySel_.size(), a, b);
-        }
-    }
-
+    ImGui::SameLine(0, fs * 0.15f);
+    ui::IconButton("tlhelp", theme::Icon::Help, "?", false, ui::Kind::Ghost);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Keys: click to pick · Shift+click to add · Shift+drag on an empty part: box · drag a key to move it\n"
+                          "right-click a key: delete, copy, paste, interpolation · Del: delete · Esc: deselect\n"
+                          "Ruler: click or drag to change the time · wheel on the ruler or Ctrl+wheel: zoom\n"
+                          "Shift+wheel or middle-click drag: scroll in time");
+    ImGui::EndGroup();
+    tlRightW_ = ImGui::GetItemRectSize().x;
 }
 
-void App::TimelinePanel() {
-    const Layout L = Lay();
-    Place(L.time.x, L.time.y, L.time.w, L.time.h);
-    BeginPanel("Timeline", kPanel | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    // selected keys that no longer exist (undo, another clip, deleted) leave the selection
-    keySel_.erase(std::remove_if(keySel_.begin(), keySel_.end(), [&](const KeySel& k) {
-        const std::vector<float> ts = k.bones.empty() ? doc_.KeyTimes(-1) : doc_.KeyTimesBones(k.bones);
-        for (float x : ts) if (std::fabs(x - k.t) < 1e-3f) return false;
-        return true;
-    }), keySel_.end());
-    Clip& c = doc_.clip();
+// the game's original animation, in blue (the ghost): play it alone, scrub it, copy a pose from it
+void App::TimelineGameRow() {
     const float fs = ImGui::GetFontSize();
-    static const char* kInterpName[3] = {"smooth", "linear", "constant"};
-
-    EndWarnings(false);   // 2026-11-26: parts not back at the end of a trick / landing clip
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Game    ");
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The game's original movement, to compare with (the blue ghost).");
-    ImGui::SameLine();
+    ImGui::TextColored(ImVec4(0.616f, 0.722f, 1.f, 1.f), "Game");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("The game's original movement, to compare with (the blue ghost in the 3D view).");
+    ImGui::SameLine(fs * 4.f);
     if (doc_.HasFigure()) {
-        if (ImGui::Button(originPlaying_ ? "||##o" : ">##o", ImVec2(fs * 2, 0))) originPlaying_ = !originPlaying_;
+        if (ui::IconButton("gameplay", originPlaying_ ? theme::Icon::Pause : theme::Icon::Play, originPlaying_ ? "||" : ">", false, ui::Kind::Ghost)) originPlaying_ = !originPlaying_;
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Plays the game's movement alone, looping.");
         ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, theme::Alpha(theme::Ghost, 0.10f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, theme::Alpha(theme::Ghost, 0.16f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, theme::Alpha(theme::Ghost, 0.22f));
+        ImGui::PushStyleColor(ImGuiCol_SliderGrab, theme::Ghost);
+        ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, ImVec4(0.616f, 0.722f, 1.f, 1.f));
         ImGui::SetNextItemWidth(fs * 26.f);
         ImGui::SliderFloat("##origine", &originT_, 0.f, doc_.FigureDuration(), "%.2f s");
+        ImGui::PopStyleColor(5);
         originFocus_ = originPlaying_ || ImGui::IsItemActive() || ImGui::IsItemHovered();
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Shows the game's pose at that moment.");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Shows the game's pose at that moment (the blue ghost).");
         ImGui::SameLine();
         // 2026-11-25: was "Take this pose (all / bone + children)", unclear to the user
         const bool part = doc_.IsEditable(sel_);
-        if (ImGui::Button(part ? "Copy the game's pose to this part" : "Copy the game's pose to the whole body")) {
+        if (ui::Button(part ? "Copy the game's pose to this part" : "Copy the game's pose to the whole body")) {
             doc_.Checkpoint("game pose");
             doc_.TakeOriginPose(originT_, part ? sel_ : -1);
             Status("game pose taken");
@@ -363,9 +401,24 @@ void App::TimelinePanel() {
         originFocus_ = false;
         ImGui::TextColored(theme::Bad, "game animation not recorded yet: do \"%s\" once in game", VariantTitleUi(var_).c_str());
     }
+}
 
-    TimelineTransport();   // UI Phase 4
-    TimelineViewBar();
+void App::TimelinePanel() {
+    const Layout L = Lay();
+    Place(L.time.x, L.time.y, L.time.w, L.time.h);
+    BeginPanel("Timeline", kPanel | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);   // redesign step 5: no title row
+    // selected keys that no longer exist (undo, another clip, deleted) leave the selection
+    keySel_.erase(std::remove_if(keySel_.begin(), keySel_.end(), [&](const KeySel& k) {
+        const std::vector<float> ts = k.bones.empty() ? doc_.KeyTimes(-1) : doc_.KeyTimesBones(k.bones);
+        for (float x : ts) if (std::fabs(x - k.t) < 1e-3f) return false;
+        return true;
+    }), keySel_.end());
+    Clip& c = doc_.clip();
+    const float fs = ImGui::GetFontSize();
+    static const char* kInterpName[3] = {"smooth", "linear", "constant"};
+
+    TimelineTransport();   // redesign step 5: one header line (the end warnings are its chip)
+    TimelineGameRow();
 
     // rows: "All", then one row per limb group, unfolded into one row per bone
     struct DRow { std::string label; std::vector<int> bones; int primary; int depth; std::string gid; bool fold; };
@@ -443,6 +496,60 @@ void App::TimelinePanel() {
         rd->PopClipRect();
         if (rulerHov) ImGui::SetTooltip(major < 0.099f ? "Click or drag: change the time · wheel: zoom\nThe numbers are frames (30 per second)." : "Click or drag: change the time · wheel: zoom");
     }
+    // redesign step 5 (2026-11-27): the story of the clip under the ruler. Trick: takeoff, flip, catch (hang time:
+    // it stretches with the jump in game), landing, ground; riding with a dismount: loop, dismount
+    if ((doc_.IsTrickClip() || doc_.HasDismount()) && dur > 0.f) {
+        const float ribH = std::round(fs * 1.15f);
+        const ImVec2 rp(trackX, ImGui::GetCursorScreenPos().y);
+        ImDrawList* rd = ImGui::GetWindowDrawList();
+        rd->AddText(ImVec2(rp.x - labelW + fs * 0.3f, rp.y + (ribH - fs) * 0.5f), U32(kMuted), doc_.IsTrickClip() ? "Trick" : "Parts");
+        ImGui::SetCursorScreenPos(rp);
+        ImGui::InvisibleButton("##ribbon", ImVec2(W, ribH));
+        const bool ribHov = ImGui::IsItemHovered();
+        struct Seg { float a, b; ImVec4 col; const char* label; const char* tip; };
+        std::vector<Seg> segs;
+        float flipAt = -1.f;   // the flip, as a tick inside the air part
+        if (doc_.IsTrickClip() && hang.ok) {
+            // user check 2026-11-27: built from the same markers as the yellow band of the rows (TrickMarkers): a recording
+            // without "catch" or "ground" events still shows its air part (hang time from the takeoff, see trick_sync.h)
+            const float air = std::clamp(hang.air, 0.f, dur), ca = std::clamp(hang.catchT, air, dur);
+            const float la = std::clamp(hang.land, ca, dur), gr = std::clamp(hang.ground, la, dur);
+            if (air > 1e-3f) segs.push_back(Seg{0.f, air, theme::Alpha(theme::Text3, 0.30f), "pop", "Before the takeoff: the pop."});
+            if (ca > air + 1e-3f) segs.push_back(Seg{air, ca, theme::Alpha(theme::Ghost, 0.32f), "flip", "From the takeoff to the catch: the board flips under the feet."});
+            if (la > ca + 1e-3f) segs.push_back(Seg{ca, la, theme::Alpha(theme::Warn, 0.24f), "in the air",
+                "In the air (the yellow band of the rows): in game this part stretches with the jump height\n(higher jump: longer), so your keys here follow the real jump.\nThe legs go back to the game 0.12 s after the catch."});
+            if (gr > la + 1e-3f) segs.push_back(Seg{la, gr, theme::Alpha(theme::Ghost, 0.22f), "landing", "Coming down to the ground."});
+            if (dur > gr + 1e-3f) segs.push_back(Seg{gr, dur, theme::Alpha(theme::Good, 0.22f), "ground", "On the ground: from here the landing clip of this trick takes over (if there is one)."});
+            const float fl = doc_.PhaseStart(2);
+            if (fl >= air && fl < la && !(ca > air + 1e-3f)) flipAt = fl;
+        }
+        if (doc_.HasDismount()) {
+            const float ll = LoopLength(c);
+            segs.push_back(Seg{0.f, ll, theme::Alpha(theme::Ghost, 0.18f), "loop", "The riding loop."});
+            segs.push_back(Seg{ll, dur, ImVec4(0.745f, 0.588f, 1.f, 0.24f), "dismount", "Played once when the feet leave the board."});
+        }
+        rd->PushClipRect(rp, ImVec2(rp.x + W, rp.y + ribH), true);
+        const char* tip = nullptr;
+        for (const Seg& sg : segs) {
+            const float xa = std::max(X(sg.a), rp.x), xb = std::min(X(sg.b), rp.x + W);
+            if (xb <= xa + 1.f) continue;
+            rd->AddRectFilled(ImVec2(xa + 1.f, rp.y + 2.f), ImVec2(xb - 1.f, rp.y + ribH - 2.f), theme::U32(sg.col), fs * 0.25f);
+            const ImVec4 tc(std::min(1.f, sg.col.x + 0.35f), std::min(1.f, sg.col.y + 0.35f), std::min(1.f, sg.col.z + 0.35f), 1.f);
+            const ImVec2 ts = ImGui::CalcTextSize(sg.label);
+            if (ts.x + 8.f < xb - xa) rd->AddText(ImVec2(xa + 5.f, rp.y + (ribH - ts.y) * 0.5f), theme::U32(tc), sg.label);
+            if (ribHov && io.MousePos.x >= xa && io.MousePos.x < xb) tip = sg.tip;
+        }
+        if (flipAt >= 0.f && InView(X(flipAt))) {   // the flip inside the air part (recordings without a catch event)
+            const float xf = X(flipAt);
+            rd->AddLine(ImVec2(xf, rp.y + 3.f), ImVec2(xf, rp.y + ribH - 3.f), IM_COL32(157, 184, 255, 220), 1.5f);
+            rd->AddText(ImVec2(xf + 4.f, rp.y + (ribH - fs) * 0.5f), IM_COL32(157, 184, 255, 255), "flip");
+            if (ribHov && std::fabs(io.MousePos.x - xf) < fs * 1.5f) tip = "The flip starts here (the board turns under the feet).";
+        }
+        const float xp = X(t_);
+        if (InView(xp)) rd->AddLine(ImVec2(xp, rp.y), ImVec2(xp, rp.y + ribH), theme::U32(theme::Accent), 2.f);
+        rd->PopClipRect();
+        if (tip) ImGui::SetTooltip("%s", tip);
+    }
     // zoom / pan with the mouse over the ruler and the rows
     const ImVec2 winMax(ImGui::GetWindowPos().x + ImGui::GetWindowSize().x, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
     const bool overTracks = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && io.MousePos.x >= trackX && io.MousePos.x <= trackX + W &&
@@ -463,6 +570,21 @@ void App::TimelinePanel() {
     for (size_t ri = 0; ri < rows.size(); ri++) {
         const DRow& r = rows[ri];
         ImGui::PushID((int)ri);
+        {   // redesign step 5: a colour bar per body part, the colours of the stage (head violet, chest yellow, arms and
+            // hands cyan, legs green, pelvis orange); the bone rows of an open group a lighter bar
+            const ImVec2 bp = ImGui::GetCursorScreenPos();
+            ImU32 bc = 0;
+            const std::string& g = r.gid;
+            if (g == "head") bc = IM_COL32(180, 140, 255, 255);
+            else if (g == "chest") bc = IM_COL32(240, 210, 74, 255);
+            else if (g == "armL" || g == "armR" || g == "handL" || g == "handR") bc = IM_COL32(54, 197, 240, 255);
+            else if (g == "legL" || g == "legR") bc = IM_COL32(95, 211, 138, 255);
+            else if (g == "pelvis") bc = IM_COL32(255, 148, 66, 255);
+            if (bc) {
+                if (r.depth) bc = (bc & 0x00FFFFFFu) | 0x70000000u;
+                ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(bp.x, bp.y + 1.f), ImVec2(bp.x + 3.f, bp.y + rowH - 1.f), bc, 1.5f);
+            }
+        }
         const bool inRow = !r.bones.empty() && std::find(r.bones.begin(), r.bones.end(), sel_) != r.bones.end();
         const bool exact = inRow && (r.depth == 1 || !r.fold);   // the bone's own row (or a group without children)
         const float indent = r.depth ? fs * 2.0f : 0.f;
@@ -576,17 +698,13 @@ void App::TimelinePanel() {
             if (pt < 0.f || pt > c.duration + 1e-3f) continue;
             const float x = X(std::min(pt, c.duration));
             if (!InView(x)) continue;
-            dl->AddLine(ImVec2(x, top), ImVec2(x, bottom), ph == 5 ? theme::U32(theme::Good, 0.8f) : theme::U32(theme::Ghost, 0.65f), ph == 5 ? 2.f : 1.f);
-            if (x >= lastEnd) {
-                dl->AddText(ImVec2(x + 3.f, top + 1.f), ph == 5 ? theme::U32(theme::Good) : IM_COL32(157, 184, 255, 255), kPhaseLabel[ph]);
-                lastEnd = x + 3.f + ImGui::CalcTextSize(kPhaseLabel[ph]).x + 4.f;
-            }
+            dl->AddLine(ImVec2(x, top), ImVec2(x, bottom), ph == 5 ? theme::U32(theme::Good, 0.55f) : theme::U32(theme::Ghost, 0.40f), 1.f);   // names: the ribbon (step 5)
+            (void)lastEnd; (void)kPhaseLabel;
         }
     }
     if (doc_.HasDismount() && bottom > top) {
         const float xd = X(LoopLength(c));
         if (InView(xd)) dl->AddLine(ImVec2(xd, top), ImVec2(xd, bottom), IM_COL32(190, 150, 255, 220), 2.f);
-        if (InView(xd)) dl->AddText(ImVec2(xd + 3.f, top + 1.f), IM_COL32(190, 150, 255, 255), "dismount");
     }
     if (bottom > top && InView(X(t_))) dl->AddLine(ImVec2(X(t_), top), ImVec2(X(t_), bottom), theme::U32(theme::Accent), 2.f);
     // box selection

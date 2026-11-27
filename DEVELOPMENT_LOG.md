@@ -98,6 +98,11 @@ Important steps, technical decisions, problems and their solutions. Current stat
   in a strip that the 3D canvas leaves free on its right (camera, picking and ImGuizmo use the narrower canvas), so
   the skater stays centred in the visible part without an off-centre projection. The clip settings (and, in Studio,
   the advanced ones) open in the same card from the timeline; the Inspector tabs and their tab-forcing code are gone.
+  After the user's check: "Clip settings" moved next to "Inspector" on the view; card buttons lighter, fields darker.
+- **Step 5: timeline header and ribbon (11-27)**: three control lines became one (keys left, transport and time centre,
+  warnings and view right, groups placed from their width at the last frame); the end warnings became a chip with a
+  popup; a phase ribbon under the ruler names the parts of the trick (the hang time is the part that stretches in
+  game); rows carry the limb colours of the stage. The row and key interactions were not touched.
 
 ## Problems met and solutions
 

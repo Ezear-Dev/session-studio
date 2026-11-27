@@ -118,7 +118,8 @@ private:
     bool clipPanel_ = false;              // the card shows the clip settings instead of the selection
     // ---------------------------------------------------------------- UI Phase 4 (2026-11-25): Timeline
     void TimelineTransport();             // jump / frame / play, time and frame readout, keys, interpolation
-    void TimelineViewBar();               // zoom - / + / fit, row density, enlarge, selection line
+    void TimelineGameRow();               // redesign step 5: the game's animation row (blue)
+    float tlCenterW_ = 0.f, tlRightW_ = 0.f;   // widths of the header groups at the last frame (centring, right edge)
     void JumpTo(float t);                 // sets the time (through the pending-change check)
     TimeView tview_;                      // visible part of the clip (model/time_view.h)
     std::string tviewKey_;                // file + variant: another clip shows whole
