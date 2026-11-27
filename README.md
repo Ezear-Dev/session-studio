@@ -5,7 +5,7 @@ away, without restarting. The game's files are not changed.
 
 This is an unofficial fan project, work in progress (version **v0.28**).
 
-## I want to use it
+## How to install
 
 1. Download `SessionStudio-v0.28.zip` from this repository's **Releases** page.
 2. Extract the whole zip, close the game, and double-click **INSTALLER.cmd**.
