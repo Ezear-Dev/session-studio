@@ -42,6 +42,7 @@ App::App(std::wstring exeDir) : exeDir_(std::move(exeDir)) {
     DefaultMode();
     doc_.SeedKeys();
     savedText_ = ClipToJson(doc_.clip());
+    BuildLandingPart();   // 2026-11-27: one timeline, two files
 }
 
 int App::SelfTest(std::string& report) {
@@ -290,6 +291,7 @@ void App::OpenFile(const std::string& name) {
     scanAge_ = 99.f;
     Status("opened: " + name + (doc_.HasLockedTracks() ? " (has locked bones: kept as they are)" : "") +
            (doc_.HasOldLandingPart() ? " (old built-in landing: redo it in “Landing of this trick”)" : ""));
+    BuildLandingPart();   // 2026-11-27: a trick shows its landing on the same timeline
 }
 
 std::string App::AutoName() const {
@@ -341,9 +343,20 @@ bool App::SaveAs(const std::string& raw, bool overwriteOk) {
 
 void App::SaveCurrent() {
     if (NeedDir()) return;
-    const std::string name = fileName_.empty() ? AutoName() : fileName_;
-    if (doc_.clip().name.empty() || doc_.clip().name == "nouveau_clip") doc_.clip().name = name.substr(0, name.size() - 6);
-    if (SaveAs(name, true) && afterSave_) { afterSave_ = false; Proceed(); }
+    // 2026-11-27 (one timeline, two files): the part under the playhead, then the other part if it needs it
+    auto saveOpen = [&]() {
+        if (hasComp_ && !PartNeedsSave(inLanding_, doc_, fileName_, savedText_) && inLanding_ && fileName_.empty()) return true;   // a locked new landing: nothing to write
+        const std::string name = fileName_.empty() ? AutoName() : fileName_;
+        if (doc_.clip().name.empty() || doc_.clip().name == "nouveau_clip") doc_.clip().name = name.substr(0, name.size() - 6);
+        return SaveAs(name, true);
+    };
+    bool ok = saveOpen();
+    if (ok && hasComp_ && PartNeedsSave(!inLanding_, comp_.doc, comp_.fileName, comp_.savedText)) {
+        SwapParts();
+        ok = saveOpen();
+        SwapParts();
+    }
+    if (ok && afterSave_) { afterSave_ = false; Proceed(); }
 }
 
 // P6: a new clip adds to the game's animation (Ajouter); without the recorded animation it can only replace
@@ -352,7 +365,10 @@ void App::DefaultMode() {
     doc_.SetMode(doc_.HasFigure() ? Mode::Additive : Mode::Replace);
 }
 
-bool App::Dirty() const { return ClipToJson(doc_.clip()) != savedText_; }
+bool App::Dirty() const {
+    if (!hasComp_) return ClipToJson(doc_.clip()) != savedText_;
+    return PartNeedsSave(inLanding_, doc_, fileName_, savedText_) || PartNeedsSave(!inLanding_, comp_.doc, comp_.fileName, comp_.savedText);
+}
 
 void App::Status(const std::string& s) {
     status_ = s;
@@ -368,6 +384,7 @@ void App::Status(const std::string& s) {
 
 bool App::CommitKeyNow(bool quiet) {
     if (!doc_.HasPending()) { if (!quiet) Status("nothing to key: rotate a bone first"); return false; }
+    if (LandingLockedHere()) { Status("the landing is locked (the game's): unlock it in Clip settings to pose it"); return false; }
     if (doc_.LockedAt(doc_.KeyTime(t_))) {   // 2026-11-26 (task 3): the locked start / end stays the game's pose
         Status("start and end are locked to the game's pose: pose between them, or discard the change");
         return false;
@@ -409,9 +426,18 @@ void App::Proceed() {
     const Ask a = ask_;
     ask_ = Ask::None;
     switch (a) {
-        case Ask::ChangeTime: t_ = askTime_; playing_ = false; break;
-        case Ask::Play: if (t_ >= doc_.clip().duration - 1e-4f) t_ = 0.f; playing_ = true; break;   // at the end: from the start
+        case Ask::ChangeTime:
+            if (askGlobal_ >= 0.f) { SetShared(askGlobal_); askGlobal_ = -1.f; }   // 2026-11-27: may move to the other part
+            else t_ = askTime_;
+            playing_ = false;
+            break;
+        case Ask::Play:   // at the end: from the start (of the trick, on one timeline)
+            if (hasComp_) { if (SharedT() >= Parts().Total() - 1e-4f) SetShared(0.f); }
+            else if (t_ >= doc_.clip().duration - 1e-4f) t_ = 0.f;
+            playing_ = true;
+            break;
         case Ask::ChangeFigure: {
+            LeaveLanding();   // 2026-11-27: from the trick part
             // another variant: open its first clip, or start a new clip for it
             var_ = askVar_;
             const ClipInfo* first = nullptr;
@@ -426,10 +452,12 @@ void App::Proceed() {
             savedText_ = ClipToJson(doc_.clip());
             sel_ = -1; t_ = 0.f; playing_ = false;
             scanAge_ = 99.f;
+            BuildLandingPart();
             break;
         }
-        case Ask::Open: OpenFile(askFile_); break;
+        case Ask::Open: LeaveLanding(); OpenFile(askFile_); break;
         case Ask::New:
+            LeaveLanding();
             doc_.NewClip(var_);
             SelectFigure(var_);
             DefaultMode();
@@ -438,8 +466,10 @@ void App::Proceed() {
             savedText_ = ClipToJson(doc_.clip());
             sel_ = -1; t_ = 0.f; playing_ = false;
             scanAge_ = 99.f;
+            BuildLandingPart();
             break;
         case Ask::CopyTo: {
+            LeaveLanding();
             doc_.Checkpoint("copy to");
             doc_.RetargetVariant(askVar_);
             const Clip keep = doc_.clip();
@@ -450,6 +480,7 @@ void App::Proceed() {
             doc_.clip().name = "nouveau_clip";
             scanAge_ = 99.f;
             Status("clip copied to \"" + VariantTitleUi(askVar_) + "\" (not saved yet: Ctrl+S)");
+            BuildLandingPart();
             break;
         }
         case Ask::Close: quit_ = true; break;
@@ -476,7 +507,14 @@ void App::Frame(float dt) {
 
     const Clip& c = doc_.clip();
     if (doc_.HasPending()) playing_ = false;   // time never moves under a pending change
-    if (playing_ && doc_.EffectiveDrive() != Drive::ManualRatio) {
+    if (playing_ && hasComp_) {   // 2026-11-27: the trick, then its landing; the loop goes back to the trick's start
+        int part = inLanding_ ? 1 : 0;
+        float local = t_;
+        const bool run = AdvanceTime(Parts(), part, local, dt * playSpeed_, loopPreview_);
+        if ((part == 1) != inLanding_) SwapParts();
+        t_ = local;
+        if (!run) playing_ = false;
+    } else if (playing_ && doc_.EffectiveDrive() != Drive::ManualRatio) {
         t_ += dt * playSpeed_;
         // 2026-11-25: "Loop" replays a one-shot clip in the editor only (the clip file is unchanged)
         if (t_ > c.duration) { if ((doc_.LoopsInTime() || loopPreview_) && c.duration > 0.f) t_ = std::fmod(t_, c.duration); else { t_ = c.duration; playing_ = false; } }

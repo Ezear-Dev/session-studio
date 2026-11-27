@@ -49,6 +49,7 @@ void App::CopyNow() {
 }
 
 void App::PasteNow() {
+    if (LandingLockedHere()) { Status("the landing is locked (the game's): unlock it in Clip settings to pose it"); return; }   // 2026-11-27
     if (!doc_.CanPaste()) { Status("nothing to paste: copy a pose or keys first (Ctrl+C)"); return; }
     if (!doc_.ClipboardHasKeys() && doc_.LockedAt(doc_.KeyTime(t_))) {   // 2026-11-26 (task 3)
         Status("start and end are locked to the game's pose: paste the pose between them");
@@ -85,7 +86,7 @@ void App::EndWarnings(bool withFix) {
     bool all = false;
     const Clip* lt = nullptr;
     if (doc_.IsTrickClip()) all = HasLandingForAllVariants(doc_.clip(), missing);
-    else if (!var_.trick.empty()) lt = TrickClipFor(var_);
+    else if (!var_.trick.empty()) lt = TrickForLanding();   // 2026-11-27: the trick in memory on one timeline
     const std::vector<EditorDoc::EndIssue> issues = doc_.EndIssues(lt, all);
     const ImVec4 yellow(1.f, 0.85f, 0.3f, 1.f);
     int idx = 0;
@@ -148,9 +149,8 @@ void App::EndWarnings(bool withFix) {
 
 // UI Phase 4: go to a time (through the pending-change check)
 void App::JumpTo(float t) {
-    if (doc_.EffectiveDrive() == Drive::ManualRatio) return;
-    askTime_ = std::clamp(t, 0.f, doc_.clip().duration);
-    Request(Ask::ChangeTime);
+    // 2026-11-27: t is a time of the open part; on one timeline it becomes a shared time
+    JumpShared(hasComp_ ? JoinTime(Parts(), inLanding_ ? 1 : 0, std::clamp(t, 0.f, doc_.clip().duration)) : t);
 }
 
 // redesign step 5 (2026-11-27): one header line. Left: keys and interpolation. Centre: transport, Auto key, the time.
@@ -164,6 +164,7 @@ void App::TimelineTransport() {
     const float winR = ImGui::GetWindowContentRegionMax().x;
 
     // ---- left: keys
+    if (LandingLockedHere()) ImGui::BeginDisabled();   // 2026-11-27: a locked landing (the game's) takes no key
     if (ui::Button("+ key")) CommitKeyNow();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Set a key at the playhead (K).");
     ImGui::SameLine(0, st.ItemSpacing.x * 0.5f);
@@ -214,6 +215,7 @@ void App::TimelineTransport() {
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%d keys selected, from %.2f to %.2f s\nDel: delete · Esc: deselect", (int)keySel_.size(), a, b);
         }
     }
+    if (LandingLockedHere()) ImGui::EndDisabled();
     const float leftEnd = ImGui::GetItemRectMax().x - ImGui::GetWindowPos().x;
 
     // ---- centre: transport, Auto key, time (centred in the panel when there is room)
@@ -221,11 +223,12 @@ void App::TimelineTransport() {
     ImGui::SetCursorPosY(lineY);
     ImGui::BeginGroup();
     if (doc_.EffectiveDrive() != Drive::ManualRatio) {
-        const float nowF = std::round(t_ / kFrame);
-        if (ui::IconButton("tostart", theme::Icon::ToStart, "|<", false, ui::Kind::Ghost)) JumpTo(0.f);
+        const float nowF = std::round(SharedT() / kFrame);   // 2026-11-27: frames of the shared timeline
+        const float totalT = hasComp_ ? Parts().Total() : c.duration;
+        if (ui::IconButton("tostart", theme::Icon::ToStart, "|<", false, ui::Kind::Ghost)) JumpShared(0.f);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Start of the clip (Home)");
         ImGui::SameLine(0, fs * 0.15f);
-        if (ui::IconButton("prevframe", theme::Icon::Prev, "<", false, ui::Kind::Ghost)) JumpTo((nowF - 1.f) * kFrame);
+        if (ui::IconButton("prevframe", theme::Icon::Prev, "<", false, ui::Kind::Ghost)) JumpShared((nowF - 1.f) * kFrame);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Previous frame (left arrow)");
         ImGui::SameLine(0, fs * 0.15f);
         {   // play / pause: the main action of the transport, always orange
@@ -235,10 +238,10 @@ void App::TimelineTransport() {
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip(playing_ ? "Pause (Space)" : "Plays the clip (Space)");
         ImGui::SameLine(0, fs * 0.15f);
-        if (ui::IconButton("nextframe", theme::Icon::Next, ">", false, ui::Kind::Ghost)) JumpTo((nowF + 1.f) * kFrame);
+        if (ui::IconButton("nextframe", theme::Icon::Next, ">", false, ui::Kind::Ghost)) JumpShared((nowF + 1.f) * kFrame);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Next frame (right arrow)");
         ImGui::SameLine(0, fs * 0.15f);
-        if (ui::IconButton("toend", theme::Icon::ToEnd, ">|", false, ui::Kind::Ghost)) JumpTo(c.duration);
+        if (ui::IconButton("toend", theme::Icon::ToEnd, ">|", false, ui::Kind::Ghost)) JumpShared(totalT);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("End of the clip (End)");
         // 2026-11-25 (user request): loop and speed of the editor playback, to study the motion
         ImGui::SameLine(0, fs * 0.4f);
@@ -284,12 +287,20 @@ void App::TimelineTransport() {
         ImGui::PushFont(theme::Strong(), big);
         const float hBig = ImGui::GetFontSize();
         ImGui::SetCursorPosY(y0 + (ImGui::GetFrameHeight() - hBig) * 0.5f - 1.f);
-        ImGui::Text("%.2f", t_);
+        const float st = SharedT(), tot = hasComp_ ? Parts().Total() : c.duration;
+        ImGui::Text("%.2f", st);
         ImGui::PopFont();
         ImGui::SameLine(0, fs * 0.3f);
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(theme::Text2, "s  ·  frame %d / %d", (int)std::lround(t_ / kFrame), (int)std::lround(c.duration / kFrame));
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("The playhead, in seconds and in frames (30 per second). The clip lasts %.2f s.", c.duration);
+        ImGui::TextColored(theme::Text2, "s  ·  frame %d / %d", (int)std::lround(st / kFrame), (int)std::lround(tot / kFrame));
+        if (ImGui::IsItemHovered()) {
+            if (hasComp_) ImGui::SetTooltip("The playhead, in seconds and in frames (30 per second).\nThe trick lasts %.2f s, then its landing %.2f s (%s).", Parts().first, Parts().second, landLocked_ ? "locked: the game's" : "yours");
+            else ImGui::SetTooltip("The playhead, in seconds and in frames (30 per second). The clip lasts %.2f s.", c.duration);
+        }
+        if (hasComp_) {   // which part is open: the trick or its landing
+            ImGui::SameLine(0, fs * 0.5f);
+            ui::Chip(inLanding_ ? (landLocked_ ? "landing (locked)" : "landing") : "trick", inLanding_ ? ImVec4(0.745f, 0.588f, 1.f, 1.f) : theme::Text2);
+        }
     }
     if (doc_.IsHold()) { ImGui::SameLine(); ImGui::AlignTextToFramePadding(); ImGui::TextDisabled("held pose"); if (ImGui::IsItemHovered()) ImGui::SetTooltip("A single pose, applied all the time."); }
     else if (doc_.EffectiveDrive() == Drive::Cycle) { ImGui::SameLine(); ImGui::AlignTextToFramePadding(); ImGui::TextDisabled("one stride"); if (ImGui::IsItemHovered()) ImGui::SetTooltip("One full stride, synced to the game's steps."); }
@@ -306,7 +317,7 @@ void App::TimelineTransport() {
         const Clip* lt = nullptr;
         bool all = false;
         if (doc_.IsTrickClip()) all = HasLandingForAllVariants(doc_.clip(), missing);
-        else if (doc_.IsLandingClip() && !var_.trick.empty()) lt = TrickClipFor(var_);
+        else if (doc_.IsLandingClip() && !var_.trick.empty()) lt = TrickForLanding();
         const size_t nIssues = (doc_.IsTrickClip() || doc_.IsLandingClip()) ? doc_.EndIssues(lt, all).size() : 0;
         if (nIssues) {
             const std::string lab = (theme::HasIcons() ? theme::Glyph(theme::Icon::Warning) + " " : std::string("! ")) + std::to_string(nIssues) + "##endwarn";
@@ -390,7 +401,10 @@ void App::TimelineGameRow() {
         ImGui::SameLine();
         // 2026-11-25: was "Take this pose (all / bone + children)", unclear to the user
         const bool part = doc_.IsEditable(sel_);
-        if (ui::Button(part ? "Copy the game's pose to this part" : "Copy the game's pose to the whole body")) {
+        if (LandingLockedHere()) ImGui::BeginDisabled();   // 2026-11-27: nothing is posed on a locked landing
+        const bool copyPose = ui::Button(part ? "Copy the game's pose to this part" : "Copy the game's pose to the whole body");
+        if (LandingLockedHere()) ImGui::EndDisabled();
+        if (copyPose) {
             doc_.Checkpoint("game pose");
             doc_.TakeOriginPose(originT_, part ? sel_ : -1);
             Status("game pose taken");
@@ -439,17 +453,29 @@ void App::TimelinePanel() {
     ImGuiIO& io = ImGui::GetIO();
     // UI Phase 4: the same width for the ruler and the rows (room kept for the rows' scrollbar)
     const float W = std::max(50.f, ImGui::GetContentRegionAvail().x - labelW - ImGui::GetStyle().ScrollbarSize);
-    const float dur = c.duration;
-    const TrickMarkers hang = doc_.IsTrickClip() ? doc_.Markers() : TrickMarkers{};   // 2026-11-25 landing sync
-    {   // another clip or variant: show it whole; the view always stays inside the clip
-        const std::string key = fileName_ + "|" + FigureKey(var_);
+    const float dur = c.duration;   // the open part (its own times)
+    // 2026-11-27 (one timeline, two files): the view covers the trick and its landing. X / T work in the open part's
+    // time, XS / TS in the shared time (the trick's times are shared times: it starts at 0)
+    const TwoPartTime tp = Parts();
+    const float off = hasComp_ ? JoinTime(tp, inLanding_ ? 1 : 0, 0.f) : 0.f;   // where the open part starts
+    const float total = hasComp_ ? tp.Total() : dur;
+    const float trickDur = hasComp_ ? tp.first : dur;
+    const EditorDoc& td = TrickDoc();
+    const bool roOpen = LandingLockedHere();   // a locked landing: its keys are not shown, nothing is edited there
+    const TrickMarkers hang = td.IsTrickClip() ? td.Markers() : TrickMarkers{};   // 2026-11-25 landing sync
+    {   // another clip or variant: show it whole; the view always stays inside the timeline
+        const std::string key = (inLanding_ ? comp_.fileName + "|" + FigureKey(comp_.var) : fileName_ + "|" + FigureKey(var_)) + (hasComp_ ? "|two" : "");
         if (key != tviewKey_) { tviewKey_ = key; tview_.Fit(); }
-        tview_.Clamp(dur);
-        if (std::fabs(t_ - tviewLastT_) > 1e-5f) { tview_.Follow(t_, dur, playing_ ? 0.f : 0.1f); tviewLastT_ = t_; }
+        tview_.Clamp(total);
+        const float ts = t_ + off;
+        if (std::fabs(ts - tviewLastT_) > 1e-5f) { tview_.Follow(ts, total, playing_ ? 0.f : 0.1f); tviewLastT_ = ts; }
     }
     float trackX = ImGui::GetCursorScreenPos().x + labelW, top = 0.f, bottom = 0.f;
-    auto X = [&](float t) { return tview_.ToX(t, trackX + 8.f, W - 16.f, dur); };
-    auto T = [&](float x) { return std::clamp(tview_.ToT(x, trackX + 8.f, W - 16.f, dur), 0.f, dur); };
+    auto XS = [&](float g) { return tview_.ToX(g, trackX + 8.f, W - 16.f, total); };
+    auto X = [&](float t) { return XS(t + off); };
+    auto TS = [&](float x) { return std::clamp(tview_.ToT(x, trackX + 8.f, W - 16.f, total), 0.f, total); };
+    auto T = [&](float x) { return std::clamp(TS(x) - off, 0.f, dur); };
+    const float xDiv = hasComp_ ? tp.first + tp.gap * 0.5f : -1.f;   // the ground contact: the trick ends, the landing begins
     auto InView = [&](float x) { return x >= trackX + 2.f && x <= trackX + W - 2.f; };
     const float rulerH = fs * 1.4f;
     const ImVec2 rulerP(trackX, ImGui::GetCursorScreenPos().y);
@@ -460,21 +486,21 @@ void App::TimelinePanel() {
         ImGui::InvisibleButton("##regle", ImVec2(W, rulerH), ImGuiButtonFlags_MouseButtonLeft);
         const bool rulerHov = ImGui::IsItemHovered();
         if (doc_.EffectiveDrive() != Drive::ManualRatio) {
-            const float tn = std::min(std::round(T(io.MousePos.x) / kFrame) * kFrame, dur);
-            if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) JumpTo(tn);
-            else if (ImGui::IsItemActive() && !doc_.HasPending() && std::fabs(tn - t_) > 1e-4f) JumpTo(tn);
+            const float tn = std::min(std::round(TS(io.MousePos.x) / kFrame) * kFrame, total);
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) JumpShared(tn);
+            else if (ImGui::IsItemActive() && !doc_.HasPending() && std::fabs(tn - (t_ + off)) > 1e-4f) JumpShared(tn);
         }
         rd->AddRectFilled(rulerP, ImVec2(rulerP.x + W, rulerP.y + rulerH), theme::U32(theme::Bg0));
         rd->PushClipRect(rulerP, ImVec2(rulerP.x + W, rulerP.y + rulerH), true);
-        const float pps = (W - 16.f) / tview_.Span(dur);
+        const float pps = (W - 16.f) / tview_.Span(total);
         const float minor = RulerStep(pps, fs * 0.45f), major = RulerStep(pps, fs * 4.5f);
-        const float a0 = tview_.Start(dur), a1 = a0 + tview_.Span(dur);
+        const float a0 = tview_.Start(total), a1 = a0 + tview_.Span(total);
         for (int i = (int)std::floor(a0 / minor); i * minor <= a1 + 1e-4f; i++) {
             const float t = i * minor;
-            if (t < -1e-4f || t > dur + 1e-4f) continue;
+            if (t < -1e-4f || t > total + 1e-4f) continue;
             const float q = t / major;
             const bool isMajor = std::fabs(q - std::round(q)) < 1e-3f;
-            const float x = X(t);
+            const float x = XS(t);
             rd->AddLine(ImVec2(x, rulerP.y + (isMajor ? rulerH * 0.45f : rulerH * 0.75f)), ImVec2(x, rulerP.y + rulerH), theme::U32(theme::Text3));
             if (isMajor) {
                 char lb[32];
@@ -483,9 +509,13 @@ void App::TimelinePanel() {
                 rd->AddText(ImVec2(x + 3.f, rulerP.y + 1.f), theme::U32(theme::Text2), lb);
             }
         }
-        if (dur > 0.f) {   // end of the clip
-            const float xe = X(dur);
+        if (total > 0.f) {   // end of the clip (of the landing, on one timeline)
+            const float xe = XS(total);
             rd->AddLine(ImVec2(xe, rulerP.y), ImVec2(xe, rulerP.y + rulerH), IM_COL32(200, 200, 210, 160), 1.f);
+        }
+        if (xDiv > 0.f) {   // the ground contact
+            const float xd = XS(xDiv);
+            rd->AddLine(ImVec2(xd, rulerP.y), ImVec2(xd, rulerP.y + rulerH), IM_COL32(190, 150, 255, 230), 2.f);
         }
         const float xp = X(t_);   // playhead handle
         if (InView(xp)) {
@@ -498,29 +528,29 @@ void App::TimelinePanel() {
     }
     // redesign step 5 (2026-11-27): the story of the clip under the ruler. Trick: takeoff, flip, catch (hang time:
     // it stretches with the jump in game), landing, ground; riding with a dismount: loop, dismount
-    if ((doc_.IsTrickClip() || doc_.HasDismount()) && dur > 0.f) {
+    if ((td.IsTrickClip() || doc_.HasDismount()) && dur > 0.f) {
         const float ribH = std::round(fs * 1.15f);
         const ImVec2 rp(trackX, ImGui::GetCursorScreenPos().y);
         ImDrawList* rd = ImGui::GetWindowDrawList();
-        rd->AddText(ImVec2(rp.x - labelW + fs * 0.3f, rp.y + (ribH - fs) * 0.5f), U32(kMuted), doc_.IsTrickClip() ? "Trick" : "Parts");
+        rd->AddText(ImVec2(rp.x - labelW + fs * 0.3f, rp.y + (ribH - fs) * 0.5f), U32(kMuted), td.IsTrickClip() ? "Trick" : "Parts");
         ImGui::SetCursorScreenPos(rp);
         ImGui::InvisibleButton("##ribbon", ImVec2(W, ribH));
         const bool ribHov = ImGui::IsItemHovered();
         struct Seg { float a, b; ImVec4 col; const char* label; const char* tip; };
         std::vector<Seg> segs;
         float flipAt = -1.f;   // the flip, as a tick inside the air part
-        if (doc_.IsTrickClip() && hang.ok) {
+        if (td.IsTrickClip() && hang.ok) {
             // user check 2026-11-27: built from the same markers as the yellow band of the rows (TrickMarkers): a recording
             // without "catch" or "ground" events still shows its air part (hang time from the takeoff, see trick_sync.h)
-            const float air = std::clamp(hang.air, 0.f, dur), ca = std::clamp(hang.catchT, air, dur);
-            const float la = std::clamp(hang.land, ca, dur), gr = std::clamp(hang.ground, la, dur);
+            const float air = std::clamp(hang.air, 0.f, trickDur), ca = std::clamp(hang.catchT, air, trickDur);
+            const float la = std::clamp(hang.land, ca, trickDur), gr = std::clamp(hang.ground, la, trickDur);
             if (air > 1e-3f) segs.push_back(Seg{0.f, air, theme::Alpha(theme::Text3, 0.30f), "pop", "Before the takeoff: the pop."});
             if (ca > air + 1e-3f) segs.push_back(Seg{air, ca, theme::Alpha(theme::Ghost, 0.32f), "flip", "From the takeoff to the catch: the board flips under the feet."});
             if (la > ca + 1e-3f) segs.push_back(Seg{ca, la, theme::Alpha(theme::Warn, 0.24f), "in the air",
                 "In the air (the yellow band of the rows): in game this part stretches with the jump height\n(higher jump: longer), so your keys here follow the real jump.\nThe legs go back to the game 0.12 s after the catch."});
             if (gr > la + 1e-3f) segs.push_back(Seg{la, gr, theme::Alpha(theme::Ghost, 0.22f), "landing", "Coming down to the ground."});
-            if (dur > gr + 1e-3f) segs.push_back(Seg{gr, dur, theme::Alpha(theme::Good, 0.22f), "ground", "On the ground: from here the landing clip of this trick takes over (if there is one)."});
-            const float fl = doc_.PhaseStart(2);
+            if (trickDur > gr + 1e-3f) segs.push_back(Seg{gr, trickDur, theme::Alpha(theme::Good, 0.22f), "ground", "On the ground: from here the landing clip of this trick takes over (if there is one)."});
+            const float fl = td.PhaseStart(2);
             if (fl >= air && fl < la && !(ca > air + 1e-3f)) flipAt = fl;
         }
         if (doc_.HasDismount()) {
@@ -528,10 +558,15 @@ void App::TimelinePanel() {
             segs.push_back(Seg{0.f, ll, theme::Alpha(theme::Ghost, 0.18f), "loop", "The riding loop."});
             segs.push_back(Seg{ll, dur, ImVec4(0.745f, 0.588f, 1.f, 0.24f), "dismount", "Played once when the feet leave the board."});
         }
+        if (hasComp_)   // 2026-11-27: the landing of this trick, after the ground contact
+            segs.push_back(Seg{tp.SecondStart(), total, landLocked_ ? ImVec4(0.45f, 0.47f, 0.52f, 0.30f) : ImVec4(0.745f, 0.588f, 1.f, 0.30f),
+                               landLocked_ ? "landing · locked (the game's)" : "landing · yours",
+                               landLocked_ ? "The landing of this trick, after the ground contact. LOCKED: the game plays its own landing,\nnothing can be posed here. Unlock it in Clip settings to make it yours."
+                                           : "The landing of this trick, after the ground contact: your landing clip.\nIn game it starts at the real ground contact. Save writes it with the trick."});
         rd->PushClipRect(rp, ImVec2(rp.x + W, rp.y + ribH), true);
         const char* tip = nullptr;
         for (const Seg& sg : segs) {
-            const float xa = std::max(X(sg.a), rp.x), xb = std::min(X(sg.b), rp.x + W);
+            const float xa = std::max(XS(sg.a), rp.x), xb = std::min(XS(sg.b), rp.x + W);
             if (xb <= xa + 1.f) continue;
             rd->AddRectFilled(ImVec2(xa + 1.f, rp.y + 2.f), ImVec2(xb - 1.f, rp.y + ribH - 2.f), theme::U32(sg.col), fs * 0.25f);
             const ImVec4 tc(std::min(1.f, sg.col.x + 0.35f), std::min(1.f, sg.col.y + 0.35f), std::min(1.f, sg.col.z + 0.35f), 1.f);
@@ -539,8 +574,8 @@ void App::TimelinePanel() {
             if (ts.x + 8.f < xb - xa) rd->AddText(ImVec2(xa + 5.f, rp.y + (ribH - ts.y) * 0.5f), theme::U32(tc), sg.label);
             if (ribHov && io.MousePos.x >= xa && io.MousePos.x < xb) tip = sg.tip;
         }
-        if (flipAt >= 0.f && InView(X(flipAt))) {   // the flip inside the air part (recordings without a catch event)
-            const float xf = X(flipAt);
+        if (flipAt >= 0.f && InView(XS(flipAt))) {   // the flip inside the air part (recordings without a catch event)
+            const float xf = XS(flipAt);
             rd->AddLine(ImVec2(xf, rp.y + 3.f), ImVec2(xf, rp.y + ribH - 3.f), IM_COL32(157, 184, 255, 220), 1.5f);
             rd->AddText(ImVec2(xf + 4.f, rp.y + (ribH - fs) * 0.5f), IM_COL32(157, 184, 255, 255), "flip");
             if (ribHov && std::fabs(io.MousePos.x - xf) < fs * 1.5f) tip = "The flip starts here (the board turns under the feet).";
@@ -557,9 +592,9 @@ void App::TimelinePanel() {
     const bool overRuler = overTracks && io.MousePos.y <= rulerP.y + rulerH;
     const float wheelPan = io.MouseWheelH != 0.f ? io.MouseWheelH : (io.KeyShift ? io.MouseWheel : 0.f);
     if (overTracks && io.MouseWheel != 0.f && (io.KeyCtrl || (overRuler && !io.KeyShift)))
-        tview_.ZoomAt(std::pow(1.25f, io.MouseWheel), T(io.MousePos.x), dur);
-    else if (overTracks && wheelPan != 0.f) tview_.Pan(-wheelPan * tview_.Span(dur) * 0.15f, dur);
-    if (overTracks && ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.f)) tview_.Pan(-io.MouseDelta.x / std::max(1.f, W - 16.f) * tview_.Span(dur), dur);
+        tview_.ZoomAt(std::pow(1.25f, io.MouseWheel), TS(io.MousePos.x), total);
+    else if (overTracks && wheelPan != 0.f) tview_.Pan(-wheelPan * tview_.Span(total) * 0.15f, total);
+    if (overTracks && ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.f)) tview_.Pan(-io.MouseDelta.x / std::max(1.f, W - 16.f) * tview_.Span(total), total);
     const bool wheelOwned = overTracks && (io.KeyCtrl || io.KeyShift || overRuler);
     ImGui::BeginChild("##feuille", ImVec2(0, 0), ImGuiChildFlags_None, wheelOwned ? ImGuiWindowFlags_NoScrollWithMouse : ImGuiWindowFlags_None);
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -614,7 +649,7 @@ void App::TimelinePanel() {
                        : r.depth ? theme::U32(theme::Bg1) : (ri % 2 ? IM_COL32(25, 28, 35, 255) : IM_COL32(21, 24, 30, 255));   // orange tints = the selected part
         dl->AddRectFilled(q0, ImVec2(q0.x + W, q0.y + rowH), bg);
         if (hang.ok && hang.land > hang.catchT + 1e-3f) {   // 2026-11-25: the hang time, stretched in game with the jump height
-            const float xa = std::clamp(X(hang.catchT), q0.x, q0.x + W), xb = std::clamp(X(hang.land), q0.x, q0.x + W);
+            const float xa = std::clamp(XS(hang.catchT), q0.x, q0.x + W), xb = std::clamp(XS(hang.land), q0.x, q0.x + W);
             if (xb > xa) dl->AddRectFilled(ImVec2(xa, q0.y), ImVec2(xb, q0.y + rowH), IM_COL32(200, 170, 60, 38));
         }
         if (doc_.HasDismount()) {   // 2026-11-25: the dismount part of a riding clip, tinted
@@ -622,13 +657,33 @@ void App::TimelinePanel() {
             dl->AddRectFilled(ImVec2(xd, q0.y), ImVec2(q0.x + W, q0.y + rowH), IM_COL32(120, 90, 160, 50));
         }
         {   // grid: the ruler's labelled steps
-            const float major = RulerStep((W - 16.f) / tview_.Span(dur), fs * 4.5f);
-            const float a0 = tview_.Start(dur), a1 = a0 + tview_.Span(dur);
-            for (int i = (int)std::ceil(a0 / major - 1e-4f); i * major <= std::min(a1, dur) + 1e-4f; i++)
-                dl->AddLine(ImVec2(X(i * major), q0.y), ImVec2(X(i * major), q0.y + rowH), theme::U32(theme::Line, 0.7f));
+            const float major = RulerStep((W - 16.f) / tview_.Span(total), fs * 4.5f);
+            const float a0 = tview_.Start(total), a1 = a0 + tview_.Span(total);
+            for (int i = (int)std::ceil(a0 / major - 1e-4f); i * major <= std::min(a1, total) + 1e-4f; i++)
+                dl->AddLine(ImVec2(XS(i * major), q0.y), ImVec2(XS(i * major), q0.y + rowH), theme::U32(theme::Line, 0.7f));
         }
-        if (dur > 0.f && X(dur) < q0.x + W) dl->AddRectFilled(ImVec2(X(dur) + 8.f, q0.y), ImVec2(q0.x + W, q0.y + rowH), theme::U32(theme::Bg0));
-        const std::vector<float> keys = r.bones.empty() ? doc_.KeyTimes(-1) : doc_.KeyTimesBones(r.bones);
+        if (total > 0.f && XS(total) < q0.x + W) dl->AddRectFilled(ImVec2(XS(total) + 8.f, q0.y), ImVec2(q0.x + W, q0.y + rowH), theme::U32(theme::Bg0));
+        if (hasComp_) {   // 2026-11-27: the landing part; locked = the game's (greyed), else yours (a violet tint)
+            const float xa = std::clamp(XS(tp.SecondStart()), q0.x, q0.x + W), xb = std::clamp(XS(total), q0.x, q0.x + W);
+            if (xb > xa) dl->AddRectFilled(ImVec2(xa, q0.y), ImVec2(xb, q0.y + rowH), landLocked_ ? IM_COL32(11, 13, 17, 150) : IM_COL32(120, 90, 160, 34));
+            const float xd = XS(xDiv);
+            if (xd >= q0.x && xd <= q0.x + W) dl->AddLine(ImVec2(xd, q0.y), ImVec2(xd, q0.y + rowH), IM_COL32(190, 150, 255, 170), 1.5f);
+            if (ri == 0 && landLocked_ && xb - xa > fs * 6.f) dl->AddText(ImVec2(xa + fs * 0.5f, q0.y + (rowH - fs) * 0.5f), theme::U32(theme::Text3), "locked: the game's landing");
+            // the other part's keys, read-only (click: go there); a locked landing has none to show
+            const bool otherIsLockedLanding = !inLanding_ && landLocked_;
+            if (!otherIsLockedLanding) {
+                const float ooff = JoinTime(tp, inLanding_ ? 0 : 1, 0.f);
+                const std::vector<float> ok2 = r.bones.empty() ? comp_.doc.KeyTimes(-1) : comp_.doc.KeyTimesBones(r.bones);
+                const float my2 = q0.y + rowH * 0.5f, rr2 = std::min(fs * 0.30f, rowH * 0.28f);
+                for (float k : ok2) {
+                    const float x = XS(k + ooff);
+                    if (!InView(x)) continue;
+                    const ImVec2 pts2[4] = {ImVec2(x, my2 - rr2), ImVec2(x + rr2, my2), ImVec2(x, my2 + rr2), ImVec2(x - rr2, my2)};
+                    dl->AddConvexPolyFilled(pts2, 4, ri == 0 ? IM_COL32(142, 149, 161, 110) : IM_COL32(232, 193, 80, 110));
+                }
+            }
+        }
+        const std::vector<float> keys = roOpen ? std::vector<float>() : r.bones.empty() ? doc_.KeyTimes(-1) : doc_.KeyTimesBones(r.bones);
         const bool draggingThis = dragKey_ && dragBones_ == r.bones;
         // 2026-11-26 (task 3): a locked start / end key is a padlock: not selectable, not movable, not deletable
         auto drawLock = [&](float x, float my2, float rr) {
@@ -656,12 +711,12 @@ void App::TimelinePanel() {
             if (picked) dl->AddPolyline(pts, 4, IM_COL32(255, 255, 255, 255), ImDrawFlags_Closed, 2.f);
             hits.push_back(Hit{r.bones, k, x, my});
         }
-        if (ri == 0) for (float lt : {0.f, dur})   // the padlocks also show on an empty clip
+        if (ri == 0 && !roOpen) for (float lt : {0.f, dur})   // the padlocks also show on an empty clip
             if (doc_.LockedAt(lt) && InView(X(lt)) && std::none_of(keys.begin(), keys.end(), [&](float k) { return std::fabs(k - lt) < 1e-3f; })) drawLock(X(lt), my, rad);
         float hit = -1.f;
         for (float k : keys) if (!lockedKey(k) && InView(X(k)) && std::fabs(X(k) - io.MousePos.x) < fs * 0.5f) hit = k;
         bool lockHover = false;
-        for (float lt : {0.f, dur}) if (doc_.LockedAt(lt) && InView(X(lt)) && std::fabs(X(lt) - io.MousePos.x) < fs * 0.5f) lockHover = true;
+        for (float lt : {0.f, dur}) if (!roOpen && doc_.LockedAt(lt) && InView(X(lt)) && std::fabs(X(lt) - io.MousePos.x) < fs * 0.5f) lockHover = true;
         if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
             if (r.primary >= 0 && (doc_.IsEditable(r.primary) || r.primary == doc_.PelvisBone()) && !inRow) { sel_ = r.primary; prevSel_ = sel_; }
             if (io.KeyShift) {
@@ -670,11 +725,11 @@ void App::TimelinePanel() {
             } else if (hit >= 0.f) {
                 clickedKey = true;
                 if (!KeySelected(r.bones, hit)) { keySel_.clear(); keySel_.push_back(KeySel{r.bones, hit}); }
-                if (doc_.HasPending()) { askTime_ = hit; Request(Ask::ChangeTime); }
+                if (doc_.HasPending()) JumpShared(hit + off);
                 else if (!doc_.IsHold()) { dragKey_ = true; dragBones_ = r.bones; dragFromT_ = dragKeyT_ = hit; dragClickX_ = io.MousePos.x; }
             } else {
                 keySel_.clear();
-                if (doc_.EffectiveDrive() != Drive::ManualRatio) { askTime_ = Snap(io.MousePos.x); Request(Ask::ChangeTime); }
+                if (doc_.EffectiveDrive() != Drive::ManualRatio) JumpShared(std::min(std::round(TS(io.MousePos.x) / kFrame) * kFrame, total));   // 2026-11-27: may go to the other part
             }
         }
         if (ImGui::IsItemClicked(ImGuiMouseButton_Right) && hit >= 0.f) {
@@ -690,13 +745,13 @@ void App::TimelinePanel() {
         ImGui::PopID();
     }
     (void)clickedKey;
-    if (doc_.IsTrickClip() && bottom > top) {
+    if (td.IsTrickClip() && bottom > top) {
         static const char* kPhaseLabel[6] = {"", "takeoff", "flip", "catch", "landing", "ground"};
         float lastEnd = -1e9f;
         for (int ph = 1; ph <= 5; ph++) {
-            const float pt = doc_.PhaseStart(ph);
-            if (pt < 0.f || pt > c.duration + 1e-3f) continue;
-            const float x = X(std::min(pt, c.duration));
+            const float pt = td.PhaseStart(ph);
+            if (pt < 0.f || pt > trickDur + 1e-3f) continue;
+            const float x = XS(std::min(pt, trickDur));
             if (!InView(x)) continue;
             dl->AddLine(ImVec2(x, top), ImVec2(x, bottom), ph == 5 ? theme::U32(theme::Good, 0.55f) : theme::U32(theme::Ghost, 0.40f), 1.f);   // names: the ribbon (step 5)
             (void)lastEnd; (void)kPhaseLabel;
@@ -732,7 +787,7 @@ void App::TimelinePanel() {
                 if (doc_.EffectiveDrive() != Drive::ManualRatio) t_ = dragKeyT_;
                 keySel_.clear(); keySel_.push_back(KeySel{dragBones_, dragKeyT_});
             } else Status(doc_.LockedAt(dragKeyT_) ? "cannot move: the start and end are locked to the game's pose" : "cannot move: a key already exists at that time on this row");
-        } else if (doc_.EffectiveDrive() != Drive::ManualRatio) { askTime_ = dragFromT_; Request(Ask::ChangeTime); }
+        } else if (doc_.EffectiveDrive() != Drive::ManualRatio) JumpShared(dragFromT_ + off);
         dragBones_.clear();
     }
     if (openKeyMenu_) { ImGui::OpenPopup("##menu_cles"); openKeyMenu_ = false; }

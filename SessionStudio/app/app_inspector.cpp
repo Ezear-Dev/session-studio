@@ -53,6 +53,13 @@ void App::InspectorCard(const ImVec2& pos, float w, float maxH) {
                 ImGui::SeparatorText("Advanced");
                 InspectorAdvanced();
             }
+        } else if (LandingLockedHere()) {   // 2026-11-27
+            ImGui::TextColored(theme::Warn, "%s", "The landing is locked: the game plays its own landing here.");
+            if (ui::Button("Unlock the landing")) SetLandingLocked(false);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Make the landing of this trick yours: pose it after the ground contact.\nSave writes it with the trick (its own clip file).");
+            ImGui::BeginDisabled();
+            InspectorSelection();
+            ImGui::EndDisabled();
         } else InspectorSelection();
         ImGui::PopTextWrapPos();
     } else ImGui::PopStyleVar();
@@ -240,14 +247,26 @@ void App::InspectorClip() {
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("A single pose, applied all the time over the game's animation\n(walking, pushing, riding...): nothing to loop. The time bar is only\nused to see the game animation. Unticked: keys over time, looping.");
     }
+    if (hasComp_) {   // 2026-11-27 (user: one timeline, two files): the landing of this trick, on the same timeline
+        ImGui::SeparatorText("Landing");
+        bool locked = landLocked_;
+        if (ui::Switch("##landlock", &locked, "Lock the landing")) SetLandingLocked(locked);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Locked (default): the game plays its own landing after the ground contact; nothing is posed there.\nUnlocked: the landing is yours (its own clip file, written by Save with the trick).\nIn game the landing starts at the real ground contact, whatever the jump height.\nLocking again keeps your landing clip but turns it off.");
+        ImGui::TextDisabled("%s", landLocked_ ? "The game's landing (after the violet line)." : "Your landing (after the violet line).");
+        if (inLanding_) { if (ui::Button("Go to the trick")) JumpShared(0.f); }
+        else if (ui::Button("Go to the landing")) JumpShared(Parts().SecondStart());
+        ImGui::Spacing();
+    }
     if (doc_.IsTrickClip()) {   // 2026-11-25 landing sync: the trick clip follows the jump, the landing is its own clip
         ImGui::TextWrapped("%s", "Synced to the jump: in game, the hang time (yellow area) stretches with the jump height, and the end of the clip falls on the ground contact.");
         if (doc_.HasOldLandingPart()) ImGui::TextColored(kWarn, "%s", "This clip holds an old built-in landing: it no longer follows the ground. Redo it in “Landing of this trick”.");
         const bool can = doc_.GroundAt() > 0.f;
-        if (!can) ImGui::BeginDisabled();
-        if (ImGui::Button("Landing of this trick")) GoToLanding();
-        if (!can) ImGui::EndDisabled();
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", "Opens the landing clip of this trick (or makes one): it starts at the real\nground contact and takes over the pose of the end of the trick.");
+        if (!hasComp_) {   // 2026-11-27: on one timeline the landing is already there
+            if (!can) ImGui::BeginDisabled();
+            if (ImGui::Button("Landing of this trick")) GoToLanding();
+            if (!can) ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", "Opens the landing clip of this trick (or makes one): it starts at the real\nground contact and takes over the pose of the end of the trick.");
+        }
         if (!can) {   // on its own line: it was cut at the panel edge
             ImGui::TextDisabled("%s", "(landing not recorded)");
             ImGui::SameLine();
@@ -256,17 +275,21 @@ void App::InspectorClip() {
     }
     if (doc_.IsLandingClip() && !var_.trick.empty()) {   // the landing clip of one trick
         ImGui::TextWrapped("%s", "Landing of the trick: starts at the ground contact, in real time.");
-        if (ImGui::Button("Back to the trick")) { FigureVariant tv = var_; tv.state = ST_Trick; askVar_ = tv; Request(Ask::ChangeFigure); }
-        ImGui::SameLine();
+        if (!hasComp_) {   // on one timeline: "Go to the trick" above
+            if (ImGui::Button("Back to the trick")) { FigureVariant tv = var_; tv.state = ST_Trick; askVar_ = tv; Request(Ask::ChangeFigure); }
+            ImGui::SameLine();
+        }
+        if (LandingLockedHere()) ImGui::BeginDisabled();
         if (ImGui::Button("Take the end of the trick")) {
             if (doc_.HasPending()) Status("set or discard the pending change first (K)");
-            else if (const Clip* tc = TrickClipFor(var_)) {
+            else if (const Clip* tc = TrickForLanding()) {
                 doc_.Checkpoint("take the end of the trick");
                 const int n = doc_.SeedLandingFromTrick(*tc, false);
                 Status(n ? "start of the landing = end of the trick" : "the trick clip changes nothing at its end: nothing to take");
             } else Status("no saved clip for this trick in this variant");
         }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", "Replaces the keys: at the start, the pose at the end of the trick clip;\nat the end, the game's pose (the landing hands back to the game smoothly).");
+        if (LandingLockedHere()) ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", "Replaces the keys: at the start, the pose at the end of the trick clip;\nat the end, the game's pose (the landing hands back to the game smoothly).");
     }
     if (doc_.IsTrickClip() || doc_.IsLandingClip()) {   // 2026-11-26 (task 3): locked start and end
         const bool avail = doc_.LockAvailable();

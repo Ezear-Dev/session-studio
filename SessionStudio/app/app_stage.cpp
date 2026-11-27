@@ -314,6 +314,8 @@ void App::ViewPanel() {
     const SkeletonFile& s = doc_.skeleton();
     std::vector<FTr> cs, gh;
     doc_.ComponentPose(t_, cs, false);
+    const bool landLockedHere = LandingLockedHere();   // 2026-11-27: the game's landing is shown, nothing is posed
+    if (landLockedHere) doc_.OriginPose(t_, cs);
     if (originFocus_) doc_.OriginPose(originT_, gh); else doc_.ComponentPose(t_, gh, true);
     std::vector<FTr> dcs(n), dgh(n);
     for (int b = 0; b < n; b++) { dcs[b] = Disp(cs[b]); dgh[b] = Disp(gh[b]); }
@@ -327,7 +329,7 @@ void App::ViewPanel() {
     const bool legFrozen = sel_ >= 0 && sel_ < n && doc_.LegFrozenAt(sel_, t_);
     // 2026-11-26: start / end locked to the game's pose: nothing is posed there (task 3)
     const bool lockedHere = sel_ >= 0 && sel_ < n && doc_.LockedAt(doc_.KeyTime(t_));
-    const bool poseBlocked = legFrozen || lockedHere;
+    const bool poseBlocked = legFrozen || lockedHere || landLockedHere;
 
     auto PU = [&](const float u[3], ImVec2& out) {   // UE component point -> screen
         const float p[3] = {u[0], -u[1], u[2]};
@@ -592,7 +594,9 @@ void App::ViewPanel() {
     bool usingGizmo = false;
     int ikR, ikU, ikF, ikH;
     const IkJoint ikKind = (ikMode_ && sel_ >= 0 && sel_ < n && !poseBlocked) ? doc_.IkHandle(sel_, ikR, ikU, ikF, ikH) : IkJoint::None;
-    if (poseBlocked) {   // no handle: the game takes the legs back from the catch, or a locked instant
+    if (landLockedHere) {   // 2026-11-27: the landing part of a trick, locked
+        banners.push_back({"The landing is locked: the game plays its own landing here. Unlock it in Clip settings to pose it.", theme::Warn});
+    } else if (poseBlocked) {   // no handle: the game takes the legs back from the catch, or a locked instant
         banners.push_back({lockedHere ? "Start and end are locked to the game's pose: pose between them (Clip settings to unlock)."
                                       : "After the catch, the game takes the legs back: pose them before the catch, or in the landing clip.", theme::Warn});
     } else if (ikKind != IkJoint::None) {

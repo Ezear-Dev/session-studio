@@ -221,9 +221,9 @@ void App::Shortcuts() {
         SaveSetting(settings_, "timeline.loop", loopPreview_ ? "1" : "0");
         Status(loopPreview_ ? "playback loops" : "playback once");
     }
-    if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_LeftArrow, false) && doc_.EffectiveDrive() != Drive::ManualRatio) { askTime_ = std::max(0.f, std::round(t_ / kFrame - 1.f) * kFrame); Request(Ask::ChangeTime); }
-    if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_RightArrow, false) && doc_.EffectiveDrive() != Drive::ManualRatio) { askTime_ = std::min(doc_.clip().duration, std::round(t_ / kFrame + 1.f) * kFrame); Request(Ask::ChangeTime); }
+    if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_LeftArrow, false) && doc_.EffectiveDrive() != Drive::ManualRatio) JumpShared(std::max(0.f, std::round(SharedT() / kFrame - 1.f) * kFrame));   // 2026-11-27: on the shared timeline
+    if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_RightArrow, false) && doc_.EffectiveDrive() != Drive::ManualRatio) JumpShared(std::round(SharedT() / kFrame + 1.f) * kFrame);
     if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_F, false)) CenterOnSelection();
-    if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_Home, false)) JumpTo(0.f);   // UI Phase 4
-    if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_End, false)) JumpTo(doc_.clip().duration);
+    if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_Home, false)) JumpShared(0.f);   // UI Phase 4
+    if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_End, false)) JumpShared(hasComp_ ? Parts().Total() : doc_.clip().duration);
 }

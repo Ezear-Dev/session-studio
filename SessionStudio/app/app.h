@@ -13,6 +13,7 @@
 #include "time_view.h"
 #include "mannequin.h"
 #include "board_mesh.h"
+#include "two_part_time.h"
 #include <memory>
 
 struct ID3D11Device;
@@ -249,6 +250,26 @@ private:
     // withFix: a fix button under each (Inspector)
     bool HasLandingForAllVariants(const Clip& trick, std::string& missing) const;
     void EndWarnings(bool withFix);
+
+    // ---------------------------------------------------------------- 2026-11-27: one timeline, two files (app_landing.cpp)
+    struct Companion { EditorDoc doc; FigureVariant var; std::string fileName, savedText, figErr; };
+    Companion comp_;                      // the part not under the playhead (the landing while on the trick, or the trick)
+    bool hasComp_ = false;                // the trick being edited shows its landing after the ground contact
+    bool inLanding_ = false;              // the playhead is in the landing part: doc_ is the landing clip, comp_ the trick
+    bool landLocked_ = true;              // the landing is the game's (default); unlocked: your landing clip (Clip settings)
+    float askGlobal_ = -1.f;              // Ask::ChangeTime to a time of the shared timeline; -1: askTime_ (local)
+    TwoPartTime Parts() const;            // lengths of the two parts
+    float SharedT() const;                // the playhead on the shared timeline
+    const EditorDoc& TrickDoc() const { return inLanding_ ? comp_.doc : doc_; }
+    bool LandingLockedHere() const;       // the playhead is in a locked landing: nothing can be posed
+    const Clip* TrickForLanding() const;  // the trick of the landing being edited (in memory when on one timeline)
+    void SwapParts();                     // exchanges the open part with comp_ (no pending change)
+    void SetShared(float g);              // moves the playhead on the shared timeline (may change part)
+    void JumpShared(float g);             // the same through the pending-change check
+    void LeaveLanding();                  // back to the trick part (before opening something else)
+    void BuildLandingPart();              // after a trick clip is opened or made: its landing as the second part
+    void SetLandingLocked(bool lock);
+    bool PartNeedsSave(bool landingPart, const EditorDoc& d, const std::string& file, const std::string& saved) const;
 
     Ask ask_ = Ask::None;
     float askTime_ = 0.f;

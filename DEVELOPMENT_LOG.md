@@ -103,6 +103,12 @@ Important steps, technical decisions, problems and their solutions. Current stat
   warnings and view right, groups placed from their width at the last frame); the end warnings became a chip with a
   popup; a phase ribbon under the ruler names the parts of the trick (the hang time is the part that stretches in
   game); rows carry the limb colours of the stage. The row and key interactions were not touched.
+- **Landing on the trick's timeline, two files (11-27)**: the user asked for the trick and its landing on one timeline,
+  then for one file. One file would have reverted the validated landing sync (the mod starts the landing clip at the
+  real ground contact) and changed the mod and the format, so the choice was one timeline over two files: the open
+  part is `doc_`, the other waits in `comp_` and they are exchanged when the playhead crosses the ground contact
+  (`app_landing.cpp`); shared-time arithmetic in `model/two_part_time` (tested). The landing is locked by default
+  (the game's); unlocked, it is the landing clip of that trick, written by Save with the trick.
 
 ## Problems met and solutions
 
