@@ -74,3 +74,14 @@ TEST(library_playing_clip_follows_the_player_order) {
     CHECK(PlayingClip({&kf}, other) == -1);
     CHECK(ClipPlaysOn(all, other) && !ClipPlaysOn(kf, other));
 }
+
+TEST(library_clip_to_open_is_the_one_that_plays) {   // user 2026-11-27: picking a trick opened the first clip, not the active one
+    FigureVariant v; v.state = ST_Trick; v.trick = "KickFlip";
+    const Clip off = TrickClip("KickFlip", kAllStances, Feet::Any, false);
+    const Clip on = TrickClip("KickFlip", kAllStances, Feet::Any, true);
+    const Clip other = TrickClip("HeelFlip", kAllStances, Feet::Any, true);
+    CHECK(ClipToOpen({&off, &on}, v) == 1);        // the active one, not the first in the list
+    CHECK(ClipToOpen({&other, &off}, v) == 1);     // nothing plays: the first one made for this trick
+    CHECK(ClipToOpen({&other}, v) == -1);
+    CHECK(ClipToOpen({nullptr, &on}, v) == 1);     // unreadable files are skipped
+}

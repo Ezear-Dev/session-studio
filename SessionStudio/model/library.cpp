@@ -21,6 +21,14 @@ int PlayingClip(const std::vector<const Clip*>& clips, const FigureVariant& v) {
     return best;
 }
 
+int ClipToOpen(const std::vector<const Clip*>& clips, const FigureVariant& v) {
+    const int pl = PlayingClip(clips, v);
+    if (pl >= 0) return pl;
+    for (int i = 0; i < (int)clips.size(); i++)
+        if (clips[i] && ClipPlaysOn(*clips[i], v)) return i;
+    return -1;
+}
+
 std::vector<LibCard> BuildLibrary(const std::vector<LibEntry>& entries, const std::function<bool(const FigureVariant&)>& recorded,
                                   const std::vector<const Clip*>& clips) {
     std::vector<LibCard> out;

@@ -441,9 +441,11 @@ void App::Proceed() {
             LeaveLanding();   // 2026-11-27: from the trick part
             // another variant: open its first clip, or start a new clip for it
             var_ = askVar_;
-            const ClipInfo* first = nullptr;
-            for (auto& ci : clips_) if (ClipTargets(ci.clip, askVar_)) { first = &ci; break; }
-            if (first) { const std::string f = first->file; OpenFile(f); break; }
+            // 2026-11-27 (user): open the clip that plays on it (else the first one made for it), not just the first in the list
+            std::vector<const Clip*> ptrs;
+            for (auto& ci : clips_) ptrs.push_back(ci.err.empty() ? &ci.clip : nullptr);
+            const int pick = ClipToOpen(ptrs, askVar_);
+            if (pick >= 0) { const std::string f = clips_[pick].file; OpenFile(f); break; }
             doc_.NewClip(askVar_);
             SelectFigure(askVar_);
             DefaultMode();

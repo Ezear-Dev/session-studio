@@ -11,6 +11,8 @@
 bool ClipPlaysOn(const Clip& c, const FigureVariant& v);
 // among clips, the one the game plays on v (enabled ones; higher priority first, then the more specific); -1: none
 int PlayingClip(const std::vector<const Clip*>& clips, const FigureVariant& v);
+// the clip to open when the user picks v: the one that plays, else the first one made for v (even off); -1: none
+int ClipToOpen(const std::vector<const Clip*>& clips, const FigureVariant& v);
 
 struct LibEntry {                 // what to list (the app fills it: ground states, then the trick list)
     FigureVariant base;           // stance normal, regular

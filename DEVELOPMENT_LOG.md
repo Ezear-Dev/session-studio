@@ -127,6 +127,9 @@ Important steps, technical decisions, problems and their solutions. Current stat
   (the "restore the saved tab over several frames" trick of the ImGui tab bar is gone with it). Its Tricks list then
   took the Browse organisation: the card drawing moved to `App::LibCardUi` (one card, used by both), the collection is
   a combo over Browse's own `browseCat_` and the filters are Browse's (one choice for both places).
+- **Open the active clip (11-27, user report)**: picking KickFlip opened the first KickFlip file of the list, not the
+  one turned on. `Ask::ChangeFigure` now opens `ClipToOpen` (`model/library`): the clip `PlayingClip` says the game
+  plays, else the first clip made for that variant, else a new clip. Tested in `test_library.cpp`.
 
 ## Problems met and solutions
 
