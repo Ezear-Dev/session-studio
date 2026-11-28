@@ -49,7 +49,7 @@ using Lua = RC::LuaMadeSimple::Lua;
 
 namespace {
 
-constexpr int kVersion = 29;
+constexpr int kVersion = 30;
 constexpr int SKM_CST = 0x4b0;    // USkinnedMeshComponent::ComponentSpaceTransformsArray[2] (0x10 apart)
 constexpr int SKM_EDIT = 0x4f0;   // USkinnedMeshComponent::CurrentEditableComponentTransforms
 constexpr int VT_FBT = 0x938;     // FinalizeBoneTransform slot in the skater mesh vtable

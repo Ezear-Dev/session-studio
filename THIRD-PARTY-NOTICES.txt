@@ -6,7 +6,14 @@ licensed under the GNU General Public License version 3 (see LICENSE). They come
 The source code of each release is published beside its package (SessionStudio-<version>-source.zip).
 
 This is an unofficial fan project, not affiliated with or endorsed by the developers or publisher of
-Session: Skate Sim. No game file is distributed.
+Session: Skate Sim.
+
+
+Character model
+---------------
+The release package holds files\Editor\body.glb, the character shown in the editor's 3D view. It is not part of
+the program and is not covered by the GPL: it is included with permission, and all rights remain with its owners.
+It is not in the source code. Apart from this model, no game file is distributed.
 
 
 Thanks

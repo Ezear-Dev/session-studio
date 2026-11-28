@@ -8,7 +8,9 @@
 #   powershell -ExecutionPolicy Bypass -File tools\make-release.ps1
 # -Dll / -Exe: package other binaries than the ones in the dist folders (for example when an open editor locks
 # dist\SessionStudio.exe). The exe's version is still checked.
-param([string]$Dll = "", [string]$Exe = "")
+# -Body: the editor's character model (.glb), shipped as files\Editor\body.glb. It is not in Git and not in the source
+# zip (not covered by the GPL). -NoBody builds a package without it (the editor then shows its built-in mannequin).
+param([string]$Dll = "", [string]$Exe = "", [string]$Body = "", [switch]$NoBody)
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
 
@@ -36,6 +38,11 @@ if (-not $Exe) { $Exe = "$root\SessionStudio\dist\SessionStudio.exe" }
 foreach ($f in $Dll, $Exe) { if (-not (Test-Path -LiteralPath $f)) { Stop-Release "$f is missing: run build.cmd" } }
 $Dll = (Get-Item -LiteralPath $Dll).FullName
 $Exe = (Get-Item -LiteralPath $Exe).FullName
+if (-not $NoBody) {
+    if (-not $Body) { $Body = "$root\SessionStudio\AMXX_SkelMesh_Full.glb" }
+    if (-not (Test-Path -LiteralPath $Body -PathType Leaf)) { Stop-Release "$Body is missing: give -Body <model.glb>, or -NoBody" }
+    $Body = (Get-Item -LiteralPath $Body).FullName
+}
 $exeVer = (Get-Item -LiteralPath $Exe).VersionInfo.FileVersion
 if ($exeVer -ne "0.$n.0.0") { Stop-Release "SessionStudio.exe says version '$exeVer', expected 0.$n.0.0: run build.cmd" }
 if (-not (Test-Path -LiteralPath $ue4ssZip)) { Stop-Release "put the official UE4SS_v3.0.1.zip in release\cache (see the top of this script)" }
@@ -96,6 +103,7 @@ Remove-Item -LiteralPath $tmp -Recurse -Force
 
 # ---------------------------------------------------------------- the editor and its guides
 Add-File $exe "files\Editor\SessionStudio.exe"
+if (-not $NoBody) { Add-File $Body "files\Editor\body.glb" }
 Add-TextFile "$root\LICENSE" "files\Editor\LICENSE.txt"
 Add-TextFile "$root\THIRD-PARTY-NOTICES.txt" "files\Editor\THIRD-PARTY-NOTICES.txt"
 foreach ($g in "Getting-Started", "Reference") { Add-TextFile "$root\SessionStudio\docs\$g.md" "files\Editor\docs\$g.md" }
@@ -166,7 +174,7 @@ if ($bad.Count) { $bad | ForEach-Object { Write-Host "  PERSONAL: $_" }; Stop-Re
 $forbidden = "(?i)(\.sanim$|\.log$|\.ini$|\.dmp$|\.pdb$|selftest|_figures|_skeleton|_trick_names|captures[\\/]|backups?[\\/])"
 $wrong = @(Get-ChildItem -LiteralPath $stage -Recurse -File | ForEach-Object { $_.FullName.Substring($stage.Length + 1) } |
     Where-Object { $_ -match $forbidden -and $_ -ne "files\UE4SS\UE4SS-settings.ini" })
-$wrong += @($source | Where-Object { $_ -match "(?i)(\.sanim$|\.log$|\.ini$|\.exe$|\.dll$|\.zip$|_figures|_skeleton\.json|^notes/|^release/|^_archive/)" })
+$wrong += @($source | Where-Object { $_ -match "(?i)(\.glb$|\.sanim$|\.log$|\.ini$|\.exe$|\.dll$|\.zip$|_figures|_skeleton\.json|^notes/|^release/|^_archive/)" })
 if ($wrong.Count) { $wrong | ForEach-Object { Write-Host "  FORBIDDEN: $_" }; Stop-Release "files that must never be shipped" }
 
 # ---------------------------------------------------------------- the player package

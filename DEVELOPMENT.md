@@ -42,6 +42,10 @@ Some tests read real files from the game's clips folder at the default Steam pat
 powershell -ExecutionPolicy Bypass -File tools\make-release.ps1
 ```
 
+The package also holds the editor's character model, as `files\Editor\body.glb`: by default
+`SessionStudio\AMXX_SkelMesh_Full.glb`, a file that is **not in Git** and not covered by the GPL. Give another one with
+`-Body <file.glb>`, or build without it with `-NoBody` (what anyone building from the source zip does).
+
 It writes the player package, the matching source zip and `SHA256SUMS.txt` in `release\out\` (not in Git). It takes an
 explicit list of files, and stops on a version mismatch, on personal data, or on a file that must never ship (clips,
 recordings, logs, settings). The two zips are published **together**: the GPL-3.0 requires the source of the

@@ -1,7 +1,7 @@
 # Session Studio: reference for creators
 
 This is the detailed reference. For a first clip, read `Getting-Started.md`.
-Version: mod (SessionAnimLoaderNative) v0.29, clip format `sanim` version 1, Session: Skate Sim Steam build of November 2026.
+Version: mod (SessionAnimLoaderNative) v0.30, clip format `sanim` version 1, Session: Skate Sim Steam build of November 2026.
 
 ---
 
@@ -160,6 +160,8 @@ in each bone's local space, the pelvis offset is in cm in component space (Z up)
 - **Pull (IK)** on hand, elbow, shoulder, foot, knee; "chest follows the hand" (off by default); elbow / knee swivel slider.
 - **Rotate** with local or world rings; precise pitch / yaw / roll in Studio mode.
 - **Pelvis**: offset with the feet kept planted; the legs bend or stretch (limited to their reach).
+- **Body**: the character of the 3D view is `body.glb`, next to `SessionStudio.exe`. Without that file (or if it does
+  not fit the game's skeleton) a simple built-in mannequin is shown. Neither is your own skater: check in game.
 - **Shoulder**: the game mesh has no twist bones, so an arm raised very high or twisted can crush the shoulder in game.
   The inspector shows the arm's raise and twist (no warning colour); **Fix the shoulder** moves part of the raise to the
   clavicle and part of the twist to the wrist, hand kept in place.

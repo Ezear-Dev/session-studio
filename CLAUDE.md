@@ -7,7 +7,7 @@ rollback paths. If documents and code disagree, **trust the code and tell the us
 ## 1. What the project is
 
 Animation tools for the game **Session: Skate Sim** (Unreal Engine 4.27, Windows, Steam). Unofficial fan project,
-public GitHub repository, GPL-3.0, first release `v0.28` published 2026-11-27, then `v0.29` the same day. Never change the repository's visibility unasked.
+public GitHub repository, GPL-3.0, first release `v0.28` published 2026-11-27, then `v0.29` the same day; `v0.30` prepared 2026-11-28 (check the Releases page). Never change the repository's visibility unasked.
 
 | Part | Folder | In the game's `Win64\Mods` | Role |
 |---|---|---|---|
@@ -105,7 +105,8 @@ the scripts call `D:\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\v
   together; the mod must match the editor that reads its log lines. `tools/make-release.ps1` refuses a mismatch. The
   release number is the mod's (owner's choice, 2026-11-27).
 - Releases (`DEVELOPMENT.md`, "Release package"): only `tools/make-release.ps1` builds the player package (explicit
-  file list, into `release/`, not in Git), with the matching source zip. No clip and no recording is ever shipped.
+  file list, into `release/`, not in Git), with the matching source zip. No clip and no recording is ever shipped. The player package (never the source zip or Git) holds
+  the editor's character model as `body.glb` (owner, 2026-11-28; see the legal rules below).
   The installer (`installer/`) never modifies an existing UE4SS and never replaces anything in `clips`. It writes down
   all it does (`Win64\SessionAnimLoader_install.json`); `uninstall.ps1` undoes only that, back to the state before the
   FIRST install. Without a record it touches nothing; it never deletes clips and never removes a folder that is not
@@ -125,6 +126,10 @@ creator gains.
   `.gitignore`). Obsolete material goes to `_archive/`. No personal paths or private data in the repository or packages.
 - Skate Style and other closed tools: ideas only, no code, no assets. ReSkate Animator Studio is GPL-3.0 (per our
   study): ask before reusing any of its code. No game asset in the repository.
+  **One exception, in the release package only:** the character model `body.glb`. The owner states they have the
+  developers' formal authorization to distribute it (2026-11-28; no written text is in the project) and chose not to
+  credit anyone. It is not under the GPL and the notices say so. This covers that file only: ask before shipping any
+  other game asset, and never add a model to Git.
 - **Licence: GPL-3.0 for the whole project** (owner's choice, 2026-11-27; copyright "Ezear-Dev"). A distributed binary
   needs its source beside it (the source zip, attached to the same release). Third-party notices:
   `THIRD-PARTY-NOTICES.txt` (update it when a dependency changes).

@@ -3,7 +3,7 @@
 Animation tools for **Session: Skate Sim**. Adjust your skater's pose in an editor, save, and the game plays it right
 away, without restarting. The game's files are not changed.
 
-This is an unofficial fan project, work in progress (version **v0.29**).
+This is an unofficial fan project, work in progress (version **v0.30**).
 
 > [!WARNING]
 > **Keep only one clip switched on per trick** (same stance and foot). The editor lets you switch on several variants
@@ -12,13 +12,14 @@ This is an unofficial fan project, work in progress (version **v0.29**).
 
 ## How to install
 
-1. Download `SessionStudio-v0.29.zip` from this repository's **Releases** page.
+1. Download `SessionStudio-v0.30.zip` from this repository's **Releases** page.
 2. Extract the whole zip, close the game, and double-click **INSTALLER.cmd**.
 3. Start the game, then open Session Studio.
 
 **[Installation guide](INSTALL.md)**: install, update, uninstall, troubleshooting.
 
-The package holds the game mod, the editor with its guides, and UE4SS 3.0.1 (installed only if you do not have UE4SS).
+The package holds the game mod, the editor with its guides and its character model, and UE4SS 3.0.1 (installed only if
+you do not have UE4SS).
 It holds **no animation and no recording**: you do each move once in game, the mod records it on your PC, and you edit
 from there.
 
@@ -74,4 +75,7 @@ share a changed version, share its source code under the same licence. No warran
 Full notices: [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt).
 
 Session Studio is inspired by Skate Style's Animation Studio (ideas only, no code nor assets).
-This project is not affiliated with the developers or publisher of the game, and contains no game file.
+This project is not affiliated with the developers or publisher of the game. This repository contains no game file.
+
+**Character model:** the release package also holds `body.glb`, the character shown in the editor's 3D view.
+It is not part of the program and is not covered by the GPL: it is included with permission, and all rights remain with its owners.

@@ -283,6 +283,12 @@ Important steps, technical decisions, problems and their solutions. Current stat
   measurement (`ShoulderInfo`), the fix button and the automatic natural shoulder are unchanged. Nothing warns any more
   of an arm likely to crush the shoulder in game.
 
+- Same day, v0.30: the owner asked to push and to prepare the release. Asked about the model, they said to include it,
+  not to credit anyone, and that they have formal authorization. The package ships the file unchanged as
+  `files\Editor\body.glb` (the installer already copies the whole editor folder and records each file, so uninstall
+  covers it); `make-release.ps1` got `-Body` / `-NoBody` and refuses a `.glb` in the source zip. A neutral notice (no
+  name) says the model is not under the GPL. The mod only changes its version number.
+
 ## Gaps in this history
 
 - No Git history before 2026-11-26: intermediate source states exist only as local zip backups in `_archive/backups/`.

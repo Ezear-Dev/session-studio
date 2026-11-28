@@ -1,4 +1,4 @@
-Session Studio v0.29 and Session Anim Loader v0.29
+Session Studio v0.30 and Session Anim Loader v0.30
 Animation tools for Session: Skate Sim (Windows, Steam). Unofficial fan project, work in progress.
 
 INSTALL OR UPDATE
@@ -21,4 +21,6 @@ Guides: after installing, the "docs" folder next to SessionStudio.exe.
 Thanks to matsix (SessionOpenMP) and Portman2 (ExpandedTricks): their work helped us a lot.
 
 Licence: GNU GPL version 3 (LICENSE.txt), no warranty. Third-party notices: THIRD-PARTY-NOTICES.txt.
-Source code: the file SessionStudio-v0.29-source.zip published with this package.
+The character model (files\Editor\body.glb) is not covered by the GPL: included with permission, all rights remain
+with its owners.
+Source code: the file SessionStudio-v0.30-source.zip published with this package.

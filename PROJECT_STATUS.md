@@ -11,7 +11,7 @@ was checked for each); the v0.24 results below still describe what was checked i
 - **CODE** — present in the code, no user test result found in the notes.
 - **✘** — tried and did not work, or parked.
 
-## 00. Editor: optional skinned body model (2026-11-28, not released)
+## 00. Mod v0.30: skinned body model in the editor, no red shoulder alert (2026-11-28)
 
 The 3D view draws a skinned model from `body.glb` next to `SessionStudio.exe` when there is one; otherwise (or if it
 does not fit the skeleton) the generated mannequin, as before. Each part of the model has a flat colour picked from
@@ -27,11 +27,13 @@ inspector figures; "Fix the shoulder" and the automatic natural shoulder stay. T
 | Editor | `build.cmd` exit 0; `--selftest` without the file, with a broken one and with the real one | 2026-11-28 |
 | Shown in the 3D view (first version, one clay colour) | the owner saw it in the editor and liked it | owner's screenshot, 2026-11-28 |
 | Part colours in the 3D view; stripe, tints, joints under clothes, goofy, speed while editing | **not verified** in the editor (colours drawn offline only) | waiting for the owner's test |
-| Release package | **not included** (`make-release.ps1` unchanged) | packaging waits for the owner's approval |
+| Release package v0.30 | prepared locally; see the development log for the checks. **Not published by the agent**: the owner uploads it | `make-release.ps1` |
+| Mod v0.30 | no change in the game mod but its version number; **not installed, not tried in game** | `git diff` |
 
-The model was given to the owner by the game's developers, who allow redistributing it (owner's statement, 2026-11-28;
-no written text is in the project). Before shipping it: credit text and conditions, whether this covers every part of the
-file, and a notice keeping it outside the GPL. `*.glb` stays out of Git.
+The model was given to the owner by the game's developers. The owner states they have formal authorization to
+distribute it and asked for it in the v0.30 package **without crediting anyone** (2026-11-28; no written text is in the
+project). The package holds it as `files\Editor\body.glb`, as received (textures included, unused by the editor); the
+README and notices say it is not covered by the GPL. `*.glb` stays out of Git and out of the source zip.
 
 ## 0. Mod v0.29: one landing per trick clip (2026-11-27, after the v0.28 release)
 
