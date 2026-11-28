@@ -11,7 +11,7 @@ was checked for each); the v0.24 results below still describe what was checked i
 - **CODE** — present in the code, no user test result found in the notes.
 - **✘** — tried and did not work, or parked.
 
-## 000. Mod v0.31: random draw between the clips of a trick (2026-11-28, not released)
+## 000. Mod v0.31: random draw between the clips of a trick (2026-11-28, released)
 
 Asked by the owner: pick one of several kickflips, or the game's own, at random. The clip switches already in the editor
 make the draw; one row, **Game animation**, adds the game's own animation per trick, stance and foot
@@ -26,6 +26,8 @@ the multiplayer wire format. **Changes behaviour** for a folder with several cli
 | In game, normal stance, regular | GAME ✔: the owner reports it works | owner, 2026-11-28; mod log: 32 draws (30 KickFlip among 4 clips + the game's animation, which came out 6 times; 2 Treflip), never the same result twice in a row for a trick, no error line |
 | Not checked item by item | the owner gave one overall verdict: nothing said apart about each landing, the editor texts or the Treflip turns | |
 | Multiplayer, goofy, other stances | **not tried** | |
+| Release `v0.31` | **published by the owner** (latest, 3 files; older releases still online), tag on `6b3cbea`; the three files have the same SHA-256 as the local `release\out` ones | GitHub API, 2026-11-28 |
+| Package install | on a made-up game folder: install puts `body.glb` next to the editor, uninstall leaves only the test's own fake game file (run after publication) | 2026-11-28 |
 
 Offline run of the day: 2 checks fail in `test_board_mesh.cpp` (`board_and_shoes_on_the_real_figures`, which reads the
 real recordings of this PC): failing since the first test run of this task, before any change of behaviour (only empty

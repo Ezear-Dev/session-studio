@@ -304,6 +304,14 @@ Important steps, technical decisions, problems and their solutions. Current stat
 - v0.31 installed on the owner's game and tried the same day (normal stance, regular): "it works". The log of the run
   shows 32 draws without an immediate repeat. Multiplayer, goofy and other stances not tried.
 
+- v0.31 pushed (`6b3cbea`) and packaged locally for the owner to publish. Checked: packaged DLL, Lua, editor and model
+  identical to the tried ones; no clip or recording in the player zip; no `.glb` or binary in the source zip. The
+  installer test on a made-up folder was **not** run: the owner's game was running and the installer refuses then; the
+  install and uninstall scripts have not changed since v0.30, where that test passed.
+
+- GitHub release `v0.31` published by the owner (latest; tag on `6b3cbea`). The three files checked against the local
+  ones (SHA-256). The install and uninstall test on a made-up game folder, skipped at packaging time, then passed.
+
 ## Gaps in this history
 
 - No Git history before 2026-11-26: intermediate source states exist only as local zip backups in `_archive/backups/`.

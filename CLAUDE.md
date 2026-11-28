@@ -7,7 +7,7 @@ rollback paths. If documents and code disagree, **trust the code and tell the us
 ## 1. What the project is
 
 Animation tools for the game **Session: Skate Sim** (Unreal Engine 4.27, Windows, Steam). Unofficial fan project,
-public GitHub repository, GPL-3.0, first release `v0.28` published 2026-11-27, then `v0.29` the same day; `v0.30` published 2026-11-28; `v0.31` (random trick draw) built the same day (check the Releases page). Never change the repository's visibility unasked.
+public GitHub repository, GPL-3.0, first release `v0.28` published 2026-11-27, then `v0.29` the same day; `v0.30` published 2026-11-28; `v0.31` (random trick draw) published the same day. Never change the repository's visibility unasked.
 
 | Part | Folder | In the game's `Win64\Mods` | Role |
 |---|---|---|---|
