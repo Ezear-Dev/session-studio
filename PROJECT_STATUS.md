@@ -27,7 +27,9 @@ inspector figures; "Fix the shoulder" and the automatic natural shoulder stay. T
 | Editor | `build.cmd` exit 0; `--selftest` without the file, with a broken one and with the real one | 2026-11-28 |
 | Shown in the 3D view (first version, one clay colour) | the owner saw it in the editor and liked it | owner's screenshot, 2026-11-28 |
 | Part colours in the 3D view; stripe, tints, joints under clothes, goofy, speed while editing | **not verified** in the editor (colours drawn offline only) | waiting for the owner's test |
-| Release package v0.30 | prepared locally; see the development log for the checks. **Not published by the agent**: the owner uploads it | `make-release.ps1` |
+| Release `v0.30` | **published by the owner** (latest, 3 files; v0.29 and v0.28 still online), tag on commit `420779e`; the three files have the same SHA-256 as the local `release\out` ones | GitHub API, 2026-11-28 |
+| Package install | on a made-up game folder: install puts `body.glb` next to the editor, uninstall leaves only the test's own fake game file. The packaged editor and model are identical to the ones whose `--selftest` loaded the model. **Not installed on the real game** by the agent | 2026-11-28 |
+| Known small defect | `--selftest` says "no body.glb next to the editor" when the skeleton is missing, even if the file is there (diagnostic text only) | fake install |
 | Mod v0.30 | no change in the game mod but its version number; **not installed, not tried in game** | `git diff` |
 
 The model was given to the owner by the game's developers. The owner states they have formal authorization to

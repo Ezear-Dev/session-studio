@@ -289,6 +289,11 @@ Important steps, technical decisions, problems and their solutions. Current stat
   covers it); `make-release.ps1` got `-Body` / `-NoBody` and refuses a `.glb` in the source zip. A neutral notice (no
   name) says the model is not under the GPL. The mod only changes its version number.
 
+- GitHub release `v0.30` published by the owner (latest; tag on `420779e`; v0.29 left as it is). The three attached
+  files checked against the local ones (SHA-256). Packaging checks: no `.glb` in the source zip, packaged model identical
+  to the original, install and uninstall on a made-up game folder. v0.30 of the mod was not tried in game before the
+  release as far as the agent knows. To fix later: the `--selftest` line about `body.glb` without a skeleton.
+
 ## Gaps in this history
 
 - No Git history before 2026-11-26: intermediate source states exist only as local zip backups in `_archive/backups/`.
