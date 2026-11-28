@@ -28,6 +28,10 @@
 
 # Local only: working notes, plans, AI prompts, development test data, private tester package, generated pages
 /notes/
+# the owner's and the agent's own project files (owner, 2026-11-28; older commits still hold them)
+/CLAUDE.md
+/PROJECT_STATUS.md
+/DEVELOPMENT_LOG.md
 /tester-package/
 /SessionAnimLoader/Lua/clips/captures/
 /SessionAnimLoader/Lua/clips/test_*.sanim
