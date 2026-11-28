@@ -153,7 +153,8 @@ The person who receives it needs the mod installed (part 1), not the editor. The
 | "Game animation not recorded yet" at the bottom of the 3D view | do the move once in game, in the right stance and with the right foot. |
 | "REFUSED" in the game pill | click the pill: the reason is given under "Last save". |
 | The game reloads the clip but nothing changes | is the mod on (game pill "mod on")? Ctrl+F3 in game. Is the clip on (switch in Browse)? |
-| Another clip plays instead | Browse shows which clip plays on each variant; Clip settings: "Several clips on this variant" says which one wins. |
+| Another clip plays instead | Browse shows what plays on each variant. Several clips of a trick that are on take turns at random: switch off those you do not want. Clip settings lists them. |
+| Alternate between your clips and the game's own trick | Leave your clips on and switch on **Game animation**, under the clips of that trick. |
 
 For a bug report: a screenshot of the editor, plus the `UE4SS.log` and `SessionAnimLoader.native.log` files from the `Win64`
 folder.

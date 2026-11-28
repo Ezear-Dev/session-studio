@@ -120,7 +120,7 @@ std::vector<std::string> ClipLibrary::Scan() {
     std::vector<std::string> log;
     bool changed = false;
     for (auto& kv : files_) kv.second.seen = false;
-    bool studioNow = false;
+    bool studioNow = false, drawNow = false;
 
     WIN32_FIND_DATAW fd;
     HANDLE h = FindFirstFileW((dir_ + L"\\*").c_str(), &fd);
@@ -160,6 +160,25 @@ std::vector<std::string> ClipLibrary::Scan() {
                 } else log.push_back("_studio.json: " + (err.empty() ? std::string("unreadable") : err) + " -- keeping the previous settings");
                 continue;
             }
+            if (_wcsicmp(wname.c_str(), L"_random.json") == 0) {   // v0.31: compared by content, it is tiny
+                drawNow = true;
+                std::string text, err;
+                if (!ReadAll(dir_ + L"\\" + wname, text)) continue;   // open elsewhere: the next scan retries
+                const uint64_t h = Fnv1a(text);
+                if (drawSeen_ && h == drawHash_) continue;
+                drawSeen_ = true;
+                drawHash_ = h;
+                std::vector<std::string> keys;
+                if (!ParseGameDraw(text, keys, err)) { log.push_back(std::string(kGameDrawFile) + ": " + err + " -- keeping the previous settings"); continue; }
+                gameDraw_.clear();
+                for (const std::string& k : keys) {
+                    DrawSlot s;
+                    if (DrawSlotOf(k, s)) gameDraw_.push_back(s);
+                }
+                changed = true;
+                log.push_back(std::string(kGameDrawFile) + ": the game's own animation is in the draw of " + std::to_string(gameDraw_.size()) + " figure(s)");
+                continue;
+            }
             if (!EndsWith(wname, L".sanim")) continue;
             ScanClip(dir_ + L"\\" + wname, name, false, log, changed);
         } while (FindNextFileW(h, &fd));
@@ -178,6 +197,12 @@ std::vector<std::string> ClipLibrary::Scan() {
         changed = true;
         log.push_back("_studio.json: deleted -- default mirror");
     }
+    if (drawSeen_ && !drawNow) {
+        drawSeen_ = false;
+        gameDraw_.clear();
+        changed = true;
+        log.push_back(std::string(kGameDrawFile) + ": deleted");
+    }
     if (changed) {
         auto more = Publish();
         log.insert(log.end(), more.begin(), more.end());
@@ -191,6 +216,7 @@ std::vector<std::string> ClipLibrary::Publish() {
     s->generation = ++gen_;
     s->mirrorStamp = mirrorStamp_;
     s->legPostPass = legPostPass_;
+    s->gameDraw = gameDraw_;
     if (haveRig_) {
         for (auto& kv : convByName_) {
             int idx = -1;

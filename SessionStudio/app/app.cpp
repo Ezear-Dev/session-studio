@@ -259,8 +259,11 @@ void App::RefreshClips() {
         else if (!ParseClip(text, f, ci.clip, err)) { ci.clip = Clip{}; ci.clip.states = 0; ci.err = err; }
         clips_.push_back(std::move(ci));
     }
+    if (!ReadGameDrawFile(clipsDir_, gameDraw_, gameDrawErr_)) gameDraw_.clear();
+    else gameDrawErr_.clear();
     // clips that would play on the variant shown, in the player's order
     conflicts_.clear();
+    conflictsDraw_ = false;
     struct E { std::string file; const Clip* c; bool me; };
     std::vector<E> es;
     const Clip& me = doc_.clip();
@@ -271,13 +274,22 @@ void App::RefreshClips() {
         if (var_.state == ST_Landing && !var_.trick.empty() && ci.clip.trickHash && ci.clip.link != me.link) continue;
         es.push_back({ci.file, &ci.clip, false});
     }
-    if (es.size() < 2) return;
+    // what takes turns here, with the open clip as it is now (saved or not)
+    std::vector<const Clip*> now{&me};
+    for (auto& ci : clips_) if (ci.err.empty() && ci.file != fileName_) now.push_back(&ci.clip);
+    const FigureDraw draw = DrawFor(now, var_, gameDraw_);
+    if (es.size() + (draw.game ? 1 : 0) < 2) return;
+    conflictsDraw_ = draw.Choices() >= 2;
     std::stable_sort(es.begin(), es.end(), [](const E& a, const E& b) {
         if (a.c->priority != b.c->priority) return a.c->priority > b.c->priority;
         return ClipSpecificity(*a.c) > ClipSpecificity(*b.c);
     });
-    for (size_t i = 0; i < es.size(); i++)
-        conflicts_.push_back(es[i].file + (i == 0 ? "  <- plays" : "") + (es[i].me ? "  [this clip]" : ""));
+    for (size_t i = 0; i < es.size(); i++) {
+        bool in = false;
+        for (int k : draw.clips) in = in || now[k] == es[i].c;
+        conflicts_.push_back(es[i].file + (!in ? "" : conflictsDraw_ ? "  <- in the draw" : "  <- plays") + (es[i].me ? "  [this clip]" : ""));
+    }
+    if (draw.game) conflicts_.push_back("Game animation  <- in the draw");
 }
 
 bool App::ClipTargets(const Clip& c, const FigureVariant& v) const {

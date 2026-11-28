@@ -1,7 +1,7 @@
 # Session Studio: reference for creators
 
 This is the detailed reference. For a first clip, read `Getting-Started.md`.
-Version: mod (SessionAnimLoaderNative) v0.30, clip format `sanim` version 1, Session: Skate Sim Steam build of November 2026.
+Version: mod (SessionAnimLoaderNative) v0.31, clip format `sanim` version 1, Session: Skate Sim Steam build of November 2026.
 
 ---
 
@@ -65,8 +65,28 @@ Every frame, among the enabled clips whose state, stance and feet match:
 3. Then the most specific one: a named trick > feet set > fewer stances.
 4. Then file order.
 
-Browse shows the clip that plays on each variant (variant detail, on the right). **Clip settings** lists the competing
-clips under **Several clips on this variant**.
+**Tricks: random draw** (mod v0.31). At each pop, the clips made for that trick that are on, play on that stance and
+foot and share the highest priority are drawn at random, whatever else they cover (rules 3 and 4 do not choose between
+them). The pick holds until the next pop. The same result never comes out twice in a row for a given trick, stance and
+foot, so two choices take turns. One clip alone always plays, as before. A clip of higher priority plays alone. A clip
+for every trick is never part of a draw (with a higher priority it still plays instead). Ground states are not drawn.
+A landing with a `link` follows the clip that was drawn.
+
+**Game animation** (a row under the clips of a trick, in the Library drawer with "This variant" and in Browse): switched
+on, the game's own animation takes part in that figure's draw, as often as each clip. When it comes out, no clip of yours
+plays on the trick, and no landing made for that trick (with or without a `link`); a landing for every landing still
+plays. It needs at least one clip of the trick that is on. The choice is saved in the clips folder, in `_random.json`:
+
+```json
+{ "gameAnimation": ["KickFlip_RGS_regular"] }
+```
+
+In multiplayer, the other players see what was drawn on your side (they need the same clips, as before). The mod's log
+has one line per draw (`random trick: ...`).
+
+Browse shows what plays on each variant (variant detail, on the right). **Clip settings** lists the clips of the variant
+under **One at random at each pop** (those marked "in the draw" take turns), or **Several clips on this variant** (the
+one marked "plays").
 
 Between two ground poses, the change is cross-faded for at least the size of the pose gap (up to 0.8 s). A trick
 clip's legs are given back to the game after the catch; a landing clip writes the legs again.
@@ -140,8 +160,8 @@ in each bone's local space, the pelvis offset is in cm in component space (Z up)
 - **Browse**: collections on the left (every trick and ground state by category, **My clips**, **Captures**; search
   Ctrl+K; filters **Recorded** and **Has clips**), one card per move with a dot per stance x feet (green = recorded,
   orange centre = one of your clips is on, white ring = the variant being edited), the variant detail on the right
-  (variant grid, which clip plays in game, its clips with an on / off switch, **Animate this variant**, **New clip for
-  this variant**). **My clips** is a sortable table with filters; right-click a clip for open, rename, duplicate, delete.
+  (variant grid, which clip plays in game, its clips with an on / off switch, **Game animation** for a trick, **Animate
+  this variant**, **New clip for this variant**). **My clips** is a sortable table with filters; right-click a clip for open, rename, duplicate, delete.
 - **Animate**: the 3D view with its floating tools (top: Rotate, Pull (IK), Move, local / world rings; top right:
   **Inspector**, **Clip settings**, view options; bottom right: camera), the Inspector card on its right, the timeline
   at the bottom (transport, Auto key, phase ribbon, "Game" row, tracks). Messages about the view sit at the bottom left.

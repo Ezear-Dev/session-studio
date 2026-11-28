@@ -371,7 +371,7 @@ void App::InspectorClip() {
 
     if (doc_.HasLockedTracks()) ImGui::TextColored(kWarn, "This clip has locked bones (kept as they are).");
     if (!conflicts_.empty()) {
-        ImGui::SeparatorText("Several clips on this variant");
+        ImGui::SeparatorText(conflictsDraw_ ? "One at random at each pop" : "Several clips on this variant");
         for (auto& l : conflicts_) ImGui::TextWrapped("%s", l.c_str());
     }
     if (!studio_) ImGui::TextDisabled("Stances, priority, blends, loop, drive:\nStudio mode (... menu at the top right).");

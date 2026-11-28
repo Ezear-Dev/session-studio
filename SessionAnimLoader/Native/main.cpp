@@ -49,7 +49,7 @@ using Lua = RC::LuaMadeSimple::Lua;
 
 namespace {
 
-constexpr int kVersion = 30;
+constexpr int kVersion = 31;
 constexpr int SKM_CST = 0x4b0;    // USkinnedMeshComponent::ComponentSpaceTransformsArray[2] (0x10 apart)
 constexpr int SKM_EDIT = 0x4f0;   // USkinnedMeshComponent::CurrentEditableComponentTransforms
 constexpr int VT_FBT = 0x938;     // FinalizeBoneTransform slot in the skater mesh vtable
@@ -300,6 +300,12 @@ void ApplyPose(uint8_t* mesh) {
     const GameState gs = g_gs[g_gsIdx & 1];
     DiagPre(mesh, gs);
     const int changed = g_player->Apply(arr->data, n, g_lib->Current(), gs, dt);
+    static uint32_t s_draw = 0;   // v0.31: one line per random draw
+    if (g_player->LastDraw().serial != s_draw) {
+        const Player::Draw& d = g_player->LastDraw();
+        s_draw = d.serial;
+        Log("random trick: %s (drawn among %d)", d.game ? "the game's own animation" : d.file, d.choices);
+    }
     DiagStage(1, arr->data);
     if (changed > 0) InterlockedIncrement(&g_applied);
     PublishClipName(g_player->CurrentClipName(), g_player->LayerCount());

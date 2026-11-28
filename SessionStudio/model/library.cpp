@@ -164,3 +164,50 @@ bool CardMatches(const LibCard& c, const LibFilter& f) {
     if (!f.search.empty() && Lower(c.title).find(Lower(f.search)) == std::string::npos) return false;
     return true;
 }
+
+bool HasGameDraw(const std::vector<std::string>& gameKeys, const FigureVariant& v) {
+    if (v.state != ST_Trick) return false;
+    const uint32_t th = TrickHash(v.trick);
+    for (const std::string& k : gameKeys) {
+        DrawSlot s;
+        if (DrawSlotOf(k, s) && s.trickHash == th && s.stance == v.stance && s.goofy == v.goofy) return true;
+    }
+    return false;
+}
+
+FigureDraw DrawFor(const std::vector<const Clip*>& clips, const FigureVariant& v, const std::vector<std::string>& gameKeys) {
+    FigureDraw d;
+    auto one = [&](int i) {
+        if (i >= 0) d.clips.push_back(i);
+    };
+    if (v.state == ST_Trick && !v.trick.empty()) {
+        const Clip* pool[kMaxDraw];
+        const int n = TrickPool((int)clips.size(), [&](int i) { return clips[i]; }, TrickHash(v.trick), v.stance, v.goofy, pool, kMaxDraw);
+        for (int k = 0; k < n; k++)
+            for (int i = 0; i < (int)clips.size(); i++)
+                if (clips[i] == pool[k]) { d.clips.push_back(i); break; }
+        d.game = n > 0 && HasGameDraw(gameKeys, v);
+        if (n == 0) one(PlayingClip(clips, v));
+        return d;
+    }
+    if (v.state == ST_Landing && !v.trick.empty()) {   // the landings that follow the trick clips of the draw
+        FigureVariant tv = v;
+        tv.state = ST_Trick;
+        const FigureDraw trick = DrawFor(clips, tv, gameKeys);
+        for (int t : trick.clips) {
+            int best = -1;
+            for (int i = 0; i < (int)clips.size(); i++) {
+                const Clip* c = clips[i];
+                if (!c || !c->enabled || !ClipPlaysOn(*c, v) || (c->trickHash && c->link != clips[t]->link)) continue;
+                if (best < 0 || c->priority > clips[best]->priority ||
+                    (c->priority == clips[best]->priority && ClipSpecificity(*c) > ClipSpecificity(*clips[best]))) best = i;
+            }
+            if (best >= 0 && std::find(d.clips.begin(), d.clips.end(), best) == d.clips.end()) d.clips.push_back(best);
+        }
+        std::sort(d.clips.begin(), d.clips.end());
+        if (trick.clips.empty()) one(PlayingClip(clips, v));
+        return d;
+    }
+    one(PlayingClip(clips, v));
+    return d;
+}

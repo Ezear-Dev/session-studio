@@ -294,6 +294,16 @@ Important steps, technical decisions, problems and their solutions. Current stat
   to the original, install and uninstall on a made-up game folder. v0.30 of the mod was not tried in game before the
   release as far as the agent knows. To fix later: the `--selftest` line about `body.glb` without a skeleton.
 
+- Same day, v0.31: random draw between the clips of a trick. The owner asked for few new buttons: the existing clip
+  switches define the draw; the only new control is a **Game animation** row among the clips (owner's choice over
+  "always in the draw"). Choices made by the agent and told to the owner: never the same result twice in a row (so two
+  choices alternate), top priority only, an "every trick" clip is never drawn, when the game's animation comes out no
+  landing of that trick plays. The draw is made once per pop in the player (never in `Choose`) and remembered by file
+  name; the setting is a new file, `_random.json`, so clips and `_studio.json` are untouched.
+
+- v0.31 installed on the owner's game and tried the same day (normal stance, regular): "it works". The log of the run
+  shows 32 draws without an immediate repeat. Multiplayer, goofy and other stances not tried.
+
 ## Gaps in this history
 
 - No Git history before 2026-11-26: intermediate source states exist only as local zip backups in `_archive/backups/`.

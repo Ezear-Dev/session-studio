@@ -1,4 +1,4 @@
-// The clip library: reads Mods\SessionAnimLoader\clips\*.sanim (+ _studio.json), keeps the last good version of
+// The clip library: reads Mods\SessionAnimLoader\clips\*.sanim (+ _studio.json, _random.json), keeps the last good version of
 // each file, binds the clips to the skeleton and publishes a read-only ClipSet by atomic swap.
 // Scan() and SetRig(): game thread (called by the Lua). Current(): any thread (the FBT hook).
 #pragma once
@@ -52,6 +52,9 @@ private:
     std::map<std::string, int> convByName_;      // _studio.json "mirrorConv"
     uint64_t mirrorStamp_ = 0;
     bool legPostPass_ = true;                     // P6 : _studio.json "legPostPass"
+    uint64_t drawHash_ = 0;                       // v0.31: content of _random.json
+    bool drawSeen_ = false;
+    std::vector<DrawSlot> gameDraw_;
     uint64_t clipStamp_ = 0;                      // content version counter (Clip::stamp)
     uint64_t gen_ = 0;
     std::atomic<ClipSet*> cur_{nullptr};

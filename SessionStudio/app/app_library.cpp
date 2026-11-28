@@ -244,6 +244,7 @@ void App::LibraryClips() {
         ImGui::Dummy(ImVec2(0, fs * 0.15f));
         ImGui::PopID();
     }
+    if (!clipsAll_ && ShownVar().state == ST_Trick) GameDrawRow(ShownVar(), DrawFor(ClipPtrs(), ShownVar(), gameDraw_));
     if (!shown) {
         ImGui::PushTextWrapPos(0.f);
         ImGui::TextColored(theme::Text2, "%s", clipsAll_ ? "No clip in the game folder." : "No clip for this variant yet. \"+ New clip\" makes one; Ctrl+S saves it into the game.");
@@ -252,6 +253,39 @@ void App::LibraryClips() {
     ImGui::Spacing();
     ImGui::TextColored(theme::Text3, "%s", "Delete moves the file to the backups.");
     ImGui::EndChild();
+}
+
+// v0.31: the clips of a trick that are on take turns at random; this row lets the game's own animation join them. Drawn
+// like a clip row (same switch), under the clips of the figure, in the drawer and in Browse
+void App::GameDrawRow(const FigureVariant& v, const FigureDraw& d) {
+    const float fs = ImGui::GetFontSize();
+    ImGui::PushID("##gamedraw");
+    const bool chosen = HasGameDraw(gameDraw_, v);
+    bool on = chosen;
+    ImGui::BeginDisabled(!gameDrawErr_.empty());
+    if (ui::Switch("##on", &on)) ToggleGameDraw(v, on);
+    ImGui::EndDisabled();
+    const char* tip = "On: the game's own animation is drawn too, as often as each clip that is on.\nWhen it comes out, no clip of yours plays on the trick, and no landing of these clips.";
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tip);
+    ImGui::SameLine();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(chosen ? theme::Text : theme::Text3, "%s", "Game animation");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tip);
+    ImGui::PushTextWrapPos(0.f);
+    if (!gameDrawErr_.empty()) ImGui::TextColored(theme::Warn, "%s", gameDrawErr_.c_str());
+    else if (chosen && !d.game) ImGui::TextColored(theme::Text3, "%s", "Switch on a clip of this trick to draw between them.");
+    else if (d.Choices() >= 2) ImGui::TextColored(theme::Accent, "At each pop, one of %d is drawn at random, never the same twice in a row.", d.Choices());
+    ImGui::PopTextWrapPos();
+    ImGui::Dummy(ImVec2(0, fs * 0.15f));
+    ImGui::PopID();
+}
+
+void App::ToggleGameDraw(const FigureVariant& v, bool on) {
+    std::string err;
+    if (!SetGameDrawFile(clipsDir_, v, on, err)) { Status(err); return; }
+    ReadGameDrawFile(clipsDir_, gameDraw_, gameDrawErr_);
+    scanAge_ = 99.f;
+    Status(on ? "the game's own animation joins the draw of this trick" : "the game's own animation is out of the draw of this trick");
 }
 
 void App::LibraryCaptures() {

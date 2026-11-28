@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "../../SessionAnimLoader/Native/src/random_draw.h"
 
 // ------------------------------------------------------------------ settings
 // Text format: one "key=value" per line; other lines are kept as they are.
@@ -81,6 +82,10 @@ std::string UniqueClipName(const std::wstring& dir, const std::string& stem, con
 // Moves a file into <root>\<stem>\<stem>_<tag>_<stamp>.sanim (recoverable delete). false with err.
 bool MoveToBackups(const std::wstring& path, const std::wstring& root, const std::string& tag, const std::string& stamp,
                    std::wstring* dest, std::string& err);
+// v0.31 <clips>\_random.json (random_draw.h). Read: true with no keys when there is no file; false (err) if unreadable
+bool ReadGameDrawFile(const std::wstring& clipsDir, std::vector<std::string>& keys, std::string& err);
+// puts the game's own animation in the draw of the figure v, or takes it out. An unreadable file is never replaced
+bool SetGameDrawFile(const std::wstring& clipsDir, const FigureVariant& v, bool on, std::string& err);
 // Rewrites a clip file with another "enabled" (parse -> change -> ClipToJson: nothing else changes). The previous
 // version goes to the backups first. false with err.
 bool SetClipEnabledFile(const std::wstring& path, bool enabled, const std::wstring& backupRoot, std::string& err);

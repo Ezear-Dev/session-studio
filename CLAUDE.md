@@ -7,7 +7,7 @@ rollback paths. If documents and code disagree, **trust the code and tell the us
 ## 1. What the project is
 
 Animation tools for the game **Session: Skate Sim** (Unreal Engine 4.27, Windows, Steam). Unofficial fan project,
-public GitHub repository, GPL-3.0, first release `v0.28` published 2026-11-27, then `v0.29` the same day; `v0.30` prepared 2026-11-28 (check the Releases page). Never change the repository's visibility unasked.
+public GitHub repository, GPL-3.0, first release `v0.28` published 2026-11-27, then `v0.29` the same day; `v0.30` published 2026-11-28; `v0.31` (random trick draw) built the same day (check the Releases page). Never change the repository's visibility unasked.
 
 | Part | Folder | In the game's `Win64\Mods` | Role |
 |---|---|---|---|
@@ -32,7 +32,7 @@ DLL ──writes──► SessionAnimLoader.native.log ──parsed by──► 
 - `SessionAnimLoader/Native/src/` = **pure logic, no UE4SS** (static lib `asn_core`): clip format and evaluation
   (`clip`), clip set and selection (`clipset`, `player`), states and tricks (`trick`), mirror, pelvis offset, step
   cycle (`cycle`), landing sync (`trick_sync`), landing hold, figure recording (`figure`, `capture`), network wire
-  (`net`), JSON, math, skeleton.
+  (`net`), random trick draw (`random_draw`), JSON, math, skeleton.
 - `SessionAnimLoader/Native/main.cpp` = the only file that touches the game: vtable hook, chaining behind
   ExpandedTricks, `ASN_*` Lua functions, `kVersion`.
 - `SessionStudio/model/` = **editor logic without interface** (static lib `asn_editor`, links `asn_core`): `EditorDoc`
@@ -162,6 +162,10 @@ creator gains.
   `play.legsAfterCatch` (v0.28).
 - The 3D mannequin's shoe soles come from the skeleton's reference toe offset (sole up = foot bone X), never from a
   recorded pose.
+- **Random draw** (v0.31, owner's choice): the clips of one trick that are on (same stance and foot, top priority) are
+  drawn once per pop in `Player::DrawTrick`, never the same twice in a row; `clips\_random.json` (written by the
+  editor) adds the game's own animation per figure. The pool rule lives once, in `src/random_draw.h` (`TrickPool`),
+  for the player and the editor. No randomness inside `Player::Choose` (it runs every frame).
 - A trick clip and **its own** landing clip share the field `link` (v0.29): in game a linked landing plays only after
   that trick clip. Never pick a landing by trick name alone (`model/library.h`: `LandingForTrick`, `LandingsOfTrick`).
 - Replay = `CustomMovementMode == 6`: the mod stands by (the replay already records our layer).

@@ -10,6 +10,7 @@
 #include "pelvis.h"
 #include "cycle.h"
 #include "net.h"
+#include "random_draw.h"
 
 struct GameState {
     bool manual, noseManual, goofy, sw; float manualRatio;
@@ -46,10 +47,12 @@ struct ClipSet {
     std::vector<std::pair<int, int>> convOverride;   // _studio.json "mirrorConv" : (index d'os, convention)
     uint64_t mirrorStamp = 0;                        // changes when the mirror overrides change
     bool legPostPass = true;                         // P6: _studio.json "legPostPass" (leg post pass after the other mods)
+    std::vector<DrawSlot> gameDraw;                  // v0.31: _random.json: figures whose draw holds the game's own animation
 };
 
 class Player {
 public:
+    Player();
     static constexpr int kMaxBones = 256;
     static constexpr int kMaxLayers = 4;
 
@@ -100,6 +103,10 @@ public:
     int LayerCount() const { return nLayers_; }
     float RemoteTime(int i) const { return i >= 0 && i < nLayers_ ? layers_[i].tFixed : -1.f; }   // tests
     int RigBones() const { return n_; }
+    // v0.31 random draw of trick clips: the seed (tests), and the last draw made among 2 or more (log)
+    struct Draw { uint32_t serial = 0; int choices = 0; bool game = false; char file[260] = {}; };
+    void SetSeed(uint64_t seed) { rng_ = seed; }
+    const Draw& LastDraw() const { return draw_; }
     const CycleTracker& Cycle() const { return cyc_; }   // 2026-11-25: the game's step cycle (journal)
 
 private:
@@ -132,6 +139,9 @@ private:
         float tFixed, wFixed, legFixed;           // remote layer (ApplyRemote): fixed time / final weight / leg weight; -1 = local
     };
     static uint64_t LinkHash(const std::string& link);
+    static constexpr uint64_t kGameLink = ~0ull;   // v0.31: the game's own animation was drawn: no clip's landing
+    void DrawTrick(const ClipSet& set, const GameState& gs);
+    uint64_t Random();
     int BlendLayers(FTr* cs, const ClipSet* set, const GameState& gs, float dt, bool newPop, bool remote);
     void Rebind(const ClipSet* set);
     int FindLiveLayer(const Clip* c, bool mirrored, bool dis = false) const;
@@ -181,6 +191,17 @@ private:
     float postP_[kMaxBones][3] = {};
     PelvisRig rig_;                  // P6 lot 2
     CycleTracker cyc_;               // 2026-11-25: game's step cycle, fed with the game's feet every frame
+    // v0.31: what was drawn for the current pop. A file name, never a pointer: the set may be read again in mid-trick
+    enum class Pick { Rule, Clip, Game };   // Rule: nothing to draw, the usual selection
+    Pick pick_ = Pick::Rule;
+    char pickFile_[260] = {};
+    bool drawn_ = false;
+    struct Turn { uint64_t figure = 0, last = 0; };   // the previous draw of a figure: not twice in a row
+    static constexpr int kMaxTurns = 64;
+    Turn turns_[kMaxTurns] = {};
+    int nTurns_ = 0, nextTurn_ = 0;
+    uint64_t rng_ = 0;
+    Draw draw_;
     float legW_ = 1.f;
     uint32_t pop_ = 0;
     bool havePop_ = false;

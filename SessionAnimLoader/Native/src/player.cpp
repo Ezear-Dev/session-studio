@@ -1,4 +1,5 @@
 #include "player.h"
+#include <chrono>
 #include <cmath>
 #include <cstring>
 
@@ -15,6 +16,49 @@ float Toward(float v, float target, float step) {
     return v;
 }
 } // namespace
+
+Player::Player() {   // a different order every time the game starts
+    rng_ = (uint64_t)std::chrono::steady_clock::now().time_since_epoch().count() ^ (uint64_t)(uintptr_t)this;
+}
+
+uint64_t Player::Random() {   // splitmix64
+    uint64_t z = (rng_ += 0x9E3779B97F4A7C15ull);
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+    return z ^ (z >> 31);
+}
+
+// v0.31: at the pop, one of the trick clips that are on for this figure, or the game's own animation if the figure has
+// it. Never the same result twice in a row (with two choices they take turns). Called from the pose hook: no allocation
+void Player::DrawTrick(const ClipSet& set, const GameState& gs) {
+    const uint32_t th = gs.trickHash ? gs.trickHash : TrickHash("KickFlip");
+    const Clip* pool[kMaxDraw];
+    const int n = TrickPool((int)set.clips.size(), [&](int i) { return &set.clips[i]; }, th, gs.stance, gs.goofy, pool, kMaxDraw);
+    if (n == 0) return;
+    bool game = false;
+    for (const DrawSlot& s : set.gameDraw) game = game || (s.trickHash == th && s.stance == gs.stance && s.goofy == gs.goofy);
+    const int total = n + (game ? 1 : 0);
+    if (total < 2) return;
+    auto id = [&](int i) -> uint64_t { return i < n ? LinkHash(pool[i]->file) : kGameLink; };
+    const uint64_t figure = ((uint64_t)th << 8) | ((uint64_t)gs.stance << 1) | (gs.goofy ? 1u : 0u);
+    Turn* turn = nullptr;
+    for (int i = 0; i < nTurns_; i++) if (turns_[i].figure == figure) turn = &turns_[i];
+    int last = -1;
+    if (turn) for (int i = 0; i < total; i++) if (id(i) == turn->last) last = i;
+    int r = (int)(Random() % (uint64_t)(last >= 0 ? total - 1 : total));
+    if (last >= 0 && r >= last) r++;
+    if (!turn) {
+        turn = nTurns_ < kMaxTurns ? &turns_[nTurns_++] : &turns_[nextTurn_++ % kMaxTurns];
+        turn->figure = figure;
+    }
+    turn->last = id(r);
+    pick_ = r < n ? Pick::Clip : Pick::Game;
+    strncpy_s(pickFile_, r < n ? pool[r]->file.c_str() : "", _TRUNCATE);
+    draw_.serial++;
+    draw_.choices = total;
+    draw_.game = pick_ == Pick::Game;
+    strncpy_s(draw_.file, pickFile_, _TRUNCATE);
+}
 
 void Player::SetRig(const int* parent, int n, MirrorMap map) {
     if (n < 0) n = 0;
@@ -41,6 +85,8 @@ void Player::SetRig(const int* parent, int n, MirrorMap map) {
     prevKick_ = false;
     lastRide_[0] = 0;
     prevDis_ = disOn_ = false;
+    drawn_ = false;
+    pick_ = Pick::Rule;
 }
 
 void Player::SetLegBones(const std::vector<bool>& isLeg) {
@@ -184,6 +230,8 @@ int Player::Apply(FTr* cs, int n, const ClipSet* set, const GameState& gs, float
     pop_ = gs.popSerial;
     if (newPop) {
         trickLink_ = 0;
+        drawn_ = false;
+        pick_ = Pick::Rule;
         legW_ = 1.f;
         trickDone_ = false;
         for (int i = 0; i < nLayers_; i++) {   // live trick layers leave frozen: the new one starts from 0
@@ -211,6 +259,11 @@ int Player::Apply(FTr* cs, int n, const ClipSet* set, const GameState& gs, float
         if (L.clip && L.trick && L.target > 0.f && L.tPlay >= L.clip->duration) trickDone_ = true;
     }
 
+    if (gs.kickflip && !drawn_ && set) {   // v0.31: once per pop
+        drawn_ = true;
+        DrawTrick(*set, gs);
+    }
+    if (gs.kickflip && pick_ == Pick::Game) trickLink_ = kGameLink;
     // winning clip; during a trick, a clip of that trick comes before the others (e.g. pop from a manual)
     const Clip* win = Choose(set, gs, gs.kickflip);
     // (a clip for "every trick" has no landing of its own: it never changes which landing plays)
@@ -593,11 +646,13 @@ const Clip* Player::Choose(const ClipSet* set, const GameState& gs, bool trickOn
         return ClipSpecificity(c) > ClipSpecificity(*w);
     };
     const Clip* win = nullptr;
-    if (trickOn) for (auto& c : set->clips) {
-        if (!c.enabled || c.foreign || !(c.states & ST_Trick) || !feetOk(c) || !(c.stances & trickStance)) continue;
-        if (c.trickHash && c.trickHash != th) continue;
-        if (better(c, win)) win = &c;
-    }
+    auto trickOk = [&](const Clip& c) {
+        return c.enabled && !c.foreign && (c.states & ST_Trick) && feetOk(c) && (c.stances & trickStance) && (!c.trickHash || c.trickHash == th);
+    };
+    // v0.31: the clip drawn for this pop (if it was switched off or removed meanwhile, the usual rule takes over);
+    // the game's own animation drawn: no trick clip at all
+    if (trickOn && pick_ == Pick::Clip) for (auto& c : set->clips) if (c.file == pickFile_ && trickOk(c)) return &c;
+    if (trickOn && pick_ != Pick::Game) for (auto& c : set->clips) if (trickOk(c) && better(c, win)) win = &c;
     if (win) return win;
     const uint8_t landStance = (uint8_t)(1u << (gs.landStance >= 0 && gs.landStance < STANCE_Count ? gs.landStance : 0));
     auto pick = [&](uint32_t want, uint8_t stances) {

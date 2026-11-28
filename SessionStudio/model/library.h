@@ -5,12 +5,23 @@
 #include <string>
 #include <vector>
 #include "../../SessionAnimLoader/Native/src/clip.h"
+#include "../../SessionAnimLoader/Native/src/random_draw.h"
 #include "../../SessionAnimLoader/Native/src/trick.h"
 
 // clip c plays on variant v: its state, its trick (or grind) name, the stance and the feet match
 bool ClipPlaysOn(const Clip& c, const FigureVariant& v);
 // among clips, the one the game plays on v (enabled ones; higher priority first, then the more specific); -1: none
 int PlayingClip(const std::vector<const Clip*>& clips, const FigureVariant& v);
+// v0.31: what takes turns on v in game: indexes of the clips (one: it plays alone; none: the game's own animation) and
+// whether the game's own animation is in the draw too (gameKeys: _random.json, see random_draw.h)
+struct FigureDraw {
+    std::vector<int> clips;
+    bool game = false;
+    int Choices() const { return (int)clips.size() + (game ? 1 : 0); }
+};
+FigureDraw DrawFor(const std::vector<const Clip*>& clips, const FigureVariant& v, const std::vector<std::string>& gameKeys);
+// the user put the game's own animation in the draw of the figure v
+bool HasGameDraw(const std::vector<std::string>& gameKeys, const FigureVariant& v);
 // the clip to open when the user picks v: the one that plays, else the first one made for v (even off); -1: none
 int ClipToOpen(const std::vector<const Clip*>& clips, const FigureVariant& v);
 

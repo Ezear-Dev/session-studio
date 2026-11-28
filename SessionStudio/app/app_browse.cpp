@@ -372,13 +372,16 @@ void App::BrowseDetail(const LibCard& card, const FigureVariant& cur, const std:
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("The next time you do this move in game, its movement is recorded again.");
     } else ImGui::TextColored(theme::Warn, "Do it once in game: the mod records it by itself.");
     {
-        const int pl = PlayingClip(clipPtrs, v);
-        std::string who = "the game's own animation";
-        if (pl >= 0) for (auto& ci : clips_) if (&ci.clip == clipPtrs[pl]) who = ci.file;
+        const FigureDraw d = DrawFor(clipPtrs, v, gameDraw_);
+        std::string who;
+        for (int k : d.clips)
+            for (auto& ci : clips_) if (&ci.clip == clipPtrs[k]) who += (who.empty() ? "" : ", ") + ci.file;
+        if (d.game) who += ", the game's own animation";
+        if (who.empty()) who = "the game's own animation";
         ImGui::PushTextWrapPos(0.f);
-        ImGui::TextColored(theme::Text2, "Plays in game: %s", who.c_str());
+        ImGui::TextColored(theme::Text2, "%s: %s", d.Choices() >= 2 ? "Plays in game, one at random" : "Plays in game", who.c_str());
         ImGui::PopTextWrapPos();
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Among your clips that are on for this variant, the one the game plays\n(higher priority first, then the more specific). Saved files only.");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Among your clips that are on for this variant, those the game plays\n(higher priority first). Several clips of a trick take turns at random. Saved files only.");
     }
     ImGui::Spacing();
     // its clips
@@ -409,6 +412,7 @@ void App::BrowseDetail(const LibCard& card, const FigureVariant& cur, const std:
         ImGui::PopID();
     }
     if (!listed) ImGui::TextColored(theme::Text3, "%s", "No clip of yours for this variant yet.");
+    else if (v.state == ST_Trick) GameDrawRow(v, DrawFor(clipPtrs, v, gameDraw_));
     ImGui::Spacing();
     ImGui::Spacing();
     if (ui::Button("Animate this variant", ui::Kind::Primary, ImVec2(-1, ImGui::GetFrameHeight() * 1.3f))) AnimateVariant(v, false);

@@ -404,3 +404,37 @@ bool ClipHasNoEffect(const Clip& c) {
     for (auto& p : c.pelvis) if (std::fabs(p.v[0]) > 0.1f || std::fabs(p.v[1]) > 0.1f || std::fabs(p.v[2]) > 0.1f) return false;
     return true;
 }
+
+// ------------------------------------------------------------------ v0.31: the random draw settings
+bool ReadGameDrawFile(const std::wstring& clipsDir, std::vector<std::string>& keys, std::string& err) {
+    const std::wstring path = clipsDir + L"\\" + Widen(kGameDrawFile);
+    if (!Exists(path)) { keys.clear(); return true; }
+    std::string text;
+    if (!ReadAll(path, text)) { err = "cannot read _random.json (file open elsewhere?)"; return false; }
+    if (!ParseGameDraw(text, keys, err)) { err = "_random.json is unreadable (" + err + "): fix or delete it"; return false; }
+    return true;
+}
+
+bool SetGameDrawFile(const std::wstring& clipsDir, const FigureVariant& v, bool on, std::string& err) {
+    std::vector<std::string> keys;
+    if (!ReadGameDrawFile(clipsDir, keys, err)) return false;
+    DrawSlot want;
+    if (!DrawSlotOf(FigureKey(v), want)) { err = "only tricks have a random draw"; return false; }
+    bool there = false;
+    for (size_t i = keys.size(); i-- > 0;) {
+        DrawSlot s;
+        if (!DrawSlotOf(keys[i], s) || s.trickHash != want.trickHash || s.stance != want.stance || s.goofy != want.goofy) continue;
+        there = true;
+        if (!on) keys.erase(keys.begin() + (long long)i);
+    }
+    if (there == on) return true;
+    if (on) keys.push_back(FigureKey(v));
+    const std::wstring path = clipsDir + L"\\" + Widen(kGameDrawFile), tmp = path + L".tmp";
+    // written aside then moved: the mod reads the folder every second and must never see half a file
+    if (!WriteAll(tmp, GameDrawToJson(keys)) || !MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+        DeleteFileW(tmp.c_str());
+        err = "cannot write _random.json (file open elsewhere?)";
+        return false;
+    }
+    return true;
+}

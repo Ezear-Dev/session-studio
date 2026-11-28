@@ -15,6 +15,7 @@
 #include "body_model.h"
 #include "board_mesh.h"
 #include "two_part_time.h"
+#include "library.h"
 #include <memory>
 
 struct ID3D11Device;
@@ -81,6 +82,11 @@ private:
     void LibraryCaptures();
     void ClipMenuItems(const std::string& file, bool capture);   // Open / Enable / Rename / Duplicate / Delete
     void ToggleClipEnabled(const std::string& file, bool on);
+    // v0.31: the random draw of a trick figure. The row "Game animation", listed and switched like a clip
+    void GameDrawRow(const FigureVariant& v, const FigureDraw& d);
+    void ToggleGameDraw(const FigureVariant& v, bool on);
+    std::vector<std::string> gameDraw_;   // _random.json, read with the clips
+    std::string gameDrawErr_;             // why it cannot be read ("": fine)
     void DuplicateClip(const std::string& file);
     void RenameClip(const std::string& file, const std::string& newName);
     void DeleteClip(const std::string& file);
@@ -217,6 +223,7 @@ private:
     std::string fileName_;                // .sanim opened or saved ("" = new)
     std::string savedText_;               // text at the last save / open (for "modified")
     std::vector<std::string> conflicts_;
+    bool conflictsDraw_ = false;          // they take turns at random (v0.31)
     float scanAge_ = 99.f;
 
     int sel_ = -1;

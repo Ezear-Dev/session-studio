@@ -11,6 +11,27 @@ was checked for each); the v0.24 results below still describe what was checked i
 - **CODE** — present in the code, no user test result found in the notes.
 - **✘** — tried and did not work, or parked.
 
+## 000. Mod v0.31: random draw between the clips of a trick (2026-11-28, not released)
+
+Asked by the owner: pick one of several kickflips, or the game's own, at random. The clip switches already in the editor
+make the draw; one row, **Game animation**, adds the game's own animation per trick, stance and foot
+(`clips\_random.json`). Rules in `SessionStudio/docs/Reference.md`, "Which clip plays". No change to the clip format or
+the multiplayer wire format. **Changes behaviour** for a folder with several clips on for one trick: they now take turns.
+
+| Item | State | Evidence |
+|---|---|---|
+| Draw once per pop, no repeat, priority, landing follows, game animation, settings file | OFFLINE ✔ | `test_random_trick.cpp` |
+| Same draw shown by the editor; settings written safely | OFFLINE ✔ (logic only) | same file |
+| Installed on the owner's game | DLL and Lua v0.31 copied over the v0.29 ones, hashes equal to the build; previous files and the clips backed up in `_archive/installed-before-v0.31` | 2026-11-28, game and editor closed |
+| In game, normal stance, regular | GAME ✔: the owner reports it works | owner, 2026-11-28; mod log: 32 draws (30 KickFlip among 4 clips + the game's animation, which came out 6 times; 2 Treflip), never the same result twice in a row for a trick, no error line |
+| Not checked item by item | the owner gave one overall verdict: nothing said apart about each landing, the editor texts or the Treflip turns | |
+| Multiplayer, goofy, other stances | **not tried** | |
+
+Offline run of the day: 2 checks fail in `test_board_mesh.cpp` (`board_and_shoes_on_the_real_figures`, which reads the
+real recordings of this PC): failing since the first test run of this task, before any change of behaviour (only empty
+declarations had been added). The previous task ended with ALL PASS; the recordings may have changed since. Cause not
+investigated.
+
 ## 00. Mod v0.30: skinned body model in the editor, no red shoulder alert (2026-11-28)
 
 The 3D view draws a skinned model from `body.glb` next to `SessionStudio.exe` when there is one; otherwise (or if it

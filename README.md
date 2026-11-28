@@ -3,16 +3,16 @@
 Animation tools for **Session: Skate Sim**. Adjust your skater's pose in an editor, save, and the game plays it right
 away, without restarting. The game's files are not changed.
 
-This is an unofficial fan project, work in progress (version **v0.30**).
+This is an unofficial fan project, work in progress (version **v0.31**).
 
-> [!WARNING]
-> **Keep only one clip switched on per trick** (same stance and foot). The editor lets you switch on several variants
-> of the same trick, but Session Anim Loader **cannot play them at random or one after another yet**: it always plays
-> the same one. In the **Clips** list, check that only the clip you want is on, and switch the others off.
+> [!NOTE]
+> **Several clips switched on for the same trick** (same stance and foot) are drawn at random at each pop, never the
+> same one twice in a row. Each keeps its own landing. In the clip list, switch **Game animation** on to let the game's
+> own animation join the draw. Switch off the clips you do not want to see.
 
 ## How to install
 
-1. Download `SessionStudio-v0.30.zip` from this repository's **Releases** page.
+1. Download `SessionStudio-v0.31.zip` from this repository's **Releases** page.
 2. Extract the whole zip, close the game, and double-click **INSTALLER.cmd**.
 3. Start the game, then open Session Studio.
 
