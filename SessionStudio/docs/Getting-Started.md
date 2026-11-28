@@ -140,7 +140,7 @@ The person who receives it needs the mod installed (part 1), not the editor. The
 - Walking and running: in progress, with known issues.
 - Powerslide: not checked yet.
 - The editor shows a mannequin, not the skater's real body. An arm twisted or raised very high can crush the shoulder in
-  game: the editor marks it in red, and the "Fix the shoulder" button helps.
+  game: the editor does not warn you, so check it in game. The "Fix the shoulder" button helps.
 - A game update can stop the mod from hooking in. It then refuses without breaking anything, and the game pill shows it.
 
 ---

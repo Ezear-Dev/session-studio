@@ -11,6 +11,28 @@ was checked for each); the v0.24 results below still describe what was checked i
 - **CODE** — present in the code, no user test result found in the notes.
 - **✘** — tried and did not work, or parked.
 
+## 00. Editor: optional skinned body model (2026-11-28, not released)
+
+The 3D view draws a skinned model from `body.glb` next to `SessionStudio.exe` when there is one; otherwise (or if it
+does not fit the skeleton) the generated mannequin, as before. Each part of the model has a flat colour picked from
+words in its material name (skin, top, trousers, cap, hair and eyes; anything else light grey); selection and locked
+parts are tints over it. The red shoulder alert is removed (owner, 2026-11-28): no red tint, no red lines, plain
+inspector figures; "Fix the shoulder" and the automatic natural shoulder stay. The twist stripe colours the surface of the selected limb facing the bone's
++Y (it looks ragged). No textures. Mod, clip format and version are unchanged.
+
+| Item | State | Evidence |
+|---|---|---|
+| Reading, matching bones, skinning, colours, stripe, refusals | OFFLINE ✔ | `test_body_model.cpp` (tiny model built by the test); `test.cmd` ALL PASS (19297 checks) |
+| Fit with the recorded skeleton | 70 joints matched, 34689 vertices, 55616 triangles; standing recording from -0.2 to 179.9 cm; 1.25 ms of skinning per frame | `asn_tests --check-body` on the owner's file, this PC |
+| Editor | `build.cmd` exit 0; `--selftest` without the file, with a broken one and with the real one | 2026-11-28 |
+| Shown in the 3D view (first version, one clay colour) | the owner saw it in the editor and liked it | owner's screenshot, 2026-11-28 |
+| Part colours in the 3D view; stripe, tints, joints under clothes, goofy, speed while editing | **not verified** in the editor (colours drawn offline only) | waiting for the owner's test |
+| Release package | **not included** (`make-release.ps1` unchanged) | packaging waits for the owner's approval |
+
+The model was given to the owner by the game's developers, who allow redistributing it (owner's statement, 2026-11-28;
+no written text is in the project). Before shipping it: credit text and conditions, whether this covers every part of the
+file, and a notice keeping it outside the GPL. `*.glb` stays out of Git.
+
 ## 0. Mod v0.29: one landing per trick clip (2026-11-27, after the v0.28 release)
 
 User report: deleting a clip left its landing; "3 kickflip clips = 3 landing clips". Cause: no link between the two

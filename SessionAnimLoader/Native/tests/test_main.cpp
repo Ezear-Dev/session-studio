@@ -1,6 +1,7 @@
 // asn_tests: tests outside the game of the SessionAnimLoaderNative logic.
 //   asn_tests                      -> runs every test
 //   asn_tests --check-clips <dir>  -> loads a clips folder with the reference skeleton
+//   asn_tests --check-body <glb> <clips dir> -> reports on an editor body model (body_model)
 #include "check.h"
 #include <cstring>
 
@@ -12,7 +13,10 @@ int ShoulderMain(const char* dir, const char* clip, bool fix);   // test_shoulde
 int ReplayStatesMain(const char* dir, const char* log, const char* from, const char* to);   // replay_states.cpp
 int ConvertLandingMain(const char* dir, bool apply);   // convert_landing.cpp (2026-11-25 landing sync)
 
+int CheckBodyMain(const char* glbPath, const char* clipsDir);   // test_body_model.cpp
+
 int main(int argc, char** argv) {
+    if (argc >= 4 && std::strcmp(argv[1], "--check-body") == 0) return CheckBodyMain(argv[2], argv[3]);
     if (argc >= 3 && std::strcmp(argv[1], "--check-clips") == 0) return CheckClipsMain(argv[2]);
     if (argc >= 3 && std::strcmp(argv[1], "--write-test-data") == 0) return WriteTestDataMain(argv[2]);
     if (argc >= 4 && std::strcmp(argv[1], "--shoulder") == 0) return ShoulderMain(argv[2], argv[3], argc >= 5 && std::strcmp(argv[4], "--fix") == 0);

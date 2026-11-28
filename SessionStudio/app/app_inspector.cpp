@@ -130,10 +130,10 @@ void App::InspectorSelection() {
             const int side = doc_.ArmSide(sel_);
             const EditorDoc::ShoulderInfo sh = doc_.Shoulder(side, t_);
             if (sh.ok) {
-                const ImVec4 col = sh.warn ? theme::Bad : theme::Good;
-                ImGui::TextColored(col, "%sshoulder: arm raised %.0f°, twist %+.0f° (forearm %+.0f°), clavicle %+.0f°",
-                                   sh.warn ? "! " : "", sh.elevation, sh.twistUpper, sh.twistFore, sh.clavRaise);
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("The game's body has no twist bones: an arm raised very high by the shoulder alone,\nor twisted on itself, crushes the shoulder's skin in game (the editor only shows bones).\nRed: risk of deformation.");
+                // 2026-11-28 (user): no red alert on the shoulder, here or in the 3D view: the figures only
+                ImGui::TextColored(theme::Text2, "shoulder: arm raised %.0f°, twist %+.0f° (forearm %+.0f°), clavicle %+.0f°",
+                                   sh.elevation, sh.twistUpper, sh.twistFore, sh.clavRaise);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("The game's body has no twist bones: an arm raised very high by the shoulder alone,\nor twisted on itself, can crush the shoulder's skin in game: check it there.");
                 if (ImGui::Button("Fix the shoulder")) {
                     const EditorDoc::State st = doc_.SaveState();
                     if (doc_.FixShoulder(side, t_, true, true)) { doc_.CheckpointState(st, "fix the shoulder"); CommitKeyNow(true); Status("shoulder fixed: the clavicle rises, the arm twists less, the hand stays in place"); }

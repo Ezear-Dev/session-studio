@@ -160,8 +160,9 @@ in each bone's local space, the pelvis offset is in cm in component space (Z up)
 - **Pull (IK)** on hand, elbow, shoulder, foot, knee; "chest follows the hand" (off by default); elbow / knee swivel slider.
 - **Rotate** with local or world rings; precise pitch / yaw / roll in Studio mode.
 - **Pelvis**: offset with the feet kept planted; the legs bend or stretch (limited to their reach).
-- **Shoulder check**: the game mesh has no twist bones; red arm = risk of a crushed shoulder; **Fix the shoulder** moves
-  part of the raise to the clavicle and part of the twist to the wrist, hand kept in place.
+- **Shoulder**: the game mesh has no twist bones, so an arm raised very high or twisted can crush the shoulder in game.
+  The inspector shows the arm's raise and twist (no warning colour); **Fix the shoulder** moves part of the raise to the
+  clavicle and part of the twist to the wrist, hand kept in place.
 - **Mirror** a bone's pose to the other side; **Copy to another variant** (left / right swapped when needed).
 - **Timeline**: groups by limb (unfold for single bones), select / Shift / box select, drag keys, delete, interpolation,
   zoom (Ctrl + wheel, or wheel on the ruler), pan (Shift + wheel, middle drag), Home / End, frame step (arrows), 30 fps.

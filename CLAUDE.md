@@ -36,7 +36,7 @@ DLL ──writes──► SessionAnimLoader.native.log ──parsed by──► 
 - `SessionAnimLoader/Native/main.cpp` = the only file that touches the game: vtable hook, chaining behind
   ExpandedTricks, `ASN_*` Lua functions, `kVersion`.
 - `SessionStudio/model/` = **editor logic without interface** (static lib `asn_editor`, links `asn_core`): `EditorDoc`
-  (split over `editor_doc_*.cpp` by feature), IK, mannequin and board meshes, time view, view math, Browse cards and the "which clip plays" rule (`library`), workspace
+  (split over `editor_doc_*.cpp` by feature), IK, mannequin and board meshes, the optional skinned body (`body_model`: `body.glb` next to the editor, fallback to the mannequin; the model file is never in Git), time view, view math, Browse cards and the "which clip plays" rule (`library`), workspace
   (settings, backups, library file operations, game log parsing), paths.
 - `SessionStudio/app/` = interface only: one `App` class (`app.h`) split by panel since 2026-11-26 —
   `app.cpp` (core: files, clips, confirmations, frame), `app_shell.cpp` (workspaces layout, top bar, game pill, toasts, welcome),

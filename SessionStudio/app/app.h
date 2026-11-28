@@ -12,6 +12,7 @@
 #include "imgui.h"
 #include "time_view.h"
 #include "mannequin.h"
+#include "body_model.h"
 #include "board_mesh.h"
 #include "two_part_time.h"
 #include <memory>
@@ -236,6 +237,13 @@ private:
     BoardRig brig_;   // 2026-11-26 (mannequin stage 2): the board bones, found with the body rig
     Mesh board_;
     void BuildBodyRig(const std::vector<FTr>& current);
+    // an optional skinned body: body.glb next to the editor (never shipped by the repository), read once. When it is
+    // absent or does not fit the skeleton, the generated mannequin above is drawn.
+    BodyModel bodyFile_;
+    BodyRig bodyFileRig_;
+    bool bodyFileRead_ = false;
+    std::string bodyFileErr_;             // "" with no model loaded: there is no file
+    void LoadBodyFile();
     bool autoKey_ = true;                 // P6: a key is set as soon as a gesture ends
     bool autoKeyFailed_ = false;          // the last automatic key could not be set (no retry until a new change)
     bool dragCheckpointed_ = false;

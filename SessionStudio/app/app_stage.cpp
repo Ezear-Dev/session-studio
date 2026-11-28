@@ -108,7 +108,9 @@ void App::StageOverlays(const ImVec2& p0, const ImVec2& sz) {
         if (ImGui::BeginPopup("##viewmenu")) {
             ImGui::TextDisabled("Show");
             if (ImGui::RadioButton("Body", bodyView_) && !bodyView_) { bodyView_ = true; stageErrShown_ = false; SaveSetting(settings_, "ui.view", "body"); }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("A solid body: what is in front, which way a limb is twisted (yellow stripe = the bone's front face).\nIt is not your character: no clothes, no real skin. The game stays the real test.");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", bodyFileRig_.ok
+                ? "The body model body.glb: what is in front, which way a limb is twisted (yellow stripe = the bone's front face).\nIt is not your character: its clothes and shape may differ. The game stays the real test."
+                : "A solid body: what is in front, which way a limb is twisted (yellow stripe = the bone's front face).\nIt is not your character: no clothes, no real skin. The game stays the real test.");
             ImGui::SameLine();
             if (ImGui::RadioButton("Skeleton", !bodyView_) && bodyView_) { bodyView_ = false; SaveSetting(settings_, "ui.view", "skeleton"); }
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("The bone lines, as before.");
@@ -452,20 +454,21 @@ void App::ViewPanel() {
                 if (BuildBoardMesh(brig_, csV, recorded, board_)) meshes.push_back(&board_);
             }
         }
-        if (bodyView_ && mrig_.ok) {
-            const bool warnSide[2] = {doc_.Shoulder(0, t_).warn, doc_.Shoulder(1, t_).warn};
+        if (bodyView_ && (bodyFileRig_.ok || mrig_.ok)) {
             auto rgba = [](int r, int g, int b) { return (uint32_t)r | ((uint32_t)g << 8) | ((uint32_t)b << 16) | 0xFF000000u; };
             std::vector<uint32_t> cols(n);
+            std::vector<uint32_t> tints(n, 0u);   // body.glb keeps the colours of its parts: the same cues, laid over them
+            auto over = [&](int a, int r, int g, int b) { return (rgba(r, g, b) & 0x00FFFFFFu) | ((uint32_t)a << 24); };
             for (int b = 0; b < n; b++) {
                 // 2026-11-26 second look: one clay colour (the timeline already shows what is animated)
                 uint32_t c = rgba(200, 196, 189);                                   // body: warm clay (redesign step 3)
-                if (!doc_.IsEditable(b) && b != doc_.PelvisBone()) c = rgba(128, 131, 140);   // locked part: a darker grey
-                const int sd = doc_.ArmSide(b);
-                if (sd >= 0 && warnSide[sd] && s.names[b].find("UpperArm") != std::string::npos) c = rgba(214, 160, 150);   // shoulder at risk: a light red tint on the upper arm only (user 2026-11-27: the red arm was too intrusive)
-                if (b == sel_) c = rgba(255, 107, 26);                              // selected part (theme::Accent)
+                if (!doc_.IsEditable(b) && b != doc_.PelvisBone()) { c = rgba(128, 131, 140); tints[b] = over(90, 20, 22, 30); }   // locked part: darker
+                if (b == sel_) { c = rgba(255, 107, 26); tints[b] = over(255, 255, 107, 26); }   // selected part (theme::Accent)
                 cols[b] = c;
             }
-            BuildMannequinMesh(mrig_, csV, cols, body_, sel_ >= 0 ? sel_ : -1);   // the stripe on the selected part only
+            // the stripe on the selected part only
+            if (bodyFileRig_.ok) SkinBodyModel(bodyFile_, bodyFileRig_, csV, tints, body_, sel_ >= 0 ? sel_ : -1);
+            else BuildMannequinMesh(mrig_, csV, cols, body_, sel_ >= 0 ? sel_ : -1);
             meshes.push_back(&body_);
             bodyBuilt = true;
         }
@@ -543,14 +546,12 @@ void App::ViewPanel() {
             for (int k = 0; k < 4; k++) dl->AddLine(sp[0][k], sp[1][k], k == 0 ? IM_COL32(255, 230, 120, 200) : col, k == 0 ? 2.f : 1.f);
         }
     }
-    const bool shWarn[2] = {doc_.Shoulder(0, t_).warn, doc_.Shoulder(1, t_).warn};   // 2026-11-25: arm likely to deform in game
     for (int b = 0; b < n && !body; b++) {   // bone lines: skeleton view only
         const int p = s.parents[b];
         if (p < 0 || skip(b) || refBone(b) || refBone(p)) continue;
         ImVec2 a, c;
         if (!P(dcsV[p], a) || !P(dcsV[b], c)) continue;
         ImU32 col = (b == sel_ || p == sel_) ? kColSel : doc_.IsEditable(b) ? (doc_.TrackOf(b) ? kColTrack : kColBone) : kColLocked;
-        { const int sd = doc_.ArmSide(p); if (sd >= 0 && shWarn[sd] && doc_.ArmSide(b) == sd && s.names[b].find("Finger") == std::string::npos) col = IM_COL32(255, 80, 60, 255); }
         dl->AddLine(a, c, col, 2.f);
     }
     for (int b = 0; b < n; b++) {

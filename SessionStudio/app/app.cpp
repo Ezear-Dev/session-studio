@@ -66,6 +66,10 @@ int App::SelfTest(std::string& report) {
     report += std::string("game running: ") + (gameRunning_ ? "yes" : "no") + "\n";
     report += "game log: " + (logFound_ ? "v0." + std::to_string(logVersion_) + (logHooked_ ? ", hooked" : ", not hooked") : std::string("absent")) + "\n";
     report += "backups: " + (backupRoot_.empty() ? std::string("unknown") : Narrow(backupRoot_)) + "\n";
+    if (skeletonOk_) LoadBodyFile();
+    report += "body model: " + (bodyFileRig_.ok ? "body.glb, " + std::to_string(bodyFile_.verts.size()) + " vertices, " + std::to_string(bodyFile_.idx.size() / 3) + " triangles"
+                                : !bodyFileErr_.empty() ? "body.glb NOT USED (" + bodyFileErr_ + "), built-in mannequin"
+                                : std::string("built-in mannequin (no body.glb next to the editor)")) + "\n";
     return skeletonOk_ ? 0 : 2;
 }
 
@@ -611,4 +615,23 @@ void App::BuildBodyRig(const std::vector<FTr>& current) {
     if (cal.size() != (size_t)doc_.BoneCount()) cal = current;
     mrig_ = BuildMannequinRig(doc_.skeleton(), cal);
     brig_ = BuildBoardRig(doc_.skeleton());
+    LoadBodyFile();
+    if (!bodyFileErr_.empty()) Status("body.glb not used (" + bodyFileErr_ + "): built-in mannequin shown");
+}
+
+void App::LoadBodyFile() {
+    if (!bodyFileRead_) {
+        bodyFileRead_ = true;
+        const std::wstring path = exeDir_ + L"body.glb";
+        std::string bytes;
+        if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) bodyFileErr_.clear();
+        else if (!ReadFileText(path, bytes)) bodyFileErr_ = "the file cannot be opened";
+        else if (!LoadBodyModel(bytes, bodyFile_, bodyFileErr_)) bodyFile_ = BodyModel{};
+        else bodyFileErr_.clear();
+    }
+    bodyFileRig_ = BodyRig{};
+    if (!bodyFile_.idx.empty()) {   // matched again each time: the skeleton may have changed
+        std::string err;
+        bodyFileErr_ = BindBodyModel(bodyFile_, doc_.skeleton(), bodyFileRig_, err) ? std::string() : err;
+    }
 }

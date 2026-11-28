@@ -264,6 +264,25 @@ Important steps, technical decisions, problems and their solutions. Current stat
 - GitHub release `v0.29` published by the owner (first published without its files, added right after); v0.28 left
   as it is. Attached files checked against the local ones (SHA-256).
 
+## 2026-11-28 — optional skinned body model in the editor
+
+- The owner received a character model of the game from its developers and says they allow redistributing it. Asked to
+  show it instead of the generated mannequin.
+- Loaded at run time from `body.glb` next to the editor; the generated mannequin stays as the fallback. No model data
+  in the code or tests; the file is not in Git (a public history cannot be taken back) and not yet in the package.
+- Own small .glb reader on the existing JSON parser (no new library). Bind pose taken from the inverse bind matrices,
+  axes converted by swapping y and z, x100. Joints matched to the game's bones by name. CPU skinning, same renderer.
+- One clay colour as before; bone tints are mixed by vertex weight; the stripe colours the surface facing the limb's +Y.
+  Textures left for later. The model has a face, which the owner had not wanted on the generated mannequin.
+- Offline tests, offline check on the real file and self-test only: not yet seen in the editor.
+- Same day: the owner saw the clay version in the editor, liked it and asked for colours. The file has colour images
+  for the skin, face and eyes only, none for the clothes: flat colours per part, chosen from words in the material
+  names; the cues became tints over them. Real textures still left for later.
+- Same day: the owner approved the result and asked to remove the red shoulder alert for good. Removed on both bodies,
+  in the skeleton view and in the inspector (the figures stay, in the normal text colour), guides updated. The
+  measurement (`ShoulderInfo`), the fix button and the automatic natural shoulder are unchanged. Nothing warns any more
+  of an arm likely to crush the shoulder in game.
+
 ## Gaps in this history
 
 - No Git history before 2026-11-26: intermediate source states exist only as local zip backups in `_archive/backups/`.
